@@ -74,7 +74,9 @@
 
 ## Runtime Rule Engine
 
-运行期规则引擎。根据运行期事件判断是否生成 TaskIntent、NeedMoreInfo 或 NoAction。
+运行期规则引擎。根据运行期事件判断是否生成 TaskIntent，或产生 NeedMoreInfo / NoAction 等规则结果。
+
+NeedMoreInfo / NoAction 不作为独立核心对象，优先作为 TaskIntent 状态或规则判断记录保存。
 
 ## Event Module
 

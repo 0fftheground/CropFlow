@@ -200,6 +200,7 @@ MVP 原则：
 ```text
 不直接生成 FarmingTask。
 优先生成 TaskIntent 或 ReviewRequest，让人工判断。
+NeedMoreInfo / NoAction 作为规则结果或 TaskIntent 状态保存，不作为独立核心对象。
 ```
 
 ---
@@ -221,6 +222,13 @@ Execution Module / Event Module
 Evaluation & Feedback Module
   ↓
 FeedbackGenerated
+```
+
+边界说明：
+
+```text
+Execution / ExecutionRecord / DeviceCommand 的状态维护属于 Execution Module。
+如果 ExecutionStatusUpdated 经过 Plan Orchestrator 或对应 Handler，Handler 只负责流程编排和委托 Execution Module，不直接维护执行对象。
 ```
 
 ---

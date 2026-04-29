@@ -7,7 +7,7 @@
 ## 1.1 系统与功能说明
 
 ```text
-plan_level_mvp_system_function_description_v2_no_recommendation.md
+docs/system-function.md
 ```
 
 先理解系统是什么、做什么、不做什么。
@@ -17,7 +17,7 @@ plan_level_mvp_system_function_description_v2_no_recommendation.md
 ## 1.2 总运行流程
 
 ```text
-plan_level_mvp_overall_runtime_flow_v2_no_recommendation.md
+docs/overall-runtime-flow.md
 ```
 
 理解种植计划从创建到执行反馈再到归档的完整闭环。
@@ -27,7 +27,7 @@ plan_level_mvp_overall_runtime_flow_v2_no_recommendation.md
 ## 1.3 系统结构图
 
 ```text
-plan_level_mvp_architecture_mermaid_revised_v4_no_recommendation.md
+docs/architecture.md
 ```
 
 理解模块、事件、对象、外部系统之间的关系。
@@ -37,39 +37,49 @@ plan_level_mvp_architecture_mermaid_revised_v4_no_recommendation.md
 ## 1.4 模块职责说明
 
 ```text
-plan_level_mvp_module_responsibilities_revised_v2_no_recommendation.md
+docs/modules.md
 ```
 
 确认各模块负责什么、不负责什么。
 
 ---
 
-## 1.5 核心对象说明
+## 1.5 编排实现设计
 
 ```text
-plan_level_mvp_core_objects_updated_v4_no_recommendation.md
+docs/orchestration-design.md
+```
+
+理解 Plan Orchestrator / Stage Orchestrator / Task Module 如何避免变成超级服务类。
+
+---
+
+## 1.6 核心对象说明
+
+```text
+docs/domain-model.md
 ```
 
 确认核心对象是否必要、边界是否清楚。
 
 ---
 
-## 1.6 事件系统设计
+## 1.7 事件系统设计
 
 ```text
-plan_level_mvp_event_system_design_updated_v4_no_recommendation.md
+docs/events.md
 ```
 
 确认事件分类、流转和处理边界。
 
 ---
 
-## 1.7 三个核心流程
+## 1.8 三个核心流程
 
 ```text
-plan_creation_initialization_flow_updated_v2_no_recommendation.md
-plan_runtime_event_task_update_flow_v2_no_recommendation.md
-plan_task_execution_feedback_flow_v2_no_recommendation.md
+docs/flows/plan-creation-initialization.md
+docs/flows/runtime-event-task-update.md
+docs/flows/task-execution-feedback.md
 ```
 
 分别审阅：
@@ -95,6 +105,7 @@ plan_task_execution_feedback_flow_v2_no_recommendation.md
 8. ReviewRequest 是否应该作为独立人工复核对象？
 9. 外部执行系统是否应该单独从系统输入中拆出？
 10. Background Job Center 是否只负责发现变化，不做业务决策？
+11. Handler / Policy / Strategy / Service 是否只作为内部实现分层，不改变模块边界？
 ```
 
 ---
@@ -104,10 +115,11 @@ plan_task_execution_feedback_flow_v2_no_recommendation.md
 如果时间有限，建议至少阅读：
 
 ```text
-1. plan_level_mvp_system_function_description_v2_no_recommendation.md
-2. plan_level_mvp_architecture_mermaid_revised_v4_no_recommendation.md
-3. plan_level_mvp_module_responsibilities_revised_v2_no_recommendation.md
-4. plan_level_mvp_core_objects_updated_v4_no_recommendation.md
+1. docs/system-function.md
+2. docs/architecture.md
+3. docs/modules.md
+4. docs/domain-model.md
+5. docs/orchestration-design.md
 ```
 
 ---

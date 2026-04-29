@@ -124,6 +124,7 @@ MVP 原则：
 ```text
 不直接生成 FarmingTask。
 先生成 TaskIntent，再由人工判断。
+NeedMoreInfo / NoAction 作为规则结果或 TaskIntent 状态保存，不作为独立核心对象。
 ```
 
 ---

@@ -198,6 +198,13 @@ cancelled
 3. 支持 NeedMoreInfo / NoAction 等非任务结果持久化
 ```
 
+说明：
+
+```text
+NeedMoreInfo / NoAction 不是独立核心对象。
+它们优先作为 TaskIntent.status、规则判断结果或处理记录保存。
+```
+
 ## 可承载的农艺建议内容
 
 MVP 去掉 `Recommendation` 后，运行期触发类建议优先放在 `TaskIntent` 中，例如：

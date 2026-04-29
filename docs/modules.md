@@ -69,6 +69,32 @@
 4. 不直接执行设备指令
 ```
 
+## 内部实现建议
+
+`Plan Orchestrator` 可以内部拆成：
+
+```text
+Handler Registry
+Event Handler
+Policy
+Task Type Strategy
+Domain Service
+```
+
+这些是实现层分工，不是新的顶层业务模块，也不改变现有模块边界。
+
+建议保持：
+
+```text
+1. Orchestrator 负责接收事件、识别流程、协调模块。
+2. Handler 负责单类事件的处理过程。
+3. Policy 负责是否需要生成、更新、失效、复核等业务判断。
+4. Strategy 负责灌溉、施肥、植保、巡田等农事类型差异。
+5. Service 负责具体领域动作和状态维护。
+```
+
+不建议把复杂规则、任务字段组装、算法接口选择和农事类型分支全部写在 `Plan Orchestrator` 中。
+
 ---
 
 # 4. Stage Orchestrator
@@ -128,6 +154,8 @@
 4. 不直接维护任务状态
 ```
 
+`NeedMoreInfo` 和 `NoAction` 是规则判断结果，应由 `Task Module` 以 `TaskIntent` 状态或规则判断记录持久化，不作为独立核心对象引入。
+
 ## 典型输入
 
 ```text
@@ -166,6 +194,22 @@ FeedbackGenerated 后的派生判断
 1. 不再维护独立 Recommendation Entity
 2. 不把农艺建议作为独立对象流转
 ```
+
+## 内部实现建议
+
+`Task Module` 对外仍是一个模块，内部可以按对象和生命周期拆成服务：
+
+```text
+CalendarItemService
+TaskGenerationPlanService
+TaskIntentService
+FarmingTaskService
+OperationPlanService
+TaskLifecycleService
+TaskConflictService
+```
+
+这些服务只处理任务与方案领域动作，不反向调用 `Handler`，也不直接控制外部硬件执行。
 
 ## 农艺建议信息放置规则
 

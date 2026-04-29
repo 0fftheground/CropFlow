@@ -358,6 +358,8 @@ Plan Orchestrator
 Task Module 保存
 ```
 
+其中 `NeedMoreInfo / NoAction` 是规则判断结果或 `TaskIntent` 状态，不是独立核心对象。
+
 ---
 
 ## 3.8 ReviewRequest 归属
