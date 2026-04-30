@@ -42,13 +42,13 @@ Field:
 
 待核对：
 
-| 问题 | 结论 | 影响 |
-|---|---|---|
-| Farm 的经纬度表示农场中心点还是默认地块点？ | pending | Farm.longitude / Farm.latitude |
-| Field.boundaryAddress 是否只是文本，还是需要边界坐标数组？ | pending | Field.boundaryAddress / Field.metadata |
-| 第一版是否需要 Field 名称？ | pending | Field |
-| 第一版是否需要地块面积？ | pending | Field / PlantingPlan.area |
-| 第一版是否需要土壤类型、土壤肥力、前茬作物？ | pending | Field.metadata / PlantingPlan.metadata |
+| 问题                                       | 结论     | 影响                                     |
+| ---------------------------------------- | ------ | -------------------------------------- |
+| Farm 的经纬度表示农场中心点还是默认地块点？                 | 中心点    | Farm.longitude / Farm.latitude         |
+| Field.boundaryAddress 是否只是文本，还是需要边界坐标数组？ | 边界坐标数组 | Field.boundaryAddress / Field.metadata |
+| 第一版是否需要 Field 名称？                        | 需要     | Field                                  |
+| 第一版是否需要地块面积？                             | 需要     | Field / PlantingPlan.area              |
+| 第一版是否需要土壤类型、土壤肥力、前茬作物？                   | 不需要    | Field.metadata / PlantingPlan.metadata |
 
 ## 2.2 PlantingPlan
 
@@ -65,14 +65,14 @@ taskGenerationWindowDays
 
 待核对：
 
-| 问题 | 结论 | 影响 |
-|---|---|---|
-| 创建计划时是否必须录入品种 varietyName？ | pending | PlantingPlan.varietyName |
-| 播种日期是否一定有？是否存在移栽日期？ | pending | PlantingPlan.sowingDate / metadata |
-| expectedHarvestDate 是用户输入还是系统预测？ | pending | PlantingPlan.expectedHarvestDate |
-| area 是计划种植面积还是地块面积快照？ | pending | PlantingPlan.area |
-| 是否需要种植方式，例如直播、移栽？ | pending | PlantingPlan.metadata |
-| 是否需要作物季次，例如早稻、晚稻？ | pending | PlantingPlan.metadata / stageCode |
+| 问题                               | 结论              | 影响                                 |
+| -------------------------------- | --------------- | ---------------------------------- |
+| 创建计划时是否必须录入品种 varietyName？       | 必须              | PlantingPlan.varietyName           |
+| 播种日期是否一定有？是否存在移栽日期？              | 播种日期一定要有，存在移栽日期 | PlantingPlan.sowingDate / metadata |
+| expectedHarvestDate 是用户输入还是系统预测？ | 系统预测            | PlantingPlan.expectedHarvestDate   |
+| area 是计划种植面积还是地块面积快照？            | 地块面积            | PlantingPlan.area                  |
+| 是否需要种植方式，例如直播、移栽？                | 需要              | PlantingPlan.metadata              |
+| 是否需要作物季次，例如早稻、晚稻？                | 需要              | PlantingPlan.metadata / stageCode  |
 
 ---
 
@@ -84,35 +84,35 @@ taskGenerationWindowDays
 
 待核对：
 
-| 问题 | 结论 | 影响 |
-|---|---|---|
-| 生育期预测算法需要哪些计划字段？ | pending | StagePredictionSnapshot.inputPayload |
-| 是否需要历史气象数据？ | pending | EventRecord / inputPayload |
-| 是否需要未来天气预报？ | pending | inputPayload |
-| 是否需要品种积温阈值表？ | pending | thermalThresholds |
-| 是否需要地理位置经纬度？ | pending | Farm / Field / inputPayload |
+| 问题               | 结论                                                                                                                | 影响                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| 生育期预测算法需要哪些计划字段？ | 品种熟制、实际稻作类型、审定稻作类型、对照品种名称、审定区域、审定亚种、种植方式、播种日期、移栽日期 、移栽叶龄、气象数据dataframe（包含日期date、温度tmp）、与对照品种生育期差距（天）、返青天数、实际记录生育期 | StagePredictionSnapshot.inputPayload |
+| 是否需要历史气象数据？      | 需要                                                                                                                | EventRecord / inputPayload           |
+| 是否需要未来天气预报？      | 需要                                                                                                                | inputPayload                         |
+| 是否需要品种积温阈值表？     | 需要                                                                                                                | thermalThresholds                    |
+| 是否需要地理位置经纬度？     | 需要                                                                                                                | Farm / Field / inputPayload          |
 
 ## 3.2 算法输出
 
 待核对：
 
-| 问题 | 结论 | 影响 |
-|---|---|---|
-| stageTimeline 的结构是什么？ | pending | StagePredictionSnapshot.stageTimeline |
-| thermalThresholds 的结构是什么？ | pending | StagePredictionSnapshot.thermalThresholds |
-| 是否返回当前阶段，还是只返回预测时间线？ | pending | CropStageState |
-| 是否返回置信度或风险提示？ | pending | StagePredictionSnapshot.metadata |
-| 是否需要记录算法版本？ | pending | algorithmCode / algorithmVersion |
+| 问题                        | 结论                                | 影响                                        |
+| ------------------------- | --------------------------------- | ----------------------------------------- |
+| stageTimeline 的结构是什么？     | {<br>各生育期节点:日期,<br>种植计划id：id<br>} | StagePredictionSnapshot.stageTimeline     |
+| thermalThresholds 的结构是什么？ | {<br>各生育期节点:日期,<br>种植计划id：id<br>} | StagePredictionSnapshot.thermalThresholds |
+| 是否返回当前阶段，还是只返回预测时间线？      | 只返回预测时间线                          | CropStageState                            |
+| 是否返回置信度或风险提示？             | 否                                 | StagePredictionSnapshot.metadata          |
+| 是否需要记录算法版本？               | 否                                 | algorithmCode / algorithmVersion          |
 
 ## 3.3 stageCode
 
 待核对：
 
-| 问题 | 结论 | 影响 |
-|---|---|---|
-| 第一版固定 stageCode 列表是什么？ | pending | data-model.md |
-| 不同作物是否共用同一套 stageCode？ | pending | CropStageState / CalendarItem |
-| 人工录入真实生育期是否只能选择固定 stageCode？ | pending | ActualStageRecorded |
+| 问题                           | 结论                  | 影响                            |
+| ---------------------------- | ------------------- | ----------------------------- |
+| 第一版固定 stageCode 列表是什么？       | 作物种类、生育期阶段及对应code编码 | data-model.md                 |
+| 不同作物是否共用同一套 stageCode？       | 否                   | CropStageState / CalendarItem |
+| 人工录入真实生育期是否只能选择固定 stageCode？ | 是                   | ActualStageRecorded           |
 
 ---
 
@@ -124,25 +124,25 @@ taskGenerationWindowDays
 
 待核对：
 
-| 问题 | 结论 | 影响 |
-|---|---|---|
-| 农事日历接口需要哪些计划字段？ | pending | EventRecord.payload / CalendarItem |
-| 是否依赖生育期预测结果？ | pending | sourceSnapshotId |
-| 是否依赖地块面积、位置、品种？ | pending | PlantingPlan / Farm / Field |
-| 是否依赖历史管理习惯或地区农艺规则？ | pending | metadata / ruleResult |
+| 问题                 | 结论                                                                                            | 影响                                 |
+| ------------------ | --------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 农事日历接口需要哪些计划字段？    | 上一茬收割日期、播种日期、移栽日期、移栽时叶龄、稻作类型、审定稻作类型、审定地区、播种方式、亚种、熟制、气象dataframe、推荐阈值、未来24 *15小时农事适宜度、生稻头季收割日期 | EventRecord.payload / CalendarItem |
+| 是否依赖生育期预测结果？       | 依赖                                                                                            | sourceSnapshotId                   |
+| 是否依赖地块面积、位置、品种？    | 依赖品种亚种类型，依赖位置地区                                                                               | PlantingPlan / Farm / Field        |
+| 是否依赖历史管理习惯或地区农艺规则？ | 可依赖                                                                                           | metadata / ruleResult              |
 
 ## 4.2 算法输出
 
 待核对：
 
-| 问题 | 结论 | 影响 |
-|---|---|---|
-| 是否返回全周期农事项？ | pending | CalendarItem |
-| 是否返回建议开始和结束日期？ | pending | suggestedStartDate / suggestedEndDate |
-| 是否返回对应生育期？ | pending | stageCode |
-| 是否返回任务生成条件？ | pending | TaskGenerationPlan.generationCondition |
-| 是否返回优先级或风险等级？ | pending | CalendarItem / TaskGenerationPlan |
-| 是否返回农事项说明和依据？ | pending | CalendarItem.description |
+| 问题             | 结论                              | 影响                                     |
+| -------------- | ------------------------------- | -------------------------------------- |
+| 是否返回全周期农事项？    | 返回                              | CalendarItem                           |
+| 是否返回建议开始和结束日期？ | 返回                              | suggestedStartDate / suggestedEndDate  |
+| 是否返回对应生育期？     | 返回（也可不返回，生育期算法会返回存储）            | stageCode                              |
+| 是否返回任务生成条件？    | 返回（不确定，农事日历生成的是通用的吧，条件生成不在该部分？） | TaskGenerationPlan.generationCondition |
+| 是否返回优先级或风险等级？  | 否                               | CalendarItem / TaskGenerationPlan      |
+| 是否返回农事项说明和依据？  | 返回                              | CalendarItem.description               |
 
 ---
 
@@ -179,13 +179,13 @@ inspection.field_patrol
 
 待核对：
 
-| 问题 | 结论 | 影响 |
-|---|---|---|
-| 施肥子类是否需要区分基肥、分蘖肥、穗肥以外的类型？ | pending | taskSubtype |
-| 植保是否只分杂草防治、虫害防治、病害防治？ | pending | taskSubtype |
-| 整地是否需要旋耕、耙田、平田等细类？ | pending | taskSubtype |
-| 收割是否需要人工收割、机械收割、分批收割？ | pending | taskSubtype |
-| 巡田是否只是人工任务，还是也可能由无人机或设备触发？ | pending | executionMode / taskSubtype |
+| 问题                         | 结论                   | 影响                          |
+| -------------------------- | -------------------- | --------------------------- |
+| 施肥子类是否需要区分基肥、分蘖肥、穗肥以外的类型？  | 是                    | taskSubtype                 |
+| 植保是否只分杂草防治、虫害防治、病害防治？      | 只有草害和病虫害两类吧          | taskSubtype                 |
+| 整地是否需要旋耕、耙田、平田等细类？         | 需要细分                 | taskSubtype                 |
+| 收割是否需要人工收割、机械收割、分批收割？      | 不区分                  | taskSubtype                 |
+| 巡田是否只是人工任务，还是也可能由无人机或设备触发？ | 可能触发无人机（需要人工确认或天气判定） | executionMode / taskSubtype |
 
 ---
 
