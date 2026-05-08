@@ -20,9 +20,9 @@
 
 预备农事项。由农事日历接口或规则生成，表示未来可能要做的农事安排，但不是正式任务。
 
-## TaskGenerationPlan
+## TaskGenerationService
 
-任务生成计划。描述 CalendarItem 在什么条件下、什么窗口内转为正式 FarmingTask。
+任务生成服务或函数概念，不是 MVP 第一版核心对象或独立表。它由 TaskDueCheckJob 触发，根据 CalendarItem 的时间窗口和 generationCondition 生成 FarmingTask。
 
 ## TaskIntent
 
@@ -64,6 +64,14 @@
 
 系统提醒。只负责提醒用户查看或处理事项，不承载核心业务状态。
 
+## InventoryItem
+
+库存物料。用于记录药剂和肥料库存主数据，例如物料类型、名称、规格、批次、当前数量和有效期。
+
+## InventoryTransaction
+
+库存流水。用于记录药剂和肥料的入库、出库或调整。MVP 阶段主要用于药剂入库和肥料入库。
+
 ## Plan Orchestrator
 
 计划级总编排器。负责协调 Stage Orchestrator、Runtime Rule Engine、Task Module、Review Module 等模块。
@@ -78,6 +86,26 @@
 
 NeedMoreInfo / NoAction 不作为独立核心对象，优先作为 TaskIntent 状态或规则判断记录保存。
 
+## Task Module
+
+任务模块。负责 CalendarItem、TaskIntent、FarmingTask、OperationPlan 和任务生命周期相关动作。
+
+## Material & Inventory Module
+
+物料与库存模块。负责 InventoryItem / InventoryTransaction，不直接生成 FarmingTask 或 OperationPlan。
+
+## Execution Module
+
+执行模块。只消费 FarmingTask + OperationPlan，负责 Execution、ExecutionRecord、DeviceCommand 和外部执行系统状态同步。
+
+## Evaluation & Feedback Module
+
+评价与反馈模块。根据 ExecutionRecord 和 OperationPlan 生成 Evaluation / Feedback。Feedback 不能直接生成任务，必须回到 Plan Orchestrator。
+
+## Review Module
+
+人工复核模块。负责 ReviewRequest 和相关 SystemNotification，复核完成后产生 ReviewRequestResolved，并回到 Plan Orchestrator。
+
 ## Event Module
 
 事件接入模块。负责接收、标准化和记录 Input Event。
@@ -89,3 +117,7 @@ NeedMoreInfo / NoAction 不作为独立核心对象，优先作为 TaskIntent �
 ## External Execution System
 
 外部执行系统。包括灌溉设备、无人机、第三方作业平台等。既可以接收系统下发，也可以回传执行状态。
+
+## SurveyDateRecommendationJob
+
+调查日期推荐后台任务。用于维护调查类 CalendarItem，不直接生成 FarmingTask。茎叶除草药前调查日期由 `soil_treatment_diagnosis` 接口返回并由后台任务维护。

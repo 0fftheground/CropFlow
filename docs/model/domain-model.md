@@ -20,7 +20,6 @@ StagePredictionSnapshot
 
 ```text
 CalendarItem
-TaskGenerationPlan
 TaskIntent
 FarmingTask
 ```
@@ -41,6 +40,13 @@ Evaluation
 Feedback
 ReviewRequest
 SystemNotification
+```
+
+## 1.5 物料与库存对象
+
+```text
+InventoryItem
+InventoryTransaction
 ```
 
 ---
@@ -158,19 +164,21 @@ cancelled
 
 ---
 
-# 7. TaskGenerationPlan：任务生成计划
+# 7. 任务生成逻辑
 
 ## 定位
 
-描述哪些 `CalendarItem` 应该在什么条件下转为正式任务。
+MVP 第一版不把 `TaskGenerationPlan` 作为核心对象或独立表。
+
+任务生成逻辑由 `TaskDueCheckJob / TaskGenerationService` 根据 `CalendarItem` 完成。
 
 ## 主要作用
 
 ```text
-1. 记录任务生成窗口
-2. 记录任务生成条件
+1. 检查 CalendarItem 是否进入任务生成窗口
+2. 检查 CalendarItem.generationCondition 是否满足
 3. 避免一次性生成整个种植季的正式任务
-4. 支持按阶段、时间窗口、触发条件生成任务
+4. 生成近期需要进入执行闭环的 FarmingTask
 ```
 
 ---
@@ -453,7 +461,57 @@ OperationPlan 是执行依据
 
 ---
 
-# 18. MVP 阶段移除 Recommendation 的说明
+# 18. InventoryItem：库存物料
+
+## 定位
+
+`InventoryItem` 是药剂和肥料库存主数据。
+
+## 主要承载
+
+```text
+1. 物料类型：药剂 / 肥料
+2. 物料名称、规格、批次
+3. 当前库存数量
+4. 有效期和可用状态
+```
+
+## 不承载
+
+```text
+1. 不承载施肥或打药作业方案
+2. 不承载农艺推荐原因
+3. 不替代 OperationPlan
+```
+
+---
+
+# 19. InventoryTransaction：库存流水
+
+## 定位
+
+`InventoryTransaction` 记录药剂和肥料库存数量变化。
+
+## 主要承载
+
+```text
+1. 入库、出库或调整类型
+2. 变动数量和单位
+3. 来源 FarmingTask / EventRecord
+4. 发生时间和操作人
+```
+
+## MVP 边界
+
+```text
+1. 药剂入库和肥料入库生成 stock_in 流水。
+2. 是否在施肥、打药执行后扣减库存，后续在执行集成阶段确认。
+3. MVP 不做完整仓储、库位、盘点、调拨或财务成本。
+```
+
+---
+
+# 20. MVP 阶段移除 Recommendation 的说明
 
 ## 为什么移除
 
@@ -490,14 +548,14 @@ OperationPlan 是执行依据
 
 ---
 
-# 19. 当前核心对象链路
+# 21. 当前核心对象链路
 
 ```text
 PlantingPlan
   ↓
 CropStageState / CropThermalTimeState / StagePredictionSnapshot
   ↓
-CalendarItem / TaskGenerationPlan
+CalendarItem
   ↓
 FarmingTask
   ↓
@@ -512,6 +570,16 @@ Evaluation
 Feedback
   ↓
 ReviewRequest
+```
+
+物料库存链路：
+
+```text
+药剂 / 肥料入库 FarmingTask
+  ↓
+InventoryStockInRecorded
+  ↓
+InventoryItem / InventoryTransaction
 ```
 
 运行期触发类链路：

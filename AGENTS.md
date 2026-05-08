@@ -49,6 +49,8 @@ CropFlow 是一个作物种植计划的 Plan-level MVP 编排系统。系统围�
 8. ReviewRequestResolved 不能直接绕过编排器，必须回到 Plan Orchestrator。
 9. 外部执行系统是独立外部系统，不属于系统输入。
 10. HW 主动回调进入 Execution Module；轮询兜底由 ExecutionStatusPollingJob 查询 HW。
+11. 药剂和肥料库存使用 InventoryItem / InventoryTransaction，不只放在 EventRecord。
+12. MVP 第一版不把 TaskGenerationPlan 作为核心对象或独立表；任务生成由 TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 完成。
 ```
 
 ## 模块边界
@@ -58,12 +60,24 @@ Plan Module：计划基础操作。
 Plan Orchestrator：计划级总编排。
 Stage Orchestrator：生育期预测、积温、生育期状态。
 Runtime Rule Engine：运行期规则判断。
-Task Module：CalendarItem / TaskGenerationPlan / TaskIntent / FarmingTask / OperationPlan。
+Task Module：CalendarItem / TaskIntent / FarmingTask / OperationPlan。
+Material & Inventory Module：InventoryItem / InventoryTransaction。
 Execution Module：Execution / ExecutionRecord / DeviceCommand。
 Evaluation & Feedback Module：Evaluation / Feedback。
 Review Module：ReviewRequest / SystemNotification。
 Event Module：事件接入、标准化、记录。
 Background Job Center：周期性发现变化，生成 Input Event。
+```
+
+当前业务分工方向：
+
+```text
+农事日历 / 生育期
+植保
+灌溉
+施肥
+遥感监测
+前端
 ```
 
 ## 命名规则
@@ -76,10 +90,11 @@ CropStageState
 CropThermalTimeState
 StagePredictionSnapshot
 CalendarItem
-TaskGenerationPlan
 TaskIntent
 FarmingTask
 OperationPlan
+InventoryItem
+InventoryTransaction
 Execution
 ExecutionRecord
 DeviceCommand
@@ -91,6 +106,7 @@ PlanOrchestrator
 StageOrchestrator
 RuntimeRuleEngine
 TaskModule
+MaterialInventoryModule
 ExecutionModule
 ```
 
@@ -99,21 +115,26 @@ ExecutionModule
 开发前优先阅读：
 
 ```text
-docs/system-function.md
-docs/architecture.md
-docs/domain-model.md
-docs/data-model.md
-docs/data-model-validation.md
-docs/development-plan.md
-docs/modules.md
-docs/events.md
-docs/orchestration-design.md
+docs/README.md
+docs/architecture/system-function.md
+docs/architecture/architecture.md
+docs/model/domain-model.md
+docs/model/data-model.md
+docs/model/data-model-validation.md
+docs/workflow/task-workflow-matrix.md
+docs/workflow/background-job-matrix.md
+docs/planning/development-roadmap.md
+docs/planning/team-work-division.md
+docs/planning/agent-development-guidelines.md
+docs/architecture/modules.md
+docs/architecture/events.md
+docs/architecture/orchestration-design.md
 ```
 
 涉及流程时阅读：
 
 ```text
-docs/flows/
+docs/workflow/flows/
 ```
 
 涉及设计取舍时阅读：

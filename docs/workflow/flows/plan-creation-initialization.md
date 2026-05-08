@@ -10,8 +10,7 @@
 1. 创建 PlantingPlan
 2. 初始化生育期预测
 3. 生成全周期预备农事项 CalendarItem
-4. 生成 TaskGenerationPlan
-5. 根据当前生育期和任务生成窗口生成近期 FarmingTask
+4. 根据当前生育期和任务生成窗口生成近期 FarmingTask
 ```
 
 MVP 阶段不在初始化阶段单独生成 `Recommendation`。
@@ -33,7 +32,7 @@ Stage Orchestrator 初始化生育期
   ↓
 Task Module 调用农事日历接口
   ↓
-生成 CalendarItem / TaskGenerationPlan
+生成 CalendarItem
   ↓
 Task Module 根据当前阶段和时间窗口生成 FarmingTask
 ```
@@ -55,7 +54,6 @@ flowchart TD
     D --> H["[Module] Task Module<br/>初始化农事项"]
     H --> I["[External Service] 农事日历接口"]
     I --> J["[Entity] CalendarItem<br/>预备农事项"]
-    H --> K["[Entity] TaskGenerationPlan<br/>任务生成计划"]
 
     H --> L["根据当前生育期 + 任务生成窗口"]
     L --> M["[Entity] FarmingTask<br/>近期正式任务"]
@@ -154,7 +152,6 @@ CropStageState
 CropThermalTimeState
 StagePredictionSnapshot
 CalendarItem
-TaskGenerationPlan
 FarmingTask
 必要时生成 OperationPlan
 必要时生成 SystemNotification

@@ -13,6 +13,7 @@
 [Orchestrator] Stage Orchestrator
 [Module] Runtime Rule Engine
 [Module] Task Module
+[Module] Material & Inventory Module
 [Module] Execution Module
 [Module] Evaluation & Feedback Module
 [Module] Review Module
@@ -89,7 +90,7 @@ Domain Service
 1. Orchestrator 负责接收事件、识别流程、协调模块。
 2. Handler 负责单类事件的处理过程。
 3. Policy 负责是否需要生成、更新、失效、复核等业务判断。
-4. Strategy 负责灌溉、施肥、植保、巡田等农事类型差异。
+4. Strategy 负责灌溉、施肥、植保、遥感监测、巡田等农事类型差异。
 5. Service 负责具体领域动作和状态维护。
 ```
 
@@ -178,14 +179,13 @@ FeedbackGenerated 后的派生判断
 ```text
 1. 调用农事日历接口生成 CalendarItem
 2. 维护 CalendarItem
-3. 维护 TaskGenerationPlan
-4. 根据任务生成窗口生成 FarmingTask
-5. 保存 TaskIntent
-6. 将确认后的 TaskIntent 转为 FarmingTask
-7. 调用灌溉/施肥/植保等算法接口生成 OperationPlan
-8. 维护 OperationPlan
-9. 维护任务状态
-10. 生成必要的 SystemNotification
+3. 根据任务生成窗口和 CalendarItem.generationCondition 生成 FarmingTask
+4. 保存 TaskIntent
+5. 将确认后的 TaskIntent 转为 FarmingTask
+6. 调用灌溉/施肥/植保等算法接口生成 OperationPlan
+7. 维护 OperationPlan
+8. 维护任务状态
+9. 生成必要的 SystemNotification
 ```
 
 ## 不再负责
@@ -201,7 +201,7 @@ FeedbackGenerated 后的派生判断
 
 ```text
 CalendarItemService
-TaskGenerationPlanService
+TaskGenerationService
 TaskIntentService
 FarmingTaskService
 OperationPlanService
@@ -225,7 +225,37 @@ TaskConflictService
 
 ---
 
-# 7. Execution Module
+# 7. Material & Inventory Module
+
+## 定位
+
+药剂和肥料库存的最小管理模块。
+
+## 职责
+
+```text
+1. 维护 InventoryItem
+2. 记录 InventoryTransaction
+3. 处理药剂入库和肥料入库
+4. 向植保方案、施肥方案提供可用物料查询
+5. 产生 InventoryTransactionCreated 等事件
+```
+
+## 不负责
+
+```text
+1. 不做完整仓储管理
+2. 不做库位、盘点、调拨或财务成本
+3. 不直接生成 FarmingTask
+4. 不直接生成 OperationPlan
+5. 不直接判断是否需要施肥或打药
+```
+
+说明：药剂和肥料入库本身可以是 FarmingTask，但库存主数据和库存流水由 Material & Inventory Module 维护。
+
+---
+
+# 8. Execution Module
 
 ## 职责
 
@@ -256,7 +286,7 @@ Recommendation
 
 ---
 
-# 8. Evaluation & Feedback Module
+# 9. Evaluation & Feedback Module
 
 ## 职责
 
@@ -279,7 +309,7 @@ Recommendation
 
 ---
 
-# 9. Review Module
+# 10. Review Module
 
 ## 职责
 
@@ -303,7 +333,7 @@ Recommendation
 
 ---
 
-# 10. Event Module
+# 11. Event Module
 
 ## 职责
 
@@ -325,7 +355,7 @@ Recommendation
 
 ---
 
-# 11. Background Job Center
+# 12. Background Job Center
 
 ## 职责
 
@@ -337,15 +367,19 @@ Recommendation
 3. 定期检查任务到期/逾期
 4. 定期轮询外部执行系统状态
 5. 产生 Input Event
+6. 定期调用调查日期推荐算法，新建或修改调查类 CalendarItem
 ```
 
 ## 典型 Job
 
 ```text
 DailyWeatherCheckJob
+StagePredictionRefreshJob
+AgronomyCalendarRefreshJob
 DeviceDataSyncJob
 TaskDueCheckJob
 ExecutionStatusPollingJob
+SurveyDateRecommendationJob
 ```
 
 ## 注意
@@ -366,7 +400,7 @@ ExecutionStatusPollingJob → HW
 
 ---
 
-# 12. 外部执行系统关系
+# 13. 外部执行系统关系
 
 ```text
 Execution Module → HW
@@ -384,18 +418,19 @@ ExecutionStatusPollingJob → HW
 
 ---
 
-# 13. 当前模块边界结论
+# 14. 当前模块边界结论
 
 ```text
 1. Plan Module 负责计划基础操作。
 2. Plan Orchestrator 负责计划级总编排。
 3. Stage Orchestrator 负责生育期状态。
 4. Runtime Rule Engine 负责运行期规则判断。
-5. Task Module 负责 CalendarItem / TaskGenerationPlan / TaskIntent / FarmingTask / OperationPlan。
+5. Task Module 负责 CalendarItem / TaskIntent / FarmingTask / OperationPlan。
 6. MVP 阶段不单独维护 Recommendation。
-7. Execution Module 只消费 FarmingTask + OperationPlan。
-8. Evaluation & Feedback Module 负责评价和反馈，不直接生成任务。
-9. Review Module 负责人工复核事项维护。
-10. Event Module 只做事件接入、标准化和记录。
-11. Background Job Center 负责周期性发现变化并产生 Input Event。
+7. Material & Inventory Module 负责 InventoryItem / InventoryTransaction。
+8. Execution Module 只消费 FarmingTask + OperationPlan。
+9. Evaluation & Feedback Module 负责评价和反馈，不直接生成任务。
+10. Review Module 负责人工复核事项维护。
+11. Event Module 只做事件接入、标准化和记录。
+12. Background Job Center 负责周期性发现变化并产生 Input Event。
 ```

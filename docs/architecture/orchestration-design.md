@@ -178,6 +178,7 @@ TaskTypeStrategy
 IrrigationTaskStrategy
 FertilizationTaskStrategy
 PlantProtectionTaskStrategy
+RemoteSensingTaskStrategy
 FieldInspectionTaskStrategy
 ManualTaskStrategy
 DroneTaskStrategy
@@ -346,8 +347,6 @@ PlanCreated
   ↓
 生成 CalendarItem
   ↓
-生成 TaskGenerationPlan
-  ↓
 生成近期 FarmingTask
 ```
 
@@ -362,7 +361,7 @@ PlanKeyInfoChanged
   ↓
 必要时重新预测生育期
   ↓
-必要时标记旧 CalendarItem / TaskGenerationPlan / OperationPlan 失效
+必要时标记旧 CalendarItem / OperationPlan 失效
   ↓
 重新生成相关内容
 ```
@@ -426,7 +425,7 @@ MVP 阶段不建议 FieldConditionReported 直接生成 FarmingTask。
 ```text
 TaskDueCheckTriggered
   ↓
-查找进入生成窗口的 TaskGenerationPlan
+查找进入生成窗口且满足生成条件的 CalendarItem
   ↓
 生成或更新 FarmingTask
   ↓
@@ -533,7 +532,7 @@ Task Module 对外是一个模块，但内部不要做成一个大类。
 
 ```text
 CalendarItemService
-TaskGenerationPlanService
+TaskGenerationService
 TaskIntentService
 FarmingTaskService
 OperationPlanService
@@ -551,12 +550,12 @@ TaskConflictService
 预备农事项版本保留
 ```
 
-### 8.2 TaskGenerationPlanService
+### 8.2 TaskGenerationService
 
 负责：
 
 ```text
-根据 CalendarItem 创建任务生成计划
+根据 CalendarItem 判断是否需要生成 FarmingTask
 判断任务生成窗口
 维护自动生成策略
 ```
@@ -697,6 +696,16 @@ NeedMoreInfo、NoAction、ReviewRequired 应作为 TaskIntent 状态、规则判
 反馈评价：用药、区域、天气窗口、作业覆盖度
 ```
 
+#### RemoteSensingTaskStrategy
+
+```text
+需要 OperationPlan：通常需要
+算法接口：缺苗识别 / 长势监测 / NDVI / 异常归因相关算法接口
+执行方式：无人机 / 影像上传 / 算法处理
+是否需要复核：异常结果通常需要人工判断
+反馈评价：影像质量、监测区域、缺苗区域、长势等级、异常点位、处方图质量
+```
+
 #### FieldInspectionTaskStrategy
 
 ```text
@@ -724,7 +733,7 @@ StageOrchestrator
   ↓
 TaskModule.CalendarItemService
   ↓
-TaskModule.TaskGenerationPlanService
+TaskModule.TaskGenerationService
   ↓
 TaskModule.FarmingTaskService
   ↓
@@ -904,6 +913,7 @@ strategies/
   - IrrigationTaskStrategy
   - FertilizationTaskStrategy
   - PlantProtectionTaskStrategy
+  - RemoteSensingTaskStrategy
   - ManualTaskStrategy
 
 services/

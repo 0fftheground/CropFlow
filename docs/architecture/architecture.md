@@ -11,6 +11,7 @@
 > - MVP 阶段移除独立的 `Recommendation` 对象，农艺建议/推荐依据分别放入 `TaskIntent / FarmingTask / OperationPlan`
 > - 删除 `Plan Orchestrator → Task Module` 上过长的复核结论箭头标签，避免结构图连线重叠
 > - 明确 `Execution Module` 只消费 `FarmingTask + OperationPlan`
+> - 增加轻量 `Material & Inventory Module`，用于药剂 / 肥料库存主数据和库存流水
 
 ---
 
@@ -112,7 +113,6 @@ DE2 --> PO
 subgraph TASK_LAYER["任务与方案层"]
     TM["[Module] Task Module<br/>预备农事项 / 任务意图 / 正式任务 / 作业方案"]
     CI[("[Entity] CalendarItem<br/>预备农事项")]
-    TGP[("[Entity] TaskGenerationPlan<br/>任务生成计划")]
     TI[("[Entity] TaskIntent<br/>任务意图")]
     FT[("[Entity] FarmingTask<br/>正式农事任务")]
     OP[("[Entity] OperationPlan<br/>作业方案 / 处方方案")]
@@ -123,7 +123,6 @@ PO --> TM
 RRE --> PO
 PO --> TM
 TM --> CI
-TM --> TGP
 TM --> TI
 TM --> FT
 TM --> OP
@@ -140,6 +139,19 @@ TM <--> FCI
 TM <--> IA
 TM <--> FA
 TM <--> PA
+
+subgraph MATERIAL_LAYER["物料与库存层"]
+    MIM["[Module] Material & Inventory Module<br/>药剂 / 肥料库存"]
+    II[("[Entity] InventoryItem<br/>库存物料")]
+    IT[("[Entity] InventoryTransaction<br/>库存流水")]
+end
+
+PO --> MIM
+TM -->|"查询可用物料"| MIM
+MIM --> II
+MIM --> IT
+MIM --> DE5["[Domain Event] InventoryTransactionCreated"]
+DE5 --> PO
 
 subgraph EXEC_LAYER["执行与反馈层"]
     EXM["[Module] Execution Module<br/>执行下发 / 执行记录 / 状态同步"]
@@ -267,7 +279,7 @@ HW → Background Job Center
 ```text
 Plan Orchestrator 发起初始化流程。
 Task Module 调用农事日历接口。
-Task Module 保存 CalendarItem / TaskGenerationPlan。
+Task Module 保存 CalendarItem。
 ```
 
 不建议：
@@ -279,7 +291,7 @@ Plan Orchestrator 直接调用农事日历接口。
 原因：
 
 ```text
-CalendarItem / TaskGenerationPlan 属于 Task Module 管理范围。
+CalendarItem 属于 Task Module 管理范围。
 ```
 
 ---
@@ -401,14 +413,16 @@ Plan Orchestrator
 7. 农艺建议、规则原因、推荐依据分别记录在 TaskIntent / FarmingTask / OperationPlan 中。
 8. 农事日历接口由 Task Module 调用。
 9. OperationPlan 是作业方案 / 处方方案，由 Task Module 获取和维护。
-10. FarmingTask 是执行入口，OperationPlan 是执行依据之一。
-11. Execution Module 负责 Execution / ExecutionRecord / DeviceCommand。
-12. Execution Module 负责向外部执行系统下发任务或指令。
-13. 外部执行系统主动回调时，结果进入 Execution Module。
-14. 外部执行系统不主动回调时，由 ExecutionStatusPollingJob 轮询兜底。
-15. 不保留 HW → Background Job Center 的直接关系。
-16. Evaluation & Feedback Module 负责 Evaluation / Feedback。
-17. FeedbackGenerated 回到 Plan Orchestrator。
-18. Review Module 负责 ReviewRequest 的状态维护和人工处理记录。
-19. ReviewRequestResolved 回到 Plan Orchestrator 后，再协调 Task Module 执行后续动作。
+10. Material & Inventory Module 负责 InventoryItem / InventoryTransaction。
+11. 药剂和肥料入库需要独立库存表，不只保存在 EventRecord。
+12. FarmingTask 是执行入口，OperationPlan 是执行依据之一。
+13. Execution Module 负责 Execution / ExecutionRecord / DeviceCommand。
+14. Execution Module 负责向外部执行系统下发任务或指令。
+15. 外部执行系统主动回调时，结果进入 Execution Module。
+16. 外部执行系统不主动回调时，由 ExecutionStatusPollingJob 轮询兜底。
+17. 不保留 HW → Background Job Center 的直接关系。
+18. Evaluation & Feedback Module 负责 Evaluation / Feedback。
+19. FeedbackGenerated 回到 Plan Orchestrator。
+20. Review Module 负责 ReviewRequest 的状态维护和人工处理记录。
+21. ReviewRequestResolved 回到 Plan Orchestrator 后，再协调 Task Module 执行后续动作。
 ```
