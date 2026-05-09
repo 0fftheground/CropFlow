@@ -36,6 +36,288 @@
 | 评价反馈 | 定义本方向如何形成 `Evaluation.metrics`、`Feedback.details`、是否需要人工复核 |
 | 测试样例 | 至少提供 1 个正常样例、1 个异常或需复核样例、1 个不生成任务或无需动作样例 |
 
+### 2.1.1 `taskCategory / taskSubtype` 的组织规则
+
+各业务方向提交任务定义时，不应只给自然语言描述，必须按统一编码方式提交。
+
+```text
+1. taskCategory 表示稳定的大类，只复用系统已存在的大类，不新增同义词。
+2. taskSubtype 表示该大类下可执行或可追溯的具体农事项，命名使用 snake_case。
+3. 一个 taskSubtype 只表达一个稳定业务语义，不把“触发条件、执行结果、人工决策”编码进名称。
+4. 调查、执行、防治、评估、入库、监测等不同语义应拆成不同 taskSubtype。
+5. 如流程分为 survey / control / evaluation，优先拆 subtype，不新增核心对象。
+6. 新 subtype 先更新 docs/workflow/task-workflow-matrix.md，再进入代码和接口。
+```
+
+建议命名方式：
+
+```text
+<stage_or_context>_<business_action>
+```
+
+示例：
+
+```text
+soil_sealing_weed_control
+stem_leaf_weed_control
+sealing_stage_disease_pest_survey
+sealing_stage_disease_pest_control
+service_effect_evaluation
+```
+
+任务定义提交时，至少提供下表。
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| workflowKey | 是 | 流程唯一编码，如 `WF_STEM_LEAF_WEED` |
+| taskCategory | 是 | 任务大类，如 `plant_protection` |
+| taskSubtype | 是 | 任务子类，如 `stem_leaf_weed_control` |
+| taskName | 是 | 用户可读名称 |
+| generalFlowKey | 是 | 复用的通用流程；无则填 `none` |
+| stageScope | 否 | 适用生育期或阶段范围 |
+| goal | 是 | 该任务要解决什么问题 |
+| requiresOperationPlan | 是 | 是否必须生成 `OperationPlan` |
+| requiresExecution | 是 | 是否进入 `Execution Module` |
+| requiresReview | 是 | 是否存在人工复核入口 |
+| upstreamKeys | 否 | 上游 workflowKey / chainKey / jobKey |
+| downstreamKeys | 否 | 下游 workflowKey / chainKey / 结果动作 |
+| notes | 否 | 约束、例外、待确认点 |
+
+推荐提交格式：
+
+```md
+| workflowKey | taskCategory | taskSubtype | taskName | generalFlowKey | stageScope | goal | requiresOperationPlan | requiresExecution | requiresReview | upstreamKeys | downstreamKeys | notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| WF_STEM_LEAF_WEED | plant_protection | stem_leaf_weed_control | 茎叶除草 | GENERAL_PLANT_PROTECTION_SURVEY + GENERAL_PLANT_PROTECTION_CONTROL | tillering_before_closure | 草害调查后决定是否实施茎叶除草 | yes | yes | conditional | SurveyDateRecommendationJob | CHAIN_STEM_LEAF_WEED / service_effect_evaluation | 补防结果需人工确认 |
+```
+
+### 2.1.2 触发条件和前后依赖的提交格式
+
+业务方向提交“触发条件”和“前后依赖”时，不接受只写一句话。至少用“触发规则表 + 依赖关系表”两张表提交。
+
+触发规则表：
+
+| 字段 | 说明 |
+|---|---|
+| targetType | 目标对象：`CalendarItem / TaskIntent / FarmingTask / OperationPlan / ReviewRequest` |
+| targetKey | 对应 workflowKey、taskSubtype 或 reviewType |
+| triggerType | `event / job / stage / time_window / manual / algorithm_result / execution_result` |
+| triggerSource | 触发来源，如 `PlanCreated`、`SurveyDateRecommendationJob`、`weedTreatmentDiagnosisAlgorithm` |
+| preconditions | 进入该触发前必须满足的条件 |
+| blockingConditions | 阻断条件，如已完成、已失效、缺少上游输入 |
+| action | 生成 / 更新 / 失效 / 跳过 / 待确认 |
+| idempotencyKeySuggestion | 建议幂等键组成 |
+| fallbackAction | 触发失败或信息不足时的兜底动作 |
+
+依赖关系表：
+
+| 字段 | 说明 |
+|---|---|
+| currentKey | 当前 workflowKey / taskSubtype |
+| dependencyType | `upstream_task / upstream_event / upstream_plan / upstream_review / upstream_inventory` |
+| dependsOn | 依赖对象 |
+| dependencyRule | 依赖规则说明 |
+| missingDependencyAction | 依赖缺失时怎么处理 |
+| satisfiedOutput | 满足依赖后可产生什么输出 |
+
+推荐提交格式：
+
+```md
+#### 触发规则表
+| targetType | targetKey | triggerType | triggerSource | preconditions | blockingConditions | action | idempotencyKeySuggestion | fallbackAction |
+|---|---|---|---|---|---|---|---|---|
+| FarmingTask | stem_leaf_weed_control_survey | job | TaskDueCheckJob | CalendarItem active 且到达生成窗口 | CalendarItem invalidated / 已存在 active task | create | plantingPlanId + calendarItemId + checkDate | 记录 EventRecord 并跳过 |
+
+#### 依赖关系表
+| currentKey | dependencyType | dependsOn | dependencyRule | missingDependencyAction | satisfiedOutput |
+|---|---|---|---|---|---|
+| WF_STEM_LEAF_WEED | upstream_event | soilTreatmentDiagnosisAlgorithm.recommendedSurveyDate | 只有药前调查日期存在时才创建调查 CalendarItem | 标记 need_more_info 或等待下次 job | 调查 CalendarItem |
+```
+
+### 2.1.3 算法接口统一提交模板
+
+算法接口必须按统一模板提交，避免各方向只给 URL 或示例 JSON。
+
+```text
+1. 每个算法接口至少提供：用途、触发时机、输入来源、请求结构、响应结构、异常结构、字段语义、映射目标、是否需要人工确认。
+2. 如果接口文档仍是 docx，也必须补一份 markdown 摘要，便于评审和 agent 消费。
+3. 算法输出中所有会进入核心对象的字段，都要注明映射到哪个对象、哪个字段或哪个 JSON 承接字段。
+```
+
+推荐模板：
+
+```md
+## <algorithmCode>
+
+### 1. 基本信息
+- algorithmCode:
+- algorithmName:
+- purpose:
+- owner:
+- endpoint:
+- method:
+- auth:
+
+### 2. 触发时机
+- upstream workflowKey / jobKey:
+- trigger event:
+- trigger step:
+- whether sync or async:
+
+### 3. 请求输入
+| field | type | required | source | example | notes |
+|---|---|---|---|---|---|
+
+### 4. 响应输出
+| field | type | meaning | example | targetObject | targetField |
+|---|---|---|---|---|---|
+
+### 5. 异常返回
+| code | meaning | retryable | fallbackAction | notes |
+|---|---|---|---|---|
+
+### 6. 业务语义
+- no_action 的判定:
+- need_more_info 的判定:
+- 是否可直接生成 OperationPlan:
+- 是否必须人工确认:
+
+### 7. 样例
+- request sample:
+- success response sample:
+- no_action sample:
+- error sample:
+```
+
+### 2.1.4 `OperationPlan` 提交模板
+
+业务方向不能只说“会生成方案”，必须明确方案字段如何组织。
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| planType | 是 | 如 `plant_protection_control`、`fertilization_prescription` |
+| algorithmCode | 否 | 方案来源算法 |
+| executionMode | 是 | `manual / device / external` |
+| operationWindowStart | 否 | 建议开始时间 |
+| operationWindowEnd | 否 | 建议结束时间 |
+| parameters | 是 | 本方向核心参数，第一版允许 JSON 承接 |
+| operationArea | 否 | 区域、地块、分区、GeoJSON 或引用 |
+| prescriptionMap | 否 | 变量处方图、区块处方数组 |
+| basis | 是 | 方案依据、推荐原因、输入摘要 |
+| acceptanceCriteria | 否 | 验收标准 |
+| riskNotes | 否 | 风险、限制、人工提示 |
+
+推荐模板：
+
+```json
+{
+  "planType": "plant_protection_control",
+  "algorithmCode": "controlPlanAlgorithm",
+  "executionMode": "manual",
+  "operationWindowStart": "2026-05-10T06:00:00+08:00",
+  "operationWindowEnd": "2026-05-10T18:00:00+08:00",
+  "parameters": {},
+  "operationArea": {},
+  "prescriptionMap": null,
+  "basis": {
+    "reason": "",
+    "sourceEventIds": [],
+    "sourceAlgorithm": ""
+  },
+  "acceptanceCriteria": {},
+  "riskNotes": []
+}
+```
+
+### 2.1.5 `ExecutionRecord / Evaluation / Feedback / ReviewRequest` 提交模板
+
+方向团队要提交的不只是“执行成功/失败”，而是完整闭环字段约定。
+
+执行记录模板：
+
+| 字段 | 说明 |
+|---|---|
+| recordType | 开始、结束、人工录入、回调、附件上传、异常 |
+| actorType / actorId | 人工、设备、第三方系统 |
+| actualStartAt / actualEndAt | 实际执行时间 |
+| actualArea / actualAmount | 实际面积、药量、水量、肥量等 |
+| resultPayload | 本方向实际结果 |
+| attachments | 图片、轨迹、报告、影像等 |
+
+评价反馈模板：
+
+| 字段 | 说明 |
+|---|---|
+| evaluationResult | `pass / warning / fail / unknown` |
+| evaluationMetrics | 具体指标，如覆盖率、长势等级、水位偏差 |
+| feedbackType | `completed / abnormal / no_action / follow_up_needed / review_needed` |
+| feedbackSummary | 一句话摘要 |
+| feedbackDetails | 结构化详情 |
+| requiresReview | 是否进入人工复核 |
+| suggestedNextAction | 建议的后续动作 |
+
+复核模板：
+
+| 字段 | 说明 |
+|---|---|
+| reviewType | 复核类型 |
+| triggerReason | 为什么触发复核 |
+| candidateActions | `approve / reject / adjust / no_action / need_more_info` |
+| decisionInput | 人工需要看到哪些上下文 |
+| resolutionEffect | 决议后影响哪些对象 |
+
+### 2.1.6 测试样例统一提交模板
+
+每个方向至少提交 3 类场景，并使用统一字段描述。
+
+| 字段 | 说明 |
+|---|---|
+| scenarioId | 场景编号 |
+| scenarioName | 场景名称 |
+| scope | `unit / integration / e2e` |
+| input | 输入计划、事件、算法响应、人工录入 |
+| expectedCreatedObjects | 应创建或更新的对象 |
+| expectedNoAction | 不应产生的对象或动作 |
+| expectedReview | 是否应触发复核 |
+| notes | 额外说明 |
+
+推荐模板：
+
+```md
+| scenarioId | scenarioName | scope | input | expectedCreatedObjects | expectedNoAction | expectedReview | notes |
+|---|---|---|---|---|---|---|---|
+| PP-INT-001 | 茎叶除草药前调查后生成防治方案 | integration | 调查 CalendarItem 到期 + 调查结果 + weed_treatment_diagnosis success | TaskIntent / OperationPlan / FarmingTask | 不直接创建补防任务 | no | control_plan 仅在需防治时调用 |
+| PP-INT-002 | 药后调查异常触发补防复核 | integration | after_treatment_diagnosis fail + additional_treatment_diagnosis immediate | ReviewRequest | 不直接创建补防 FarmingTask | yes | 需人工确认 |
+| PP-INT-003 | 病虫调查结果无需防治 | integration | 调查结果 + diagnosis=no_action | EventRecord / TaskIntent(no_action) | 不创建 OperationPlan / FarmingTask | no | 保留追溯记录 |
+```
+
+### 2.1.7 方向交付包最小清单
+
+每个业务方向提交文档时，最少要补齐以下内容。
+
+```text
+1. taskCategory / taskSubtype 定义表。
+2. 触发规则表和依赖关系表。
+3. 算法接口模板文档。
+4. OperationPlan JSON 样例。
+5. ExecutionRecord / Evaluation / Feedback / ReviewRequest 样例。
+6. 至少 3 个测试场景表。
+7. 如涉及后台任务，补 docs/workflow/background-job-matrix.md。
+8. 如涉及新流程或新 subtype，补 docs/workflow/task-workflow-matrix.md。
+```
+
+### 2.1.8 建议的文档落点
+
+为保证提交物统一，文档建议按下面位置维护。
+
+| 内容 | 建议位置 |
+|---|---|
+| 任务定义、触发条件、前后依赖 | `docs/workflow/task-workflow-matrix.md` 或 `docs/workflow/flows/` |
+| 后台任务相关触发 | `docs/workflow/background-job-matrix.md` |
+| 算法接口模板 | `docs/api/` |
+| 方向补充说明、字段映射、JSON 样例 | 对应方向章节下补充，必要时新增 `docs/api/<direction>-*.md` |
+| 设计取舍 | `docs/decisions/` |
+
 ## 2.2 核心后端负责什么
 
 核心后端不替各业务方向定义农艺规则，但负责把各方向收敛到统一模型和接口中。

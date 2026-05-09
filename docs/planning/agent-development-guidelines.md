@@ -45,6 +45,7 @@
 3. docs/planning/team-work-division.md
 4. docs/model/data-model.md
 5. 与本方向相关的 docs/workflow/task-workflow-matrix.md / docs/workflow/background-job-matrix.md / docs/api/
+6. 如任务涉及方向文档补齐，按 docs/planning/team-work-division.md 第 2.1 节模板提交。
 
 允许修改：
 列出本次允许修改的目录或文件。
@@ -60,6 +61,7 @@ adapter / schema / mapper / rule / service / API router / frontend component / t
 2. 需要生成哪些 mock 或 fixture。
 3. 是否需要更新 OpenAPI。
 4. 是否需要更新 docs。
+5. 是否补齐 task 定义表、触发规则表、依赖关系表、算法接口模板和 JSON 样例。
 ```
 
 ---
