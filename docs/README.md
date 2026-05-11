@@ -26,6 +26,15 @@ docs/
 ├── planning/
 │   ├── development-roadmap.md
 │   ├── team-work-division.md
+│   ├── team-work-division/
+│   │   ├── product-architecture-owner.md
+│   │   ├── core-backend.md
+│   │   ├── calendar-stage.md
+│   │   ├── plant-protection.md
+│   │   ├── irrigation.md
+│   │   ├── fertilization.md
+│   │   ├── remote-sensing.md
+│   │   └── frontend.md
 │   └── agent-development-guidelines.md
 ├── architecture/
 │   ├── architecture.md
