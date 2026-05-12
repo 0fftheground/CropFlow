@@ -438,17 +438,29 @@ EventRecord.payload
 
 # 7. 每个方向提交材料模板
 
-每个业务方向补接口或流程时，按同一模板提交：
+每个业务方向补接口或流程时，按同一模板提交。
+
+当前阶段说明：
+
+```text
+1. 当前仍处于核心对象、ER 图、表结构草案和 API contract 收敛阶段。
+2. 各方向当前优先提交接口摘要、字段草案、流程草案、场景表和待决问题清单。
+3. 文中提到的 CalendarItem / TaskIntent / FarmingTask / OperationPlan / ExecutionRecord / Feedback / ReviewRequest 主要用于表达未来统一承接的目标语义。
+4. 当前阶段不要求各方向直接提交这些核心对象的最终 JSON 或代码实现。
+```
+
+建议模板：
 
 ```text
 1. 业务场景：这个算法或流程解决什么问题。
 2. 触发时机：由用户、后台任务、调查结果、反馈还是复核触发。
-3. 输入字段：来自 PlantingPlan / Field / FarmingTask / OperationPlan / ExecutionRecord / EventRecord 的哪些字段。
-4. 输出字段：返回日期、方案、处方、风险、no_action 还是需要人工确认。
-5. 数据映射：输出写入 OperationPlan、TaskIntent、ReviewRequest、CalendarItem 还是 EventRecord。
+3. 输入字段：当前已知来自哪些业务信息、事件、调查结果或上游资料；如字段尚未冻结，可先列字段草案。
+4. 输出字段：返回日期、方案字段、处方字段、风险、no_action 还是需要人工确认。
+5. 目标语义映射：这些输出未来准备落到 CalendarItem、TaskIntent、FarmingTask、OperationPlan、ExecutionRecord、Feedback、ReviewRequest 还是 EventRecord。
 6. 是否生成 FarmingTask：自动生成、人工确认后生成，还是不生成。
-7. 不确定字段：先放哪个 JSON 字段。
-8. 样例：至少提供一个请求样例和一个响应样例。
+7. 不确定字段：有哪些待确认点、建议暂存在哪类扩展字段或说明中。
+8. 样例：至少提供一个输入样例和一个输出样例；如核心对象尚未冻结，可先不给最终对象 JSON。
+9. 待决问题：哪些点需要产品 / 架构负责人或核心后端拍板。
 ```
 
 ---

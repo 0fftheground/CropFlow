@@ -25,6 +25,8 @@ docs/
 │   └── meeting.md
 ├── planning/
 │   ├── development-roadmap.md
+│   ├── non-code-integration-package-template.md
+│   ├── plant-protection-closed-loop-schedule.md
 │   ├── team-work-division.md
 │   ├── team-work-division/
 │   │   ├── product-architecture-owner.md

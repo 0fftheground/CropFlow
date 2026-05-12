@@ -1,7 +1,7 @@
 # CropFlow Plan-level MVP Data Model
 
 > 本文档定义 CropFlow MVP 的逻辑数据模型草案。  
-> 当前技术栈尚未确定，因此本文不绑定具体数据库、ORM、DDL 或迁移工具。
+> 当前已确认后端采用 Python + FastAPI，数据库采用 PostgreSQL，部署方式采用 Docker；本文仍以逻辑模型为主，不展开具体 DDL 和工程细节。
 
 ---
 
@@ -960,14 +960,14 @@ ExternalExecutionSystem
 1. 固定 stageCode 的完整枚举值。
 2. 第一版 taskSubtype 建议清单是否需要进一步收敛。
 3. generalFlowKey / chainKey 是否进入第一版表结构，还是先放 metadata。
-4. 技术栈、数据库类型、ID 生成方式和命名风格。
+4. ID 生成方式和命名风格。
 ```
 
 ---
 
-# 14. 技术栈建议
+# 14. 技术栈约定
 
-在 3-4 人团队、Plan-level MVP、团队更熟悉 Python、且后续需要清晰模块边界和数据一致性的前提下，建议优先考虑：
+当前已确认采用以下技术栈和部署方式：
 
 ```text
 后端：Python + FastAPI
@@ -981,7 +981,13 @@ ID：UUID 或数据库生成 ID
 命名：数据库 snake_case，代码 camelCase
 ```
 
-前端技术栈暂不强制指定，但需要遵守接口契约：
+部署方式：
+
+```text
+后端和数据库相关服务采用 Docker 方式部署。
+```
+
+前端技术栈由前端负责人确定，但需要遵守接口契约：
 
 ```text
 1. 接口协议：REST API。
@@ -992,7 +998,7 @@ ID：UUID 或数据库生成 ID
 6. 枚举值：与 docs/model/data-model.md 保持一致。
 ```
 
-推荐理由：
+选择理由：
 
 ```text
 1. FastAPI 对 Python 团队上手成本低，自动生成 OpenAPI，适合前后端并行。
@@ -1003,7 +1009,7 @@ ID：UUID 或数据库生成 ID
 6. 前端框架由前端负责人选择，不影响后端模型和接口契约。
 ```
 
-备选方案：
+备选方案仅作为后续重构参考，不作为当前 MVP 范围内的待决事项：
 
 ```text
 1. 如果需要后台管理能力优先，可以考虑 Django + Django REST Framework + PostgreSQL。
@@ -1011,4 +1017,4 @@ ID：UUID 或数据库生成 ID
 3. 如果后续有强企业集成、复杂事务和团队 Java 经验，再考虑 Java + Spring Boot + PostgreSQL。
 ```
 
-当前默认推荐：Python + FastAPI + PostgreSQL。
+当前执行口径：Python + FastAPI + PostgreSQL + Docker。
