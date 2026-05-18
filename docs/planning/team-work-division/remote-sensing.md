@@ -13,10 +13,10 @@
 | 方向 | 当前要交什么 | 产出形式 | 依赖谁拍板 |
 |---|---|---|---|
 | 遥感监测 | 遥感算法接口摘要 | Markdown 摘要 | 核心后端、产品 / 架构负责人 |
-| 遥感监测 | 任务类型与流程草案 | 任务表 / 流程说明 | 产品 / 架构负责人 |
+| 遥感监测 | `taskCategory / taskSubtype` 定义表 | 定义表 | 产品 / 架构负责人、核心后端 |
+| 遥感监测 | 触发规则表和依赖关系表 | 规则表 / 依赖表 | 产品 / 架构负责人、核心后端 |
 | 遥感监测 | 方案字段草案 | 字段表 | 核心后端 |
-| 遥感监测 | 过程记录字段草案 | 字段表 | 核心后端 |
-| 遥感监测 | 评价反馈字段草案 | 字段表 / 规则说明 | 核心后端 |
+| 遥感监测 | 过程记录、评价、反馈、复核字段草案 | 字段表 / 规则说明 | 核心后端 |
 | 遥感监测 | 下游关系说明 | 关系说明 | 产品 / 架构负责人、核心后端 |
 | 遥感监测 | 测试场景表 | 场景表 | 无，必要时核心后端确认 |
 | 遥感监测 | 待决问题清单 | 问题列表 | 产品 / 架构负责人、核心后端 |
@@ -33,31 +33,19 @@
 7. 明确长势监测与穗肥变量处方图的关系。
 ```
 
-## 需要补齐的内容
-
-| 类型 | 需要说明 |
-|---|---|
-| 任务 | 缺苗识别、长势监测、穗肥前长势监测、穗肥后效果抽查、异常点位调查 |
-| 算法 | 影像输入、拼接结果、NDVI 结果、缺苗区域、长势等级、异常点位 |
-| OperationPlan | 航拍时间、影像类型、监测区域、监测目的、算法参数、验收标准 |
-| 执行 | 无人机航测、影像上传、影像拼接、算法处理、结果确认的 ExecutionRecord 字段 |
-| Evaluation | 缺苗面积、缺苗严重程度、长势等级变化、异常点位数量、处方图质量 |
-| Feedback | 是否完成监测、是否需要补拍、是否需要人工确认、是否触发后续农事或处方生成 |
-| 下游关系 | 缺苗识别可触发补苗或复核；穗肥前长势监测可为施穗肥 OperationPlan 提供变量处方图 |
-
 ## 当前阶段非代码任务
 
 ```text
 1. 遥感监测算法接口摘要：
-   说明影像输入、拼接依赖、输出结构、异常处理和人工确认点。
-2. 任务类型与流程草案：
-   明确缺苗识别、长势监测、穗肥前监测、效果抽查、异常点位调查的触发条件和前后依赖。
-3. 方案字段草案：
+   按总文档统一算法模板说明影像输入、拼接依赖、输出结构、异常结构、映射目标、异常处理和人工确认点。
+2. task 定义表：
+   至少按总文档统一格式给出缺苗识别、长势监测、穗肥前监测、效果抽查、异常点位调查相关 workflowKey、taskCategory、taskSubtype、goal、upstreamKeys、downstreamKeys。
+3. 触发规则表和依赖关系表：
+   按总文档统一格式说明遥感相关 CalendarItem、FarmingTask、OperationPlan、ReviewRequest 的触发来源、阻断条件、依赖关系和 fallbackAction。
+4. 方案字段草案：
    列出监测任务后续至少需要哪些方案字段，不要求现在给最终 OperationPlan JSON。
-4. 过程记录字段草案：
-   列出影像上传、拼接、算法处理、结果确认分别需要记录哪些字段。
-5. 评价反馈字段草案：
-   说明缺苗识别、长势监测、异常点位、处方图质量分别需要哪些评价和反馈字段。
+5. 过程记录、评价、反馈、复核字段草案：
+   列出影像上传、拼接、算法处理、结果确认分别需要记录哪些字段，并说明哪些字段进入 Evaluation / Feedback / ReviewRequest。
 6. 下游关系说明：
    说明缺苗识别、长势监测与补苗、复核、施肥处方图之间的关系。
 7. 至少 3 个测试场景：
@@ -66,6 +54,116 @@
    - 穗肥前长势监测生成变量处方图并供施穗肥方案使用。
 8. 待决问题清单：
    统一列出需要核心后端或产品 / 架构负责人拍板的点。
+9. 文档回写要求：
+   如涉及新的 workflow、taskSubtype 或后台任务，需同步更新 docs/workflow/task-workflow-matrix.md 和 docs/workflow/background-job-matrix.md。
+```
+
+### 直接提交模板
+
+#### 1. 遥感监测算法接口摘要
+
+```md
+## remote_sensing_algorithm
+
+### 1. 基本信息
+- algorithmCode:
+- algorithmName:
+- purpose:
+- owner:
+- endpoint:
+- method:
+- auth:
+
+### 2. 触发时机
+- upstream workflowKey / jobKey:
+- trigger event:
+- trigger step:
+- whether sync or async:
+
+### 3. 请求输入
+| field | type | required | source | example | notes |
+|---|---|---|---|---|---|
+
+### 4. 响应输出
+| field | type | meaning | example | targetObject | targetField |
+|---|---|---|---|---|---|
+
+### 5. 异常返回
+| code | meaning | retryable | fallbackAction | notes |
+|---|---|---|---|---|
+```
+
+#### 2. task 定义表
+
+```md
+| workflowKey | taskCategory | taskSubtype | taskName | generalFlowKey | stageScope | goal | requiresOperationPlan | requiresExecution | requiresReview | upstreamKeys | downstreamKeys | notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+```
+
+#### 3. 触发规则表
+
+```md
+| targetType | targetKey | triggerType | triggerSource | preconditions | blockingConditions | action | idempotencyKeySuggestion | fallbackAction |
+|---|---|---|---|---|---|---|---|---|
+```
+
+#### 4. 依赖关系表
+
+```md
+| currentKey | dependencyType | dependsOn | dependencyRule | missingDependencyAction | satisfiedOutput |
+|---|---|---|---|---|---|
+```
+
+#### 5. `OperationPlan` / 监测方案字段表
+
+```md
+| field | required | meaning | source | example | notes |
+|---|---|---|---|---|---|
+| planType | yes | 方案类型 | 固定值或规则 | remote_sensing_monitoring |  |
+| algorithmCode | no | 方案来源算法 | 算法 | growthMonitoringAlgorithm |  |
+| executionMode | yes | 执行方式 | 业务约定 | external |  |
+| operationWindowStart | no | 建议开始时间 | 规则或调度 |  |  |
+| operationWindowEnd | no | 建议结束时间 | 规则或调度 |  |  |
+| parameters | yes | 监测目的、影像类型、算法参数等 | 业务约定 |  |  |
+| operationArea | no | 监测区域 | 计划或算法 |  |  |
+| prescriptionMap | no | 变量处方图 | 算法 |  |  |
+| acceptanceCriteria | no | 验收标准 | 业务约定 |  |  |
+| riskNotes | no | 风险提示 | 算法或人工 |  |  |
+```
+
+#### 6. 过程记录 / 评价 / 反馈 / 复核字段表
+
+```md
+| objectType | field | type | required | meaning | example | notes |
+|---|---|---|---|---|---|---|
+| ExecutionRecord |  |  |  |  |  |  |
+| Evaluation |  |  |  |  |  |  |
+| Feedback |  |  |  |  |  |  |
+| ReviewRequest |  |  |  |  |  |  |
+```
+
+#### 7. 下游关系表
+
+```md
+| sourceResult | downstreamType | downstreamKey | triggerCondition | output | notes |
+|---|---|---|---|---|---|
+```
+
+#### 8. 测试场景表
+
+```md
+| scenarioId | scenarioName | scope | input | expectedCreatedObjects | expectedNoAction | expectedReview | notes |
+|---|---|---|---|---|---|---|---|
+| RS-INT-001 | 缺苗识别生成复核事项 | integration | 缺苗识别结果 high_risk | Evaluation / Feedback / ReviewRequest | 不直接创建补苗任务 | yes |  |
+| RS-INT-002 | 常规长势监测生成状态更新和异常点位 | integration | 长势监测结果 | Evaluation / Feedback | 不创建无关方案 | conditional |  |
+| RS-INT-003 | 穗肥前长势监测生成变量处方图 | integration | 长势结果 + 施肥衔接 | prescriptionMap / OperationPlan | 不重复创建监测任务 | no |  |
+```
+
+#### 9. 待决问题清单
+
+```md
+| questionId | question | impact | options | owner | targetDecisionDate | status | notes |
+|---|---|---|---|---|---|---|---|
 ```
 
 ## 当前阶段完成标准
@@ -73,41 +171,7 @@
 ```text
 1. 不要求代码提交。
 2. 不要求给最终 OperationPlan / ExecutionRecord / Feedback JSON。
-3. 需要给出字段草案、流程草案和下游关系说明，供核心后端后续统一实现。
+3. 需要给出任务定义表、触发规则表、依赖关系表、字段草案和下游关系说明，供核心后端后续统一实现。
 4. 遥感过程记录必须拆分成多个步骤描述，不能只描述最终结果。
+5. 算法摘要和场景表需遵循总文档统一模板。
 ```
-
-## 进入实现阶段后参考的代码落点
-
-```text
-1. backend/app/adapters/remote_sensing/missing_seedling_adapter.py
-2. backend/app/adapters/remote_sensing/growth_monitoring_adapter.py
-3. backend/app/adapters/remote_sensing/ndvi_monitoring_adapter.py
-4. backend/app/schemas/remote_sensing/ 影像、拼接、算法结果、监测反馈 DTO。
-5. backend/app/mappers/remote_sensing/operation_plan_mapper.py
-6. backend/app/mappers/remote_sensing/execution_record_mapper.py
-7. backend/app/mappers/remote_sensing/evaluation_feedback_mapper.py
-8. backend/app/mappers/remote_sensing/prescription_map_mapper.py
-9. backend/app/rules/remote_sensing/missing_seedling_review_policy.py
-10. backend/app/rules/remote_sensing/growth_monitoring_policy.py
-11. backend/app/api/routes/remote_sensing.py，如需要影像上传或结果确认接口。
-12. backend/tests/fixtures/remote_sensing/ 缺苗识别、长势监测、穗肥前监测样例。
-13. backend/tests/unit/remote_sensing/ 影像结果映射、评价反馈、处方图衔接测试。
-14. backend/tests/integration/remote_sensing/ 缺苗到复核、长势监测到施肥处方图链路测试。
-```
-
-## 进入实现阶段后代码落点说明
-
-| 交付物 | 最少需要包含 |
-|---|---|
-| `adapters/remote_sensing/` | 缺苗识别、长势监测、NDVI 等算法调用和结果解析 |
-| `schemas/remote_sensing/` | 影像输入、拼接结果、算法结果、反馈 DTO |
-| `mappers/remote_sensing/operation_plan_mapper.py` | 监测任务或监测方案到 OperationPlan 的映射 |
-| `mappers/remote_sensing/execution_record_mapper.py` | 影像上传、拼接、算法处理过程到 ExecutionRecord 的映射 |
-| `mappers/remote_sensing/evaluation_feedback_mapper.py` | 监测结果到 Evaluation / Feedback / ReviewRequest 的映射 |
-| `mappers/remote_sensing/prescription_map_mapper.py` | 长势监测结果到 prescriptionMap 的映射 |
-| `rules/remote_sensing/` | 缺苗复核、异常点位、是否触发下游动作的判断逻辑 |
-| `api/routes/remote_sensing.py` | 影像上传、结果确认或相关查询接口 |
-| `tests/fixtures/remote_sensing/` | 缺苗、长势、穗肥前监测样例 |
-| `tests/unit/remote_sensing/` | mapper、rule、适配逻辑测试 |
-| `tests/integration/remote_sensing/` | 缺苗到复核、长势到施肥处方图链路测试 |

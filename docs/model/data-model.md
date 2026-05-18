@@ -134,20 +134,27 @@ InventoryTransaction
 # 5. 实体关系
 
 ```text
-Farm 1 - N Field
+User 1 - N UserAccount
+User 1 - N ReviewRequest
+User 1 - N SystemNotification
+Farm 1 - N FarmFieldRelation
+Field 1 - N FarmFieldRelation
+RiceVariety 1 - N PlantingPlan
 Farm 1 - N InventoryItem
 InventoryItem 1 - N InventoryTransaction
-Field 1 - N PlantingPlan
+
+PlantingPlan 1 - N PlantingPlanFieldRelation
+Field 1 - N PlantingPlanFieldRelation
 
 PlantingPlan 1 - 1 CropStageState
 PlantingPlan 1 - 1 CropThermalTimeState
 PlantingPlan 1 - N StagePredictionSnapshot
 
 PlantingPlan 1 - N CalendarItem
-CalendarItem 0..1 - N FarmingTask
+CalendarItem 0..1 - 0..1 FarmingTask
 
 PlantingPlan 1 - N TaskIntent
-TaskIntent 0..1 - N FarmingTask
+TaskIntent 0..1 - 0..1 FarmingTask
 
 PlantingPlan 1 - N FarmingTask
 FarmingTask 1 - N OperationPlan
@@ -156,16 +163,80 @@ FarmingTask 1 - N Execution
 OperationPlan 0..1 - N Execution
 Execution 1 - N ExecutionRecord
 Execution 1 - 0..N DeviceCommand
-Execution 1 - N Evaluation
+Execution 1 - 0..N Evaluation
 Evaluation 1 - N Feedback
 
-Feedback 0..1 - N ReviewRequest
-TaskIntent 0..1 - N ReviewRequest
-ReviewRequest 0..1 - N FarmingTask
+Feedback 0..1 - 0..1 ReviewRequest
+TaskIntent 0..1 - 0..1 ReviewRequest
+ReviewRequest 0..1 - 0..1 FarmingTask
 
 PlantingPlan 1 - N SystemNotification
 PlantingPlan 1 - N EventRecord
 PlantingPlan 0..1 - N InventoryTransaction
+```
+
+## 5.1 ER 图
+
+```mermaid
+erDiagram
+    cf_user ||--o{ cf_user_account : authenticates
+    cf_user ||--o{ cf_review_request : reviews
+    cf_user ||--o{ cf_system_notification : receives
+
+    cf_farm ||--o{ cf_farm_field_relation : owns
+    cf_field ||--o{ cf_farm_field_relation : belongs_to
+
+    cf_farm ||--o{ cf_planting_plan : has
+    cf_rice_variety ||--o{ cf_planting_plan : selected_by
+
+    cf_planting_plan ||--o{ cf_planting_plan_field_relation : covers
+    cf_field ||--o{ cf_planting_plan_field_relation : linked_to
+
+    cf_planting_plan ||--|| cf_crop_stage_state : has
+    cf_planting_plan ||--|| cf_crop_thermal_time_state : has
+    cf_planting_plan ||--o{ cf_stage_prediction_snapshot : records
+
+    cf_stage_prediction_snapshot ||--o{ cf_calendar_item : sources
+    cf_stage_prediction_snapshot ||--o{ cf_crop_stage_state : sources
+    cf_stage_prediction_snapshot ||--o{ cf_crop_thermal_time_state : thresholds
+
+    cf_planting_plan ||--o{ cf_event_record : logs
+    cf_event_record ||--o{ cf_stage_prediction_snapshot : triggers
+    cf_event_record ||--o{ cf_task_intent : triggers
+    cf_event_record ||--o{ cf_operation_plan : triggers
+
+    cf_planting_plan ||--o{ cf_calendar_item : has
+    cf_planting_plan ||--o{ cf_task_intent : has
+    cf_planting_plan ||--o{ cf_review_request : has
+    cf_planting_plan ||--o{ cf_farming_task : has
+
+    cf_calendar_item o|--o{ cf_farming_task : generates
+    cf_task_intent o|--o{ cf_farming_task : converts_to
+    cf_review_request o|--o{ cf_farming_task : resolves_to
+
+    cf_farming_task ||--o{ cf_operation_plan : has
+    cf_farming_task ||--o{ cf_execution : executes
+
+    cf_operation_plan o|--o{ cf_execution : used_by
+
+    cf_execution ||--o{ cf_execution_record : records
+    cf_execution ||--o{ cf_evaluation : evaluated_by
+    cf_execution ||--o{ cf_feedback : produces
+
+    cf_evaluation ||--o{ cf_feedback : summarized_as
+
+    cf_planting_plan ||--o{ cf_system_notification : notifies
+```
+
+说明：
+
+```text
+1. 本图对应 src/sql/20260518_weed_protection_closed_loop.sql 的当前主表关系。
+2. ReviewRequest.sourceEntityType/sourceEntityId 是多态来源，不在图中画成固定外键。
+3. InventoryItem / InventoryTransaction 不在当前杂草防治闭环 DDL 范围内，因此未在图中展开。
+4. 当前主链路为 PlantingPlan -> CalendarItem -> FarmingTask -> Execution -> ExecutionRecord -> Evaluation / Feedback -> ReviewRequest。
+5. ReviewRequest.assignedUserId / resolvedBy、SystemNotification.targetUserId 指向 User 表。
+6. UserAccount 负责登录认证，不直接参与业务复核或通知关系。
 ```
 
 说明：
@@ -175,11 +246,64 @@ PlantingPlan 0..1 - N InventoryTransaction
 2. ReviewRequest 的处理结果不能直接绕过 Plan Orchestrator。
 3. EventRecord 可以关联多个后续业务对象，但业务对象不应依赖 EventRecord 执行业务判断。
 4. DeviceCommand 只在设备、无人机或第三方系统执行场景出现；是否限制一对一留到后续确认。
+5. 当前 MVP 语义下，一个 CalendarItem / TaskIntent / ReviewRequest 最多只直接对应一个 FarmingTask。
+6. 如后续需要补救任务、复查任务或新的服务任务，应由 Plan Orchestrator 新建新的 CalendarItem、TaskIntent 或 ReviewRequest，再进入后续链路，而不是让同一个上游对象直接派生多个 FarmingTask。
 ```
 
 ---
 
 # 6. 字段草案
+
+## 6.0 User
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | string | 用户 ID |
+| userCode | string | 用户编码，可为空 |
+| username | string | 登录名或唯一用户名 |
+| displayName | string | 展示名，可为空 |
+| mobile | string | 手机号，可为空 |
+| email | string | 邮箱，可为空 |
+| status | enum | active / inactive |
+| metadata | json | 扩展信息 |
+| createdAt | datetime | 创建时间 |
+| updatedAt | datetime | 更新时间 |
+
+说明：
+
+```text
+User 负责业务身份，主要用于 ReviewRequest 指派 / 处理，以及 SystemNotification 接收人。
+登录认证信息放在独立 UserAccount，不与业务用户表混存。
+完整权限、组织、角色体系不进入当前 MVP 数据模型。
+```
+
+## 6.0.1 UserAccount
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | id | 账户 ID |
+| userId | string | 所属 User |
+| accountType | enum | password / sms / oauth / wecom 等，第一版默认 password |
+| loginName | string | 登录名，唯一 |
+| passwordHash | string | 密码哈希，可为空 |
+| status | enum | active / disabled / locked |
+| lastLoginAt | datetime | 最近登录时间，可为空 |
+| lastLoginIp | string | 最近登录 IP，可为空 |
+| passwordChangedAt | datetime | 最近密码修改时间，可为空 |
+| failedLoginCount | integer | 连续失败次数 |
+| lockedUntil | datetime | 锁定截止时间，可为空 |
+| metadata | json | 认证扩展信息 |
+| createdAt | datetime | 创建时间 |
+| updatedAt | datetime | 更新时间 |
+
+说明：
+
+```text
+UserAccount 负责登录认证，第一版只要求支持 password 账号密码登录。
+passwordHash 只存密码哈希，不存明文密码。
+推荐使用 Argon2id 或 bcrypt，不在表中单独设计明文 password 字段。
+一个 User 当前可对应多个 UserAccount，但同一 userId + accountType 组合唯一。
+```
 
 ## 6.1 Farm
 
@@ -187,32 +311,32 @@ PlantingPlan 0..1 - N InventoryTransaction
 |---|---|---|
 | id | id | 农场 ID |
 | farmName | string | 农场名称 |
-| longitude | decimal | 经度 |
-| latitude | decimal | 纬度 |
-| address | string | 地址 |
-| province | string | 省份 |
-| metadata | json | 扩展信息 |
+| boundaryWkt | text | 农场边界 WKT，可为空 |
+| centroidLat | decimal | 中心点纬度，可为空 |
+| centroidLon | decimal | 中心点经度，可为空 |
+| createdAt | datetime | 创建时间 |
+| updatedAt | datetime | 更新时间 |
 
 ## 6.2 Field
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | id | id | 地块 ID |
-| farmId | id | 所属 Farm |
 | fieldName | string | 地块名称 |
-| area | decimal | 地块面积 |
-| areaUnit | string | 面积单位 |
-| boundaryAddress | text | 地块边界地址或边界描述 |
-| boundaryGeometry | json | 地块边界坐标数组或 GeoJSON |
-| metadata | json | 扩展信息 |
+| boundaryWkt | text | 地块边界 WKT，可为空 |
+| centroidLat | decimal | 中心点纬度，可为空 |
+| centroidLon | decimal | 中心点经度，可为空 |
+| areaHa | decimal | 地块面积，单位公顷，可为空 |
+| createdAt | datetime | 创建时间 |
+| updatedAt | datetime | 更新时间 |
 
 说明：
 
 ```text
-Farm.longitude / Farm.latitude 表示农场中心点。
-Field 第一版需要地块名称、地块面积和边界坐标。
-boundaryAddress 可保留边界文件地址或边界描述，boundaryGeometry 承载边界坐标数组或 GeoJSON。
-土壤类型、土壤肥力、前茬作物第一版不建独立字段，后续如需要再放入 Field.metadata 或新增字段。
+Farm.centroidLat / Farm.centroidLon 表示农场中心点。
+Field 不再直接保存 farmId，农场与地块关系通过 FarmFieldRelation 维护。
+Field 第一版对齐 agri_field，保留地块名称、边界 WKT、中心点和面积。
+土壤类型、土壤肥力、前茬作物等信息当前不在 agri_field 中，第一版先不结构化。
 ```
 
 ## 6.3 PlantingPlan
@@ -223,37 +347,119 @@ boundaryAddress 可保留边界文件地址或边界描述，boundaryGeometry �
 | planCode | string | 计划编号 |
 | planName | string | 计划名称 |
 | farmId | id | 所属 Farm |
-| fieldId | id | 所属 Field |
-| cropName | string | 作物 |
-| varietyName | string | 品种 |
-| fieldCode | string | 地块编号 |
-| fieldName | string | 地块名称 |
-| area | decimal | 种植面积 |
-| areaUnit | string | 面积单位 |
-| regionCode | string | 区域编码 |
-| regionName | string | 区域名称 |
+| year | integer | 年份，可为空 |
+| cultiTypeCode | integer | 栽培类型字典 code，引用 cf_code_dict.code，例如 5=早稻 |
+| plantingMethodCode | integer | 种植方式字典 code，引用 cf_code_dict.code，例如 1=直播 |
+| cropName | string | 作物，映射 agri_crop_season.crop_type |
+| varietyId | id | 所属 RiceVariety |
+| varietyName | string | 品种名称快照 |
 | sowingDate | date | 播种日期 |
 | transplantDate | date | 移栽日期，可为空 |
+| harvestDate | date | 收获日期，可为空 |
 | transplantLeafAge | decimal | 移栽时叶龄，可为空 |
-| plantingMethod | enum | direct_seeding / transplanting |
-| cropSeason | string | 作物季次，例如 early_rice / late_rice |
-| riceCroppingType | string | 稻作类型，可为空 |
 | previousHarvestDate | date | 上一茬收割日期，可为空 |
 | ratoonFirstSeasonHarvestDate | date | 再生稻头季收割日期，可为空 |
 | expectedHarvestDate | date | 预计采收日期 |
 | status | enum | 计划状态 |
 | taskGenerationWindowDays | integer | 默认任务生成窗口 |
+| createdAt | datetime | 创建时间 |
+| updatedAt | datetime | 更新时间 |
 | metadata | json | 计划扩展信息 |
 
 说明：
 
 ```text
-fieldCode / fieldName / regionCode / regionName 在 PlantingPlan 中保留一份快照，避免后续地块信息变化影响历史计划展示。
+PlantingPlan 保留 farmId，对齐 agri_crop_season 的 season 归属农场语义。
+PlantingPlan 不再直接保存 fieldId，计划与地块关系通过 PlantingPlanFieldRelation 维护。
+varietyId 关联独立 RiceVariety；varietyName 作为展示和历史追溯快照保留。
 expectedHarvestDate 第一版由系统预测生成，不作为用户必填字段。
-sowingDate 是必填计划字段；transplantDate 仅在 plantingMethod = transplanting 时需要。
+sowingDate 是必填计划字段；transplantDate 仅在 plantingMethodCode = 3（插秧）时需要。
 PlantingPlan 中只保留计划创建、页面展示、任务生成和算法高频共用字段。
+cultiTypeCode 已覆盖当前 cropSeason / riceCroppingType 语义，第一版不再重复保留这两个字段。
+业务基础枚举不直接存中文展示值，而是直接引用 cf_code_dict.code。
 审定稻作类型、品种熟制、审定亚种、审定区域、对照品种、生育期差距、返青天数等字段当前不是 3、4 节算法明确必需字段，第一版先放 PlantingPlan.metadata 或 StagePredictionSnapshot.inputPayload；开发时确认高频查询或稳定复用后再结构化。
 算法专用或临时输入仍可进入 StagePredictionSnapshot.inputPayload / EventRecord.payload。
+字段命名和口径优先对齐外部参考表 agri_crop_season；当前文档先收口语义，不替代原始 DDL。
+```
+
+## 6.3.1 RiceVariety
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | id | 品种 ID |
+| name | string | 品种名称 |
+| approveYear | integer | 审定年份，可为空 |
+| approveNo | string | 审定编号，可为空 |
+| approveRegion | string | 审定区域，可为空 |
+| suitableRegion | string | 适宜区域，可为空 |
+| cultiTypeCode | integer | 栽培类型字典 code，可为空，引用 cf_code_dict.code |
+| subTypeCode | integer | 亚种字典 code，例如 9=籼 |
+| maturityCode | integer | 熟期字典 code，可为空，引用 cf_code_dict.code |
+| controlVariety | string | 对照品种，可为空 |
+| growthDays | decimal | 生育天数，可为空 |
+| compareDays | decimal | 比对天数，可为空 |
+| riceCode | string | 品种编码，可为空 |
+
+说明：
+
+```text
+RiceVariety 第一版按用户提供的 agri_rice_variety 结构建模。
+PlantingPlan 通过 varietyId 关联 RiceVariety，同时保留 varietyName 快照用于历史展示。
+RiceVariety.cultiTypeCode / subTypeCode / maturityCode 均引用 cf_code_dict.code。
+subType 当前业务枚举为籼 / 粳 / 籼粳交，在业务表中存原始 code，例如 9 / 10 / 11。
+```
+
+## 6.3.1.1 cf_code_dict 约定
+
+| 列别名 | 原始列 | 说明 |
+|---|---|---|
+| id | agri_code_dict.id | 主键，自增 |
+| code | agri_code_dict.code | 业务表引用的字典值 |
+| displayName | agri_code_dict.code_name | 展示名称，例如 早稻 / 直播 / 籼 |
+| dictType | agri_code_dict.category | 字典类型，例如 culti_type / sowingmtd / sub_type / maturity |
+| isActive | agri_code_dict.is_active | 是否启用 |
+
+说明：
+
+```text
+cf_code_dict 的表结构和初始化数据沿用 agri_code_dict。
+业务表统一保存 cf_code_dict.code，前端展示再通过 displayName 转义。
+cf_code_dict.dictType 当前至少使用 culti_type、sowingmtd、sub_type、maturity。
+```
+
+## 6.3.2 FarmFieldRelation
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | id | 关系 ID |
+| farmId | id | 所属 Farm |
+| fieldId | id | 所属 Field |
+| createdAt | datetime | 创建时间 |
+| updatedAt | datetime | 更新时间 |
+
+说明：
+
+```text
+FarmFieldRelation 用于维护农场与地块的归属关系。
+当前参考 ddl.sql 中 agri_field 直接保存 farm_id，但当前业务口径要求显式拆出 FarmFieldRelation，因此关系表保留 farmId / fieldId / createdAt / updatedAt 四类字段。
+```
+
+## 6.3.3 PlantingPlanFieldRelation
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | id | 关系 ID |
+| plantingPlanId | id | 所属 PlantingPlan |
+| fieldId | id | 所属 Field |
+| createdAt | datetime | 创建时间 |
+| updatedAt | datetime | 更新时间 |
+
+说明：
+
+```text
+PlantingPlanFieldRelation 用于维护种植计划与地块关系，是 PlantingPlan 获取地块上下文的唯一入口。
+第一版显式取消 PlantingPlan.fieldId。
+字段命名和口径优先对齐 agri_field_crop_season：核心关系为 fieldId + plantingPlanId 对应 field_id + season_id，并保留 createdAt / updatedAt。
 ```
 
 ## 6.4 CropStageState
@@ -279,7 +485,7 @@ PlantingPlan 中只保留计划创建、页面展示、任务生成和算法高�
 | accumulatedThermalTime | decimal | 当前累计积温 |
 | thermalTimeUnit | string | 积温单位 |
 | baseTemperature | decimal | 基准温度 |
-| startDate | date | 起算日期 |
+| startDate | date | 起算日期，第一版固定按 sowingDate 起算 |
 | lastCalculatedDate | date | 最近计算日期 |
 | thresholdSnapshotId | id | 使用的阈值快照 |
 | dataVersion | string | 气象或计算数据版本 |
@@ -305,6 +511,7 @@ PlantingPlan 中只保留计划创建、页面展示、任务生成和算法高�
 ```text
 生育期预测算法当前只返回预测时间线，不直接返回当前阶段。
 CropStageState.currentStageCode 由 Stage Orchestrator 根据 stageTimeline 和当前日期计算或由人工录入修正。
+人工录入真实生育期时，优先修正 CropStageState；CropThermalTimeState 仍按 sowingDate 持续累计，不因人工反馈重新起算。
 stageTimeline 第一版保存算法返回的各生育期节点日期。
 算法版本如果外部服务暂不返回，可以为空；algorithmCode 仍用于标识调用的算法接口。
 ```
@@ -315,7 +522,7 @@ stageTimeline 第一版保存算法返回的各生育期节点日期。
 |---|---|---|
 | id | id | 预备农事项 ID |
 | plantingPlanId | id | 所属 PlantingPlan |
-| stageCode | string | 关联生育期编码 |
+| stageCode | string | 关联生育期编码，可为空，仅适用于阶段相关农事项 |
 | taskCategory | enum | 农事大类 |
 | taskSubtype | string | 农事子类 |
 | title | string | 农事项标题 |
@@ -337,6 +544,7 @@ stageTimeline 第一版保存算法返回的各生育期节点日期。
 MVP 第一版不把 TaskGenerationPlan 作为核心对象或独立表。
 CalendarItem 承载预备农事项、建议时间和轻量生成条件。
 TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask。
+并非所有 CalendarItem 都必须绑定生育期；stageCode 只在阶段驱动或算法明确返回阶段上下文时填写。
 如果后续出现复杂生成窗口、重试、跳过原因、多次生成计划历史，再考虑重新引入 TaskGenerationPlan。
 ```
 
@@ -373,7 +581,7 @@ TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask�
 | taskSubtype | string | 农事子类 |
 | title | string | 任务标题 |
 | description | text | 任务说明 |
-| targetStageCode | string | 目标生育期 |
+| targetStageCode | string | 目标生育期，可为空，仅适用于阶段相关正式任务 |
 | plannedStartAt | datetime | 计划开始时间 |
 | plannedEndAt | datetime | 计划结束时间 |
 | priority | enum | low / normal / high / urgent |
@@ -381,6 +589,13 @@ TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask�
 | executionMode | enum | manual / device / drone / third_party |
 | generationReason | text | 任务生成原因 |
 | idempotencyKey | string | 幂等键 |
+
+说明：
+
+```text
+FarmingTask.targetStageCode 不要求所有任务都有值。
+如果任务来自阶段驱动 CalendarItem，或算法/复核明确给出阶段目标，则填写；否则保持为空。
+```
 
 ## 6.10 OperationPlan
 
@@ -410,7 +625,7 @@ TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask�
 ```text
 同一 FarmingTask 同一时间只允许一个 active OperationPlan。
 历史方案通过 superseded / invalidated 状态保留。
-植保 OperationPlan.parameters 第一版可承载 control_plan 返回的兑水量、处方数组、农药、剂型、厂商、推荐用量、复配提示，以及 strategy / target / stage 等算法输入摘要。
+植保 OperationPlan.parameters 第一版可承载植保诊断接口直接返回的兑水量、处方数组、农药、剂型、厂商、推荐用量，以及 strategy / target / stage、杂草萌发起始日期、防治对象等算法输入摘要。
 植保防治日期来自诊断接口时，优先映射到 operationWindowStart / operationWindowEnd；多个推荐日期可同时保存在 parameters.recommendedControlDates。
 安全间隔期和天气窗口当前植保接口未显式返回，第一版不新增独立字段。
 ```
@@ -479,11 +694,20 @@ TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask�
 | plantingPlanId | id | 所属 PlantingPlan |
 | executionId | id | 所属 Execution |
 | operationPlanId | id | 关联 OperationPlan，可为空 |
+| sourceType | enum | 评估来源类型，例如 algorithm / user / system / external |
+| sourceId | string | 评估来源标识，例如算法记录 ID、用户 ID、外部记录 ID |
 | result | enum | pass / warning / fail / unknown |
 | score | decimal | 评价分数，可为空 |
 | metrics | json | 评价指标 |
 | conclusion | text | 评价结论 |
 | evaluatedAt | datetime | 评价时间 |
+
+说明：
+
+```text
+Evaluation 既可能来自算法自动评估，也可能来自人工评估或外部系统回传。
+sourceType / sourceId 用于追溯评价是谁或哪个系统给出的。
+```
 
 ## 6.15 Feedback
 
@@ -493,6 +717,8 @@ TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask�
 | plantingPlanId | id | 所属 PlantingPlan |
 | evaluationId | id | 来源 Evaluation |
 | executionId | id | 来源 Execution |
+| sourceType | enum | 反馈来源类型，例如 algorithm / user / system / external |
+| sourceId | string | 反馈来源标识，例如算法记录 ID、用户 ID、外部记录 ID |
 | feedbackType | enum | completed / incomplete / abnormal / remedial_needed / adjust_future |
 | severity | enum | info / warning / critical |
 | status | enum | 反馈状态 |
@@ -501,6 +727,13 @@ TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask�
 | requiresReview | boolean | 是否需要人工复核 |
 | feedbackVersion | integer | 反馈版本 |
 | idempotencyKey | string | 幂等键 |
+
+说明：
+
+```text
+Feedback 和 feedbackType 不是一回事。
+feedbackType 表示业务反馈分类；sourceType / sourceId 表示这条反馈由谁或哪个系统产生。
+```
 
 ## 6.16 ReviewRequest
 
@@ -515,9 +748,10 @@ TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask�
 | sourceEntityId | id | 来源对象 ID |
 | title | string | 复核标题 |
 | description | text | 复核说明 |
+| assignedUserId | string | 指派复核人，可为空 |
 | decision | enum | approve / reject / need_more_info / no_action / adjust |
 | decisionPayload | json | 复核结论明细 |
-| resolvedBy | string | 处理人 |
+| resolvedBy | string | 实际处理人，可为空 |
 | resolvedAt | datetime | 处理时间 |
 | idempotencyKey | string | 幂等键 |
 
@@ -526,6 +760,7 @@ TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask�
 ```text
 MVP 阶段 ReviewRequest.decision 先采用简单枚举。
 复杂复核结论暂放 decisionPayload，不单独建复核结论模型。
+assignedUserId / resolvedBy 指向最小 User 表。
 ```
 
 ## 6.17 SystemNotification
@@ -535,7 +770,7 @@ MVP 阶段 ReviewRequest.decision 先采用简单枚举。
 | id | id | 通知 ID |
 | plantingPlanId | id | 所属 PlantingPlan |
 | notificationType | enum | review_required / task_due / task_updated / execution_alert / info |
-| targetUserId | string | 接收用户 |
+| targetUserId | string | 接收用户，指向 User |
 | title | string | 通知标题 |
 | content | text | 通知内容 |
 | status | enum | unread / read / dismissed |
@@ -820,6 +1055,7 @@ transplanting
 ```text
 第一版 stageCode 使用固定编码，但不同作物不强制共用同一套编码。
 人工录入真实生育期时，只能选择当前作物可用的固定 stageCode。
+CalendarItem.stageCode / FarmingTask.targetStageCode 均为可空字段，仅在阶段相关任务上使用。
 完整 stageCode 清单由作物种类、生育期阶段和 code 编码共同确定，待业务表确认后补充。
 ```
 
@@ -843,8 +1079,8 @@ transplanting
 | OperationPlan 生成 | farmingTaskId + planType + version |
 | InventoryItem 创建 | farmId + materialType + materialName + specification + batchNo |
 | InventoryTransaction 生成 | inventoryItemId + transactionType + quantity + occurredAt + sourceEventId |
-| Field 创建 | farmId + fieldName + boundaryHash |
-| PlantingPlan 创建 | fieldId + cropName + varietyName + sowingDate + plantingMethod |
+| Field 创建 | fieldName + boundaryHash |
+| PlantingPlan 创建 | planCode + cropName + varietyId + sowingDate + plantingMethodCode |
 
 关键幂等键建议在数据库层建立唯一约束：
 
@@ -935,7 +1171,7 @@ ExternalExecutionSystem
 ```text
 1. EventRecord 进入第一版正式数据模型。
 2. Farm / Field 进入第一版正式数据模型。
-3. 当前没有用户体系，createdById、targetUserId、resolvedBy 先用字符串占位。
+3. 当前引入 User + UserAccount 两层；createdById 仍保留字符串占位，targetUserId、assignedUserId、resolvedBy 可指向 User.id。
 4. stageCode 当前按固定编码处理。
 5. 农事类型采用 taskCategory + taskSubtype，两级表达；大类先固定，子类允许后续新增。
 6. 同一 FarmingTask 同一时间只允许一个 active OperationPlan。
@@ -945,11 +1181,14 @@ ExternalExecutionSystem
 10. 软删除先统一使用业务 status，不引入 deletedAt。
 11. DeviceCommand 与 Execution 的关系目前暂不强行确定，先允许一个 Execution 关联 0..N 个 DeviceCommand。
 12. ReviewRequest.decision 先采用最简单枚举，复杂内容放 decisionPayload。
-13. Farm 第一版字段为：farmName、longitude、latitude、address、province；经纬度表示农场中心点。
-14. Field 第一版字段为：farmId、fieldName、area、areaUnit、boundaryAddress、boundaryGeometry。
-15. PlantingPlan 第一版需要显式记录 plantingMethod、cropSeason、riceCroppingType、transplantDate、transplantLeafAge 等计划和算法高频字段。
-16. expectedHarvestDate 由系统预测生成，不作为创建计划时用户必填字段。
-17. 对算法专用、执行细节不清楚或暂不稳定复用的字段，第一版优先放 metadata / inputPayload / resultPayload，具体开发时再决定是否结构化。
+13. Farm 第一版字段语义对齐 agri_farm；经纬度表示农场中心点。
+14. Field 第一版字段语义对齐 agri_field；不再直接保存 farmId。
+15. 第一版新增 FarmFieldRelation 和 PlantingPlanFieldRelation，分别维护农场-地块、计划-地块关系。
+16. PlantingPlan 第一版取消直接 fieldId，引入 varietyId 关联 RiceVariety，并显式记录 cultiTypeCode、plantingMethodCode、transplantDate、transplantLeafAge 等计划和算法高频字段；cropSeason、riceCroppingType 不再重复保留。
+17. RiceVariety 第一版按 agri_rice_variety 建模。
+18. 业务基础枚举通过 cf_code_dict 统一维护；cf_code_dict 的结构和初始化数据沿用 agri_code_dict，业务表保存原始 code，不直接保存中文展示值。
+19. expectedHarvestDate 由系统预测生成，不作为创建计划时用户必填字段。
+20. 对算法专用、执行细节不清楚或暂不稳定复用的字段，第一版优先放 metadata / inputPayload / resultPayload，具体开发时再决定是否结构化。
 ```
 
 ---

@@ -61,18 +61,21 @@ MVP 阶段以单个 `PlantingPlan` 为编排边界。
 ## 主要承载
 
 ```text
-1. 作物、品种、地块、播期等计划基础信息
+1. 农场归属、作物、品种引用、播期等计划基础信息
 2. 当前计划状态
 3. 任务生成窗口配置
 4. 计划创建、运行、完成、归档状态
 ```
 
-## 不承载
+补充说明：
 
 ```text
-1. 不直接保存所有农事任务明细
-2. 不直接保存全部执行记录
-3. 不直接维护农事规则
+1. PlantingPlan 保留 farmId。
+2. PlantingPlan 不再直接保存 fieldId。
+3. 计划与地块关系通过 PlantingPlanFieldRelation 维护。
+4. 农场与地块关系通过 FarmFieldRelation 维护。
+5. 品种通过独立 RiceVariety 维护，PlantingPlan 通过 varietyId 引用。
+6. cultiTypeCode / plantingMethodCode 等基础业务枚举通过 cf_code_dict 维护，其结构和初始化数据沿用 agri_code_dict。
 ```
 
 ---

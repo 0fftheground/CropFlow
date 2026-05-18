@@ -242,7 +242,7 @@ service_effect_evaluation
 #### 依赖关系表
 | currentKey | dependencyType | dependsOn | dependencyRule | missingDependencyAction | satisfiedOutput |
 |---|---|---|---|---|---|
-| WF_STEM_LEAF_WEED | upstream_event | soilTreatmentDiagnosisAlgorithm.recommendedSurveyDate | 只有药前调查日期存在时才创建调查 CalendarItem | 标记 need_more_info 或等待下次 job | 调查 CalendarItem |
+| WF_STEM_LEAF_WEED | upstream_event | weedSurveyDateDiagnosisAlgorithm.recommendedSurveyDate | 只有药前调查日期存在时才创建调查 CalendarItem | 标记 need_more_info 或等待下次 job | 调查 CalendarItem |
 ```
 
 ### 2.1.3 算法接口统一提交模板
@@ -412,7 +412,7 @@ service_effect_evaluation
 ```md
 | scenarioId | scenarioName | scope | input | expectedCreatedObjects | expectedNoAction | expectedReview | notes |
 |---|---|---|---|---|---|---|---|
-| PP-INT-001 | 茎叶除草药前调查后生成防治方案 | integration | 调查 CalendarItem 到期 + 调查结果 + weed_treatment_diagnosis success | TaskIntent / OperationPlan / FarmingTask | 不直接创建补防任务 | no | control_plan 仅在需防治时调用 |
+| PP-INT-001 | 茎叶除草药前调查后生成防治方案 | integration | 调查 CalendarItem 到期 + 调查结果 + weed_treatment_diagnosis success | TaskIntent / OperationPlan / FarmingTask | 不直接创建补防任务 | no | weed_treatment_diagnosis 直接返回防治方案 |
 | PP-INT-002 | 药后调查异常触发补防复核 | integration | after_treatment_diagnosis fail + additional_treatment_diagnosis immediate | ReviewRequest | 不直接创建补防 FarmingTask | yes | 需人工确认 |
 | PP-INT-003 | 病虫调查结果无需防治 | integration | 调查结果 + diagnosis=no_action | EventRecord / TaskIntent(no_action) | 不创建 OperationPlan / FarmingTask | no | 保留追溯记录 |
 ```

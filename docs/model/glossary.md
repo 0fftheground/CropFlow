@@ -120,4 +120,4 @@ NeedMoreInfo / NoAction 不作为独立核心对象，优先作为 TaskIntent �
 
 ## SurveyDateRecommendationJob
 
-调查日期推荐后台任务。用于维护调查类 CalendarItem，不直接生成 FarmingTask。茎叶除草药前调查日期由 `soil_treatment_diagnosis` 接口返回并由后台任务维护。
+调查日期推荐后台任务。用于维护调查类 CalendarItem，不直接生成 FarmingTask。茎叶除草药前调查日期由 `weed_survey_date_diagnosis` 接口返回并由后台任务维护。

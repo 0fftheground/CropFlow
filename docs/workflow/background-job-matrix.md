@@ -14,6 +14,7 @@
 4. 到期生成正式 FarmingTask 仍由 TaskDueCheckJob 触发，并回到 Plan Orchestrator / Task Module。
 5. 调查日期推荐不属于调查农事本身，不生成 FarmingTask。
 6. 后台任务的执行记录第一版可以进入 EventRecord，不单独建 JobRun 表。
+7. P1 暂不做气象校准、补数或独立气象缓存表。
 ```
 
 ---
@@ -36,10 +37,10 @@
 
 | jobKey | trigger | algorithmOrService | updatedObjects | emittedEvents | idempotencyKey | notes |
 |---|---|---|---|---|---|---|
-| DailyWeatherCheckJob | 每日 / 天气数据刷新 | weatherProvider | EventRecord | WeatherUpdated | weatherDate + regionCode + dataVersion | 只负责天气输入变化，不直接生成任务 |
+| DailyWeatherCheckJob | 每日 / 天气数据刷新 | weatherProvider | EventRecord | WeatherUpdated | weatherDate + regionCode + dataVersion | 气象原始数据由外部大数据接口提供；本系统不维护原始气象主数据，只负责按天拉取、比对变化并在 EventRecord 留痕；获取失败时最多重试 2 次 |
 | StagePredictionRefreshJob | WeatherUpdated / PlanKeyInfoChanged / ActualStageRecorded | stagePredictionAlgorithm | CropThermalTimeState / StagePredictionSnapshot / CropStageState | StageChanged / EventRecord | plantingPlanId + inputHash + predictionSource | StagePredictionSnapshot 只追加，不覆盖 |
 | AgronomyCalendarRefreshJob | 计划初始化 / StageChanged / PlanKeyInfoChanged / 农事日历版本变化 | agronomyCalendarAlgorithm | CalendarItem | CalendarItemUpdated | plantingPlanId + calendarVersion + inputHash | 生成或更新预备农事项，不生成 FarmingTask |
-| SurveyDateRecommendationJob | 每日 / 天气变化 / stage 变化 / 调查窗口变化 | soilTreatmentDiagnosisAlgorithm / diseasePestSurveyDateRecommendationAlgorithm / pestSurveyDateRecommendationAlgorithm | 土壤封闭 / 草害 / 病害 / 虫害调查类 CalendarItem | CalendarItemUpdated | plantingPlanId + workflowKey + stageCode + surveyType + recommendationDate + inputHash | `soil_treatment_diagnosis` 返回土壤封闭推荐日期和茎叶除草药前调查日期；调查日期推荐不属于调查农事流程 |
+| SurveyDateRecommendationJob | 每日 / 天气变化 / stage 变化 / 调查窗口变化 | soilTreatmentDiagnosisAlgorithm / weedSurveyDateDiagnosisAlgorithm / diseasePestSurveyDateRecommendationAlgorithm / pestSurveyDateRecommendationAlgorithm | 土壤封闭 / 草害 / 病害 / 虫害调查类 CalendarItem | CalendarItemUpdated | plantingPlanId + workflowKey + stageCode + surveyType + recommendationDate + inputHash | `soil_treatment_diagnosis` 维护土壤封闭日期，`weed_survey_date_diagnosis` 维护茎叶除草药前调查日期；调查日期推荐不属于调查农事流程 |
 | TaskDueCheckJob | 定时检查到期窗口 | none | FarmingTask / SystemNotification / EventRecord | TaskDueCheckTriggered / FarmingTaskCreated | plantingPlanId + sourceEntityType + sourceEntityId + checkDate | 到期后生成正式任务 |
 | ExecutionStatusPollingJob | 定时兜底轮询外部执行系统 | externalExecutionStatusApi | Execution / ExecutionRecord / DeviceCommand / EventRecord | ExecutionStatusUpdated | externalSystemCode + externalExecutionId + statusVersion | HW 主动回调优先，轮询兜底 |
 | DeviceDataSyncJob | 定时同步设备或传感器数据 | deviceDataApi / sensorDataApi | EventRecord | SensorDataUpdated / DeviceDataUpdated | deviceId + dataTime + dataVersion | 第一版只作为输入事件，不直接建业务任务 |
@@ -56,8 +57,8 @@ SurveyDateRecommendationJob 调用调查日期推荐算法。
 调查 FarmingTask 只在调查日期到期后由 TaskDueCheckJob 生成。
 调查 FarmingTask 本身只负责调查执行和调查结果录入。
 草害调查和虫害调查的推荐日期都由后台任务维护。
-茎叶除草药前调查日期由 soil_treatment_diagnosis 接口返回。
-土壤封闭除草 FarmingTask 不调用调查日期推荐算法；但后台任务可以使用 soil_treatment_diagnosis 返回的土壤封闭推荐日期维护土壤封闭 CalendarItem。
+茎叶除草药前调查日期由 weed_survey_date_diagnosis 接口返回。
+土壤封闭除草 FarmingTask 不调用调查日期推荐算法；后台任务只使用 soil_treatment_diagnosis 返回的土壤封闭推荐日期维护土壤封闭 CalendarItem。
 ```
 
 ## 4.2 农事日历刷新
@@ -74,6 +75,8 @@ AgronomyCalendarRefreshJob 调用农事日历算法。
 StagePredictionRefreshJob 可以因为天气、计划关键字段或实际生育期录入而触发。
 它保存 StagePredictionSnapshot，并更新 CropStageState / CropThermalTimeState。
 如果当前生育期发生变化，产生 StageChanged。
+WeatherUpdated 由 DailyWeatherCheckJob 基于外部气象接口的变化检测产生，而不是要求本系统维护完整气象库。
+DailyWeatherCheckJob 当前按天刷新即可；如外部气象接口获取失败，最多重试 2 次。P1 只在 EventRecord 留痕，不额外维护气象明细表。
 ```
 
 ## 4.4 到期任务生成

@@ -23,36 +23,45 @@
 
 目标：确认创建 `PlantingPlan` 时前端实际录入、业务实际需要、算法实际依赖的字段。
 
-## 2.1 Farm / Field
+## 2.1 Farm / Field / Relation
 
 当前模型：
 
 ```text
 Farm:
   farmName
-  longitude
-  latitude
-  address
-  province
+  boundaryWkt
+  centroidLat
+  centroidLon
 
 Field:
-  farmId
   fieldName
-  area
-  areaUnit
-  boundaryAddress
-  boundaryGeometry
+  boundaryWkt
+  centroidLat
+  centroidLon
+  areaHa
+
+FarmFieldRelation:
+  farmId
+  fieldId
 ```
 
 核对结论：
 
 | 问题                                       | 结论     | 影响                                     |
 | ---------------------------------------- | ------ | -------------------------------------- |
-| Farm 的经纬度表示农场中心点还是默认地块点？                 | 中心点    | Farm.longitude / Farm.latitude         |
-| Field.boundaryAddress 是否只是文本，还是需要边界坐标数组？ | 边界坐标数组 | Field.boundaryGeometry；boundaryAddress 可保留文件地址或描述 |
-| 第一版是否需要 Field 名称？                        | 需要     | Field.fieldName                        |
-| 第一版是否需要地块面积？                             | 需要     | Field.area / Field.areaUnit / PlantingPlan.area |
-| 第一版是否需要土壤类型、土壤肥力、前茬作物？                   | 不需要    | Field.metadata / PlantingPlan.metadata |
+| Farm 的经纬度表示农场中心点还是默认地块点？                 | 中心点    | Farm.centroidLat / Farm.centroidLon    |
+| Field.boundaryWkt 是否保留边界信息？ | 需要 | Field.boundaryWkt |
+| 第一版是否需要 Field 名称？                    | 需要     | Field.fieldName      |
+| 第一版是否需要地块面积？                             | 需要     | Field.areaHa |
+| 第一版是否需要土壤类型、土壤肥力、前茬作物？                   | 不需要    | PlantingPlan.metadata |
+
+处理结果：
+
+```text
+Farm 与 Field 的归属关系不再通过 Field.farmId 直接表达，而通过 FarmFieldRelation 维护。
+Farm、Field 的字段口径优先对齐 ddl.sql 中的 agri_farm / agri_field。
+```
 
 ## 2.2 PlantingPlan
 
@@ -60,15 +69,17 @@ Field:
 
 ```text
 cropName
+farmId
+year
+cultiTypeCode
+varietyId
 varietyName
 sowingDate
 expectedHarvestDate
-area
-plantingMethod
+plantingMethodCode
 transplantDate
+harvestDate
 transplantLeafAge
-cropSeason
-riceCroppingType
 taskGenerationWindowDays
 ```
 
@@ -76,14 +87,46 @@ taskGenerationWindowDays
 
 | 问题                               | 结论              | 影响                                 |
 | -------------------------------- | --------------- | ---------------------------------- |
-| 创建计划时是否必须录入品种 varietyName？       | 必须              | PlantingPlan.varietyName           |
+| 创建计划时是否必须选择品种？                  | 必须              | PlantingPlan.varietyId / PlantingPlan.varietyName |
+| PlantingPlan 是否需要 farmId？             | 需要              | PlantingPlan.farmId |
 | 播种日期是否一定有？是否存在移栽日期？              | 播种日期一定要有，存在移栽日期 | PlantingPlan.sowingDate / PlantingPlan.transplantDate |
 | expectedHarvestDate 是用户输入还是系统预测？ | 系统预测            | PlantingPlan.expectedHarvestDate   |
-| area 是计划种植面积还是地块面积快照？            | 地块面积            | PlantingPlan.area                  |
-| 是否需要种植方式，例如直播、移栽？                | 需要              | PlantingPlan.plantingMethod        |
-| 是否需要作物季次，例如早稻、晚稻？                | 需要              | PlantingPlan.cropSeason / stageCode |
+| 是否需要种植方式，例如直播、移栽？                | 需要              | PlantingPlan.plantingMethodCode        |
+| 是否需要区分早稻、晚稻、中稻、再生稻等栽培类型？         | 需要              | PlantingPlan.cultiTypeCode / stageCode |
+| PlantingPlan 是否直接保存 fieldId？         | 不直接保存           | PlantingPlanFieldRelation          |
 
 ---
+
+## 2.3 RiceVariety
+
+当前模型重点字段：
+
+```text
+name
+approveYear
+approveNo
+approveRegion
+suitableRegion
+cultiTypeCode
+subTypeCode
+maturityCode
+controlVariety
+growthDays
+compareDays
+riceCode
+```
+
+处理结果：
+
+```text
+第一版新增独立 RiceVariety，对齐 agri_rice_variety。
+PlantingPlan 创建时应选择 varietyId，并保留 varietyName 快照用于展示和历史追溯。
+PlantingPlan.cultiTypeCode、PlantingPlan.plantingMethodCode、RiceVariety.subTypeCode 不直接存中文，而是引用 cf_code_dict.code。
+当前业务值分别为：
+1. cultiType：双季晚稻、早稻、一季晚稻、中稻、再生稻
+2. plantingMethod：直播、抛秧、插秧
+3. subType：籼、粳、籼粳交
+```
 
 # 3. 生育期预测算法核对
 
@@ -104,7 +147,12 @@ taskGenerationWindowDays
 处理结果：
 
 ```text
-PlantingPlan 保留品种名称、种植方式、播种日期、移栽日期、移栽叶龄等计划创建和算法高频共用字段。
+PlantingPlan 保留品种引用、品种名称快照、种植方式 code、播种日期、移栽日期、移栽叶龄、栽培类型 code 等计划创建和算法高频共用字段。
+PlantingPlan 保留 farmId，对齐 agri_crop_season 的农场归属语义。
+PlantingPlan 不再直接保存 fieldId，计划与地块关系通过 PlantingPlanFieldRelation 维护。
+PlantingPlanFieldRelation 只负责保存计划与地块关联关系。
+cropSeason / riceCroppingType 与 cultiTypeCode 语义重复，第一版不再单独建字段。
+基础业务枚举统一通过 cf_code_dict 维护；cf_code_dict 的结构和初始化数据沿用 agri_code_dict，业务表只存原始 code。
 气象数据、品种积温阈值表、实际记录生育期等算法运行期输入继续放在 StagePredictionSnapshot.inputPayload / thermalThresholds 或 EventRecord.payload。
 审定亚种、审定区域、对照品种、生育期差距、返青天数等旧版本曾记录的扩展字段，当前 3、4 节未明确需要，第一版先放 PlantingPlan.metadata 或 StagePredictionSnapshot.inputPayload，开发时再判断是否结构化。
 ```
@@ -126,6 +174,7 @@ PlantingPlan 保留品种名称、种植方式、播种日期、移栽日期、�
 ```text
 StagePredictionSnapshot.algorithmVersion 保留为可空字段。
 外部算法当前不返回版本时可以为空，但系统仍保留 algorithmCode 用于标识调用的算法接口。
+人工录入真实生育期时，先修正 CropStageState.currentStageCode / effectiveDate；CropThermalTimeState 仍按 sowingDate 持续累计，不因人工反馈重新起算。
 ```
 
 ## 3.3 stageCode
@@ -137,11 +186,13 @@ StagePredictionSnapshot.algorithmVersion 保留为可空字段。
 | 第一版固定 stageCode 列表是什么？       | 作物种类、生育期阶段及对应code编码 | data-model.md                 |
 | 不同作物是否共用同一套 stageCode？       | 否                   | CropStageState / CalendarItem |
 | 人工录入真实生育期是否只能选择固定 stageCode？ | 是                   | ActualStageRecorded           |
+| CalendarItem / FarmingTask 是否都必须有 stageCode？ | 否，仅阶段相关任务需要 | CalendarItem / FarmingTask |
 
 处理结果：
 
 ```text
 data-model.md 已补充 StageCode 说明：第一版使用固定编码，不同作物不强制共用同一套编码；人工录入真实生育期只能选择当前作物可用的固定 stageCode。
+CalendarItem.stageCode / FarmingTask.targetStageCode 改为可空，仅在阶段驱动任务、算法明确返回阶段上下文或复核明确指定目标阶段时填写。
 完整 stageCode 清单仍需后续补充。
 ```
 
@@ -157,7 +208,7 @@ data-model.md 已补充 StageCode 说明：第一版使用固定编码，不同�
 
 | 问题                 | 结论                                                                                            | 影响                                 |
 | ------------------ | --------------------------------------------------------------------------------------------- | ---------------------------------- |
-| 农事日历接口需要哪些计划字段？    | 播种日期、移栽日期(如有)、移栽时叶龄（如有）、稻作类型、品种名称、播种方式 | EventRecord.payload / CalendarItem |
+| 农事日历接口需要哪些计划字段？    | 播种日期、移栽日期(如有)、移栽时叶龄（如有）、栽培类型、品种名称、播种方式 | EventRecord.payload / CalendarItem |
 | 是否依赖生育期预测结果？       | 依赖                                                                                            | sourceSnapshotId                   |
 | 是否依赖地块面积、位置、品种？    | 依赖品种和种植位置                                                                               | PlantingPlan / Farm / Field        |
 | 是否依赖历史管理习惯或地区农艺规则？ | 依赖                                                                                           | metadata / ruleResult              |
@@ -165,7 +216,7 @@ data-model.md 已补充 StageCode 说明：第一版使用固定编码，不同�
 处理结果：
 
 ```text
-农事日历算法高频依赖字段已补充到 PlantingPlan，例如 plantingMethod、transplantDate、transplantLeafAge、riceCroppingType。
+农事日历算法高频依赖字段已补充到 PlantingPlan，例如 cultiTypeCode、plantingMethodCode、transplantDate、transplantLeafAge。
 历史管理习惯、地区农艺规则、未来天气、农事适宜度、推荐阈值等运行期或规则输入继续放在 PlantingPlan.metadata、EventRecord.payload 或算法调用 inputPayload 中。
 ```
 
@@ -177,7 +228,7 @@ data-model.md 已补充 StageCode 说明：第一版使用固定编码，不同�
 | -------------- | ------------------------------- | -------------------------------------- |
 | 是否返回全周期农事项？    | 返回                              | CalendarItem                           |
 | 是否返回建议开始和结束日期？ | 返回                              | suggestedStartDate / suggestedEndDate  |
-| 是否返回对应生育期？     | 返回（也可不返回，生育期算法会返回存储）            | stageCode                              |
+| 是否返回对应生育期？     | 可返回，也允许不返回            | stageCode                              |
 | 是否返回任务生成条件？    | 返回（不确定，农事日历生成的是通用的吧，条件生成不在该部分？） | CalendarItem.generationCondition |
 | 是否返回优先级或风险等级？  | 否                               | CalendarItem      |
 | 是否返回农事项说明和依据？  | 返回                              | CalendarItem.description               |
@@ -186,6 +237,7 @@ data-model.md 已补充 StageCode 说明：第一版使用固定编码，不同�
 
 ```text
 CalendarItem 当前字段可以承接农事日历输出。
+stageCode 允许为空，不要求所有农事项都携带阶段编码。
 generationCondition 如算法暂不返回，可先由 Task Module 根据 CalendarItem 和任务生成窗口生成。
 ```
 
@@ -327,20 +379,20 @@ field_inspection.lodging_detection
 | 问题 | 结论 | 影响 |
 |---|---|---|
 | 植保算法需要哪些输入？ | 已核对：province、year、cultivation_system、cultivation_pattern、strategy；茎叶除草需要 rice_leaf_age / target；突发病虫防治需要 stage；杂草诊断还需要经纬度、栽培日期、杂草萌发日期、调查日期、weed_survey 等 | OperationPlan.parameters / EventRecord.payload / ExecutionRecord.resultPayload |
-| 是否返回药剂、剂量、稀释倍数、作业窗口？ | 返回药剂、剂型、厂商、推荐用量、兑水量、复配提示；防治日期由诊断接口返回，不是 control_plan 接口返回 | OperationPlan.parameters / OperationPlan.operationWindowStart / OperationPlan.operationWindowEnd |
+| 是否返回药剂、剂量、稀释倍数、作业窗口？ | 返回药剂、剂型、厂商、推荐用量、兑水量；防治日期和处方均由杂草诊断接口直接返回 | OperationPlan.parameters / OperationPlan.operationWindowStart / OperationPlan.operationWindowEnd |
 | 是否需要天气窗口约束？ | 当前接口未显式返回天气窗口；日期推荐可能隐含天气或适宜度判断 | OperationPlan.basis / parameters |
-| 杂草防治和病虫害防治参数是否不同？ | 不同；外部可共用 `/api/get_control_plan` endpoint，但系统内部按 strategy / target / stage 区分 algorithmCode 和参数结构 | taskSubtype / OperationPlan.parameters |
+| 杂草防治和病虫害防治参数是否不同？ | 不同；当前已确认的杂草主线 3 个诊断接口直接返回处方，病虫方向是否保留共用方案接口需后续单独确认 | taskSubtype / OperationPlan.parameters |
 | 是否需要安全间隔期？ | 当前接口未返回安全间隔期，第一版不新增独立字段 | OperationPlan.parameters |
 
 处理结果：
 
 ```text
 植保接口文档与当前核心设计总体一致。
-soil_treatment_diagnosis 返回土壤封闭推荐日期和茎叶除草药前调查日期，归入后台日期维护或日历维护输入。
-weed_treatment_diagnosis 在药前调查结果录入后调用，可返回重新调查日期或推荐防治日期与 control_plan_input。
-/api/get_control_plan 返回最终防治处方，映射到 OperationPlan.parameters。
+soil_treatment_diagnosis 返回土壤封闭推荐日期和防治方案，归入后台日期维护和方案输入。
+weed_survey_date_diagnosis 返回茎叶除草药前调查日期，归入后台日期维护输入。
+weed_treatment_diagnosis 在药前调查结果录入后调用，可返回重新调查日期或直接返回推荐防治日期与防治方案。
 after_treatment_diagnosis 返回药后调查日期。
-additional_treatment_diagnosis 返回无需补防、暂缓补防并补充调查、立即补防；立即补防必须人工确认后才能生成补防 TaskIntent / FarmingTask。
+additional_treatment_diagnosis 返回无需补防、需缓解药害、待药害缓解后补充调查、立即补防；立即补防必须人工确认后才能生成补防 TaskIntent / FarmingTask。
 外部 endpoint 可以共用，但系统内部仍按 strategy / target / stage 区分算法语义。
 ```
 
@@ -361,6 +413,15 @@ additional_treatment_diagnosis 返回无需补防、暂缓补防并补充调查�
 | 是否需要实际作业面积和用量？ | pending | actualArea / actualAmount |
 | 是否允许部分完成？ | pending | Execution.status / Feedback |
 
+当前对杂草防治链路已补充冻结结论：
+
+```text
+1. 杂草防治第一版执行结果仅考虑人工录入。
+2. 第一版不要求图片附件、实际面积和实际用量。
+3. 第一版不支持 partial。
+4. 药后调查链路触发依赖执行完成时间；调查类任务在 ExecutionRecord.resultPayload 中至少要能记录调查日期及 weed_diagnosis_api.md 所需调查结果。
+```
+
 ## 7.2 设备 / 无人机 / 第三方执行
 
 待核对：
@@ -372,6 +433,12 @@ additional_treatment_diagnosis 返回无需补防、暂缓补防并补充调查�
 | 一个 Execution 是否可能下发多个 DeviceCommand？ | pending | DeviceCommand |
 | 是否需要轮询兜底？ | pending | ExecutionStatusPollingJob / EventRecord |
 | 设备失败原因是否结构化？ | pending | failureReason / callbackPayload |
+
+当前对杂草防治链路已补充冻结结论：
+
+```text
+杂草防治第一版不接设备回调或第三方执行系统回传；相关回调、轮询和 DeviceCommand 细节后续按其他农事项统一扩展。
+```
 
 ---
 
@@ -385,9 +452,19 @@ additional_treatment_diagnosis 返回无需补防、暂缓补防并补充调查�
 |---|---|---|
 | 每类任务的评价指标是什么？ | pending | Evaluation.metrics |
 | pass / warning / fail 是否足够？ | pending | Evaluation.result |
+| 是否需要区分算法评估、人评估等来源？ | 需要 | Evaluation.sourceType / Evaluation.sourceId |
 | FeedbackType 是否覆盖业务反馈？ | pending | Feedback.feedbackType |
+| 是否需要区分反馈是算法、人还是外部系统产生？ | 需要 | Feedback.sourceType / Feedback.sourceId |
 | 哪些反馈必须进入人工复核？ | pending | Feedback.requiresReview / ReviewRequest |
 | 反馈是否可能产生补救 TaskIntent？ | pending | FeedbackGeneratedHandler / TaskIntent |
+
+当前对杂草防治链路已补充冻结结论：
+
+```text
+1. 只有当接口结果提示需要新增农事，且系统不能直接落正式任务时，才进入 requiresReview / ReviewRequest。
+2. 农户反馈服务评价默认是一个正式 FarmingTask。
+3. 服务评价结果不满意时，第一版直接创建后续 FarmingTask，不先创建建议态对象。
+```
 
 ---
 
