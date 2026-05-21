@@ -80,8 +80,8 @@
 | WF_LAND_LEVELING | soil_preparation | land_leveling | none | 水整地 / 平地效果评估 | landLevelingEvaluationAlgorithm | 水整地后评估 |
 | WF_WATER_LEVEL_SETUP | irrigation | water_level_setup | none | 水位计 / 水位尺布设 | waterLevelDevicePlacementAlgorithm | 水整地 / 平地效果评估完成后 |
 | WF_TRANSPLANTING | planting | transplanting | none | 移栽 | none | 非直播时存在 |
-| WF_SOIL_SEAL_WEED | plant_protection | soil_sealing_weed_control | GENERAL_PLANT_PROTECTION_CONTROL | 土壤封闭除草 | soilTreatmentDiagnosisAlgorithm | soil_treatment_diagnosis 直接返回土壤封闭推荐日期和防治方案 |
-| WF_STEM_LEAF_WEED | plant_protection | stem_leaf_weed_control | GENERAL_PLANT_PROTECTION_SURVEY + GENERAL_PLANT_PROTECTION_CONTROL | 茎叶除草 | weedSurveyDateDiagnosisAlgorithm / weedTreatmentDiagnosisAlgorithm / afterTreatmentDiagnosisAlgorithm / additionalTreatmentDiagnosisAlgorithm | 药前调查日期由 weed_survey_date_diagnosis 返回；weed_treatment_diagnosis 直接返回防治方案 |
+| WF_SOIL_SEAL_WEED | plant_protection | soil_sealing_weed_control | GENERAL_PLANT_PROTECTION_CONTROL | 土壤封闭除草 | soilTreatmentDiagnosisAlgorithm | soil_treatment_diagnosis 返回土壤封闭建议，先进入 TaskIntent / ReviewRequest，再决定是否生成正式任务和方案 |
+| WF_STEM_LEAF_WEED | plant_protection | stem_leaf_weed_control | GENERAL_PLANT_PROTECTION_SURVEY + GENERAL_PLANT_PROTECTION_CONTROL | 茎叶除草 | weedSurveyDateDiagnosisAlgorithm / weedTreatmentDiagnosisAlgorithm / afterTreatmentSurveyDateDiagnosisAlgorithm / injuryMitigationDiagnosisAlgorithm / additionalTreatmentDiagnosisAlgorithm | 药前调查日期由 weed_survey_date_diagnosis 返回；运行期诊断形成的防治或补防建议先进入 TaskIntent / ReviewRequest，再决定是否生成正式任务和方案 |
 | WF_DISEASE_PEST_SEALING_SURVEY | plant_protection | sealing_stage_disease_pest_survey | GENERAL_PLANT_PROTECTION_SURVEY | 封行病虫调查 | diseaseControlRecommendationAlgorithm / pestControlRecommendationAlgorithm / categorySpecificControlAlgorithm | 调查不一定触发防治 |
 | WF_DISEASE_PEST_SEALING_CONTROL | plant_protection | sealing_stage_disease_pest_control | GENERAL_PLANT_PROTECTION_CONTROL | 封行病虫防治 | none | 纯打药作业，消费调查后生成的 OperationPlan |
 | WF_DISEASE_PEST_SUDDEN_SURVEY | plant_protection | sudden_disease_pest_survey | GENERAL_PLANT_PROTECTION_SURVEY | 突发病虫调查 | diseaseControlRecommendationAlgorithm / pestControlRecommendationAlgorithm / categorySpecificControlAlgorithm | 调查不一定触发防治 |
@@ -114,7 +114,6 @@
 
 | jobKey | 调用算法 | 维护对象 | 说明 |
 |---|---|---|---|
-| SurveyDateRecommendationJob | soilTreatmentDiagnosisAlgorithm | 土壤封闭 CalendarItem | 调用 `/api/soil_treatment_diagnosis`，使用土壤封闭推荐日期 |
 | SurveyDateRecommendationJob | weedSurveyDateDiagnosisAlgorithm | 茎叶除草药前调查 CalendarItem | 调用 `/api/weed_survey_date_diagnosis`，使用推荐茎叶除草前调查日期 |
 | SurveyDateRecommendationJob | diseasePestSurveyDateRecommendationAlgorithm | 病虫调查 CalendarItem | 按 stage / subtype 维护封行、突发、齐穗、破口等病虫调查日期 |
 | SurveyDateRecommendationJob | pestSurveyDateRecommendationAlgorithm | 虫害调查 CalendarItem | 如虫害调查与病虫调查需要合并，后续统一接口 |
@@ -127,6 +126,8 @@
 5. 草害调查和虫害调查的推荐日期都由后台任务获取，不在调查 FarmingTask 内调用。
 6. 茎叶除草药前调查日期由 weed_survey_date_diagnosis 接口返回。
 7. 土壤封闭除草 FarmingTask 不调用调查日期推荐算法；soil_treatment_diagnosis 只负责土壤封闭日期和方案输入。
+8. 调查结果录入完成后，应发布调查结果事件，再由 Plan Orchestrator 调用对应防治推荐算法。
+9. 运行期新生成的 TaskIntent / FarmingTask 需要能同时追溯前置 FarmingTask 和触发它的 ExecutionRecord。
 ```
 
 ---
@@ -141,8 +142,8 @@
 |---|---|---|---|---|---|---|---|---|---|
 | S1 | 调查任务生成 | manual_task | 调查类 CalendarItem 到期 | Field / 调查日期 / surveyType | none | 调查 FarmingTask | FarmingTask | S2 | 调查日期由 SurveyDateRecommendationJob 维护 |
 | S2 | 调查执行 | manual_task | 调查任务到期 | Field / surveyType | none | 调查结果待录入 | Execution / ExecutionRecord | S3 | 可人工调查，也可结合遥感或设备结果 |
-| S3 | 调查结果录入 | input | 调查完成 | 杂草密度 / 草相 / 病虫类型 / 发生程度 | none | 调查结果 | ExecutionRecord / FieldConditionReported | S4 |  |
-| S4 | 防治推荐 | algorithm | 调查结果录入 | 调查结果 / 天气 / Field / 防治阈值 | weedTreatmentDiagnosisAlgorithm / diseaseControlRecommendationAlgorithm / pestControlRecommendationAlgorithm / categorySpecificControlAlgorithm | no_action / 重新调查 / 需防治 / 防治日期 / 防治方案 | TaskIntent / OperationPlan / CalendarItem | BRANCH | 杂草诊断可返回重新调查日期或直接返回推荐防治日期与防治方案；病虫害按病害、虫害、发生类别分别调用，不视为共用算法 |
+| S3 | 调查结果录入 | input | 调查完成 | 杂草密度 / 草相 / 病虫类型 / 发生程度 | none | 调查结果事件 | ExecutionRecord / FieldConditionReported | S4 | 保存结果后发布调查结果事件，作为后续防治推荐的统一入口 |
+| S4 | 防治推荐 | algorithm | 调查结果事件 | 调查结果 / 天气 / Field / 防治阈值 | weedTreatmentDiagnosisAlgorithm / diseaseControlRecommendationAlgorithm / pestControlRecommendationAlgorithm / categorySpecificControlAlgorithm | no_action / 重新调查 / 需防治 / 防治日期 / 防治方案 | TaskIntent / ReviewRequest / CalendarItem | BRANCH | 运行期调查形成的防治建议先生成 TaskIntent，进入 ReviewRequest 人工审核；审核通过后再生成 FarmingTask，并为正式任务创建 OperationPlan。TaskIntent 应记录前置 FarmingTask 和 sourceExecutionRecordId；病虫害按病害、虫害、发生类别分别调用，不视为共用算法 |
 
 ## 4.2 GENERAL_PLANT_PROTECTION_CONTROL：植保防治
 
@@ -206,15 +207,15 @@
 | WF_LAND_LEVELING | none | 水整地后 | RGB 影像上传，平地效果评估 | ExecutionRecord / EventRecord |  |
 | WF_WATER_LEVEL_SETUP | none | 水整地 / 平地效果评估完成后 | 航测、影像拼接、水位布设区域推荐 | OperationPlan |  |
 | WF_TRANSPLANTING | none | plantingMethodCode = 3（插秧） | 移栽作业，只记录执行结果和实际移栽日期 | Feedback / PlantingPlan / EventRecord | 不需要 OperationPlan |
-| WF_SOIL_SEAL_WEED | GENERAL_PLANT_PROTECTION_CONTROL | soil_treatment_diagnosis 或农事规则推荐执行时间 | soil_treatment_diagnosis 直接返回土壤封闭推荐日期和防治方案，再执行植保防治 | OperationPlan / Feedback | 正式作业不调用调查日期推荐算法 |
-| WF_STEM_LEAF_WEED | GENERAL_PLANT_PROTECTION_SURVEY + GENERAL_PLANT_PROTECTION_CONTROL | weed_survey_date_diagnosis 返回的药前调查日期到期 | 药前调查后调用 weed_treatment_diagnosis；如返回需防治，直接用返回的防治方案生成 OperationPlan；补防诊断结果需人工确认 | OperationPlan / Feedback / ReviewRequest | 跨农事链路见 CHAIN_STEM_LEAF_WEED |
-| WF_DISEASE_PEST_SEALING_SURVEY | GENERAL_PLANT_PROTECTION_SURVEY | 封行病虫调查日期到期 | 调查结果录入后按病虫类别调用对应防治推荐算法 | TaskIntent / OperationPlan | 调查不一定触发防治 |
+| WF_SOIL_SEAL_WEED | GENERAL_PLANT_PROTECTION_CONTROL | soil_treatment_diagnosis 返回土壤封闭建议，或农事规则推荐执行时间 | soil_treatment_diagnosis 返回土壤封闭推荐日期和防治方案后，先形成待审核 TaskIntent / ReviewRequest；审核通过后再生成正式 FarmingTask，并为该正式任务创建 OperationPlan，再执行植保防治 | TaskIntent / ReviewRequest / FarmingTask / OperationPlan / Feedback | 正式作业不调用调查日期推荐算法 |
+| WF_STEM_LEAF_WEED | GENERAL_PLANT_PROTECTION_SURVEY + GENERAL_PLANT_PROTECTION_CONTROL | weed_survey_date_diagnosis 返回的药前调查日期到期 | 药前调查后调用 weed_treatment_diagnosis；如返回需防治，先生成待审核 TaskIntent / ReviewRequest，审核通过后再生成 FarmingTask，并为该正式任务创建 OperationPlan；药后调查链路继续进入安全性调查、防效兼安全性调查和补防诊断 | TaskIntent / ReviewRequest / FarmingTask / Feedback | 跨农事链路见 CHAIN_STEM_LEAF_WEED |
+| WF_DISEASE_PEST_SEALING_SURVEY | GENERAL_PLANT_PROTECTION_SURVEY | 封行病虫调查日期到期 | 调查结果录入后按病虫类别调用对应防治推荐算法；如返回具体防治方案，先进入 TaskIntent / ReviewRequest，审核通过后再生成正式任务 | TaskIntent / ReviewRequest | 调查不一定触发防治 |
 | WF_DISEASE_PEST_SEALING_CONTROL | GENERAL_PLANT_PROTECTION_CONTROL | 防治推荐算法返回需防治 | 纯打药作业 | Feedback | 消费调查后生成的 OperationPlan |
-| WF_DISEASE_PEST_SUDDEN_SURVEY | GENERAL_PLANT_PROTECTION_SURVEY | 突发病虫调查日期到期 | 调查结果录入后按病虫类别调用对应防治推荐算法 | TaskIntent / OperationPlan | 调查不一定触发防治 |
+| WF_DISEASE_PEST_SUDDEN_SURVEY | GENERAL_PLANT_PROTECTION_SURVEY | 突发病虫调查日期到期 | 调查结果录入后按病虫类别调用对应防治推荐算法；如返回具体防治方案，先进入 TaskIntent / ReviewRequest，审核通过后再生成正式任务 | TaskIntent / ReviewRequest | 调查不一定触发防治 |
 | WF_DISEASE_PEST_SUDDEN_CONTROL | GENERAL_PLANT_PROTECTION_CONTROL | 防治推荐算法返回需防治 | 纯打药作业 | Feedback | 消费调查后生成的 OperationPlan |
-| WF_DISEASE_PEST_HEADING_SURVEY | GENERAL_PLANT_PROTECTION_SURVEY | 齐穗病虫调查日期到期 | 调查结果录入后按病虫类别调用对应防治推荐算法 | TaskIntent / OperationPlan | 调查不一定触发防治 |
+| WF_DISEASE_PEST_HEADING_SURVEY | GENERAL_PLANT_PROTECTION_SURVEY | 齐穗病虫调查日期到期 | 调查结果录入后按病虫类别调用对应防治推荐算法；如返回具体防治方案，先进入 TaskIntent / ReviewRequest，审核通过后再生成正式任务 | TaskIntent / ReviewRequest | 调查不一定触发防治 |
 | WF_DISEASE_PEST_HEADING_CONTROL | GENERAL_PLANT_PROTECTION_CONTROL | 防治推荐算法返回需防治 | 纯打药作业 | Feedback | 消费调查后生成的 OperationPlan |
-| WF_DISEASE_PEST_BOOTING_SURVEY | GENERAL_PLANT_PROTECTION_SURVEY | 破口病虫调查日期到期 | 调查结果录入后按病虫类别调用对应防治推荐算法 | TaskIntent / OperationPlan | 调查不一定触发防治 |
+| WF_DISEASE_PEST_BOOTING_SURVEY | GENERAL_PLANT_PROTECTION_SURVEY | 破口病虫调查日期到期 | 调查结果录入后按病虫类别调用对应防治推荐算法；如返回具体防治方案，先进入 TaskIntent / ReviewRequest，审核通过后再生成正式任务 | TaskIntent / ReviewRequest | 调查不一定触发防治 |
 | WF_DISEASE_PEST_BOOTING_CONTROL | GENERAL_PLANT_PROTECTION_CONTROL | 防治推荐算法返回需防治 | 纯打药作业 | Feedback | 消费调查后生成的 OperationPlan |
 | WF_BASE_FERTILIZER | GENERAL_FERTILIZATION_OPERATION | 农事规则推荐执行时间 | 施基肥作业 | Feedback | 范围由 farmingRuleLibrary 维护 |
 | WF_TILLERING_FERTILIZER | GENERAL_FERTILIZATION_OPERATION | 农事规则推荐执行时间 | 施分蘖肥作业 | Feedback |  |
@@ -245,7 +246,8 @@ SurveyDateRecommendationJob
 → 植保调查 FarmingTask
 → 调查结果录入
 → 防治推荐算法
-→ no_action 或 OperationPlan
+→ no_action / TaskIntent / ReviewRequest / CalendarItem
+→ 审核通过后生成 FarmingTask，并为正式任务创建 OperationPlan
 → 植保防治 FarmingTask
 ```
 
@@ -256,15 +258,24 @@ SurveyDateRecommendationJob
 → 药前调查
 → 调查结果录入
 → weed_treatment_diagnosis
-→ 重新调查 或 推荐防治日期 + 防治方案
-→ 生成 OperationPlan
+→ 重新调查 或 待审核防治建议
+→ 推荐防治日期 + 防治方案先写入 TaskIntent
+→ ReviewRequest 人工审核
+→ 审核通过后生成 FarmingTask，并为正式任务创建 OperationPlan
 → 茎叶除草作业
-→ after_treatment_diagnosis 推荐药后调查日期
-→ 药后调查
+→ after_treatment_survey_date_diagnosis 推荐药后调查日期
+→ 新增安全性调查 CalendarItem + 防效兼安全性调查 CalendarItem
+→ 安全性调查
+→ injury_mitigation_diagnosis
+→ no_action 或 待审核药害缓解建议
+→ 审核通过后生成药害缓解 FarmingTask
+→ 防效兼安全性调查
 → additional_treatment_diagnosis
 → 无需补防 / 需缓解药害 / 待药害缓解后补充调查 / 立即补防
-→ 立即补防时进入人工确认
-→ no_action / ReviewRequest / 补防 TaskIntent
+→ 补防建议、药害缓解建议先生成 TaskIntent
+→ ReviewRequest 人工审核
+→ 审核通过后生成补防 FarmingTask，并为正式任务创建 OperationPlan
+→ additional_survey_date / service_effect_evaluation_date 继续生成 CalendarItem
 ```
 
 ## 6.3 CHAIN_PANICLE_FERTILIZER：穗肥前监测到穗肥效果抽查
@@ -304,15 +315,17 @@ PlantingPlan.cultiTypeCode = 8（再生稻）
 |---|---|---|---|---|---|---|
 | B_SERVICE_01 | WF_SERVICE_AREA | S2 | manual_decision | 不需要更新服务区 | END_NO_ACTION | TaskIntent(no_action) |
 | B_SERVICE_02 | WF_SERVICE_AREA | S2 | manual_decision | 需要更新服务区 | WF_SERVICE_AREA.S3 | FarmingTask |
-| B_PP_SURVEY_01 | GENERAL_PLANT_PROTECTION_SURVEY | S4 | threshold | 分类防治推荐算法返回需要防治，并给出防治日期和防治方案 | GENERAL_PLANT_PROTECTION_CONTROL.S1 | TaskIntent / OperationPlan / FarmingTask |
+| B_PP_SURVEY_01 | GENERAL_PLANT_PROTECTION_SURVEY | S4 | threshold | 分类防治推荐算法返回需要防治，并给出防治日期和防治方案；运行期调查形成的农事需先人工审核 | REVIEW | TaskIntent / ReviewRequest |
 | B_PP_SURVEY_02 | GENERAL_PLANT_PROTECTION_SURVEY | S4 | threshold | 推荐算法返回不需要防治 | END_NO_ACTION | TaskIntent(no_action) |
 | B_PP_SURVEY_03 | GENERAL_PLANT_PROTECTION_SURVEY | S4 | risk | 推荐算法结果不确定、方案风险高或天气窗口不确定 | REVIEW | ReviewRequest |
 | B_WEED_DIAG_01 | CHAIN_STEM_LEAF_WEED | weed_treatment_diagnosis | result | 算法返回 5d 后重新调查 | GENERAL_PLANT_PROTECTION_SURVEY.S1 | CalendarItem |
-| B_WEED_DIAG_02 | CHAIN_STEM_LEAF_WEED | weed_treatment_diagnosis | result | 算法返回推荐防治日期和防治方案 | GENERAL_PLANT_PROTECTION_CONTROL.S1 | OperationPlan / FarmingTask |
-| B_WEED_POST_01 | CHAIN_STEM_LEAF_WEED | additional_treatment_diagnosis | manual_decision | 算法返回需要立即补防，人工确认后执行 | GENERAL_PLANT_PROTECTION_CONTROL.S1 | ReviewRequest / TaskIntent / OperationPlan |
-| B_WEED_POST_02 | CHAIN_STEM_LEAF_WEED | additional_treatment_diagnosis | result | 算法返回无需补防 | END_CLOSED | Feedback / TaskIntent(no_action) |
-| B_WEED_POST_03 | CHAIN_STEM_LEAF_WEED | additional_treatment_diagnosis | manual_decision | 算法返回需缓解药害，人工判断不处理、施肥还是打药 | REVIEW | ReviewRequest |
-| B_WEED_POST_04 | CHAIN_STEM_LEAF_WEED | additional_treatment_diagnosis | result | 算法返回需待药害缓解后补充调查 | GENERAL_PLANT_PROTECTION_SURVEY.S1 | CalendarItem |
+| B_WEED_DIAG_02 | CHAIN_STEM_LEAF_WEED | weed_treatment_diagnosis | threshold | 算法返回推荐防治日期和防治方案，先形成待审核防治建议 | REVIEW | TaskIntent / ReviewRequest |
+| B_WEED_SAFE_01 | CHAIN_STEM_LEAF_WEED | injury_mitigation_diagnosis | result | 安全性调查后诊断返回无需缓解 | END_CLOSED | TaskIntent(no_action) |
+| B_WEED_SAFE_02 | CHAIN_STEM_LEAF_WEED | injury_mitigation_diagnosis | manual_decision | 安全性调查后诊断返回药害缓解措施和建议时间窗，先形成待审核农事建议 | REVIEW | TaskIntent / ReviewRequest |
+| B_WEED_POST_01 | CHAIN_STEM_LEAF_WEED | additional_treatment_diagnosis | manual_decision | 算法返回需要立即补防，生成待审核补防建议 | REVIEW | TaskIntent / ReviewRequest |
+| B_WEED_POST_02 | CHAIN_STEM_LEAF_WEED | additional_treatment_diagnosis | result | 算法返回无需补防且无需药害缓解，同时返回服务效果评估日期 | WF_PLANT_PROTECTION_SERVICE_EVALUATION.S1 | TaskIntent(no_action) / CalendarItem |
+| B_WEED_POST_03 | CHAIN_STEM_LEAF_WEED | additional_treatment_diagnosis | manual_decision | 算法返回需要补防但需先缓解药害，同时返回补充调查日期 | REVIEW | TaskIntent / ReviewRequest / CalendarItem |
+| B_WEED_POST_04 | CHAIN_STEM_LEAF_WEED | additional_treatment_diagnosis | manual_decision | 算法返回不需要补防但需药害缓解，同时返回补充调查日期 | REVIEW | TaskIntent / ReviewRequest / CalendarItem |
 | B_SEEDLING_01 | WF_MISSING_SEEDLING_DETECTION | recognition_result | manual_decision | 识别出缺苗区域后，人工判断需要补苗 | REVIEW_OR_TASK_INTENT | ReviewRequest / TaskIntent |
 | B_SEEDLING_02 | WF_MISSING_SEEDLING_DETECTION | recognition_result | result | 未识别出缺苗区域 | END_CLOSED | FarmingTask status update |
 | B_GROWTH_01 | GENERAL_GROWTH_MONITORING | S5 | manual_decision | 普通长势监测发现异常点位后，人工判断需要触发定点低空 RGB 归因分析 | LOW_ALTITUDE_RGB_CAUSE_ANALYSIS | FarmingTask / EventRecord |
@@ -323,22 +336,46 @@ PlantingPlan.cultiTypeCode = 8（再生稻）
 
 ---
 
-# 8. 对 data-model.md 的潜在影响
+# 8. 对 data-model.md 的影响
 
-基于具体农事项、通用流程、跨农事链路三层结构，建议后续评估是否增加轻量追踪字段：
+基于具体农事项、通用流程、跨农事链路三层结构，第一版已确认增加以下轻量追溯字段：
+
+```text
+CalendarItem.parentTaskId
+CalendarItem.sourceExecutionId
+CalendarItem.sourceExecutionRecordId
+
+TaskIntent.parentTaskId
+TaskIntent.sourceExecutionId
+TaskIntent.sourceExecutionRecordId
+
+FarmingTask.parentTaskId
+FarmingTask.sourceExecutionId
+FarmingTask.sourceExecutionRecordId
+```
+
+ReviewRequest.decisionPayload.contextRefs 也应保留以下引用上下文：
+
+```text
+parentTaskId
+sourceExecutionId
+sourceExecutionRecordId
+inputTaskIds
+inputExecutionRecordIds
+```
+
+以下流程标识字段在业务层已确认需要，但是否进入第一版表结构仍待定，可先放 metadata、事件上下文或编排层：
 
 ```text
 TaskIntent.workflowKey
 TaskIntent.workflowStepKey
 TaskIntent.generalFlowKey
 TaskIntent.chainKey
-TaskIntent.parentTaskId
 
 FarmingTask.workflowKey
 FarmingTask.workflowStepKey
 FarmingTask.generalFlowKey
 FarmingTask.chainKey
-FarmingTask.parentTaskId
 
 OperationPlan.workflowKey
 OperationPlan.workflowStepKey
@@ -359,16 +396,6 @@ EventRecord.workflowKey
 EventRecord.workflowStepKey
 EventRecord.generalFlowKey
 EventRecord.chainKey
-```
-
-暂不建议新增：
-
-```text
-GeneralFlowDefinition
-WorkflowDefinition
-WorkflowInstance
-WorkflowStepInstance
-ChainDefinition
 ```
 
 已确认需要新增或保留的支撑数据对象：
@@ -397,14 +424,15 @@ InventoryTransaction
 1. PDF 中红色部分先不处理，不转成正式待办。
 2. 图片中结构有误：草害调查和虫害调查的推荐日期都由后台任务获取。
 3. 封闭除草不调用杂草调查日期推荐算法。
-4. 药后调查结果可进入 additional_treatment_diagnosis；算法返回需要立即补防时，必须人工确认后才能生成补防任务。
-5. 病虫害防治推荐可以共用外部 endpoint，但系统内部按 strategy / target / stage 区分算法语义和 algorithmCode。
-6. 长势监测异常点位生成后，由人工判断是否触发定点低空 RGB 归因分析。
-7. 缺苗识别结果由人工判断是否触发补苗任务。
-8. 药剂 / 肥料入库需要独立库存表。
-9. 移栽作业不需要 OperationPlan，只记录执行结果和实际移栽日期。
-10. 再生季施发苗肥、施促芽肥、晒田、收割的执行时间由农事规则推荐。
-11. generalFlowKey / chainKey 是否进入第一版表结构暂未确定。
+4. 药后调查结果可进入 additional_treatment_diagnosis；算法返回需要立即补防或药害缓解建议时，先生成 TaskIntent / ReviewRequest，人工审核通过后再生成正式 FarmingTask。
+5. after_treatment_survey_date_diagnosis 当前固定返回两个日期：安全性调查日期和防效兼安全性调查日期，均映射为调查类 CalendarItem。
+6. 病虫害防治推荐可以共用外部 endpoint，但系统内部按 strategy / target / stage 区分算法语义和 algorithmCode。
+7. 长势监测异常点位生成后，由人工判断是否触发定点低空 RGB 归因分析。
+8. 缺苗识别结果由人工判断是否触发补苗任务。
+9. 药剂 / 肥料入库需要独立库存表。
+10. 移栽作业不需要 OperationPlan，只记录执行结果和实际移栽日期。
+11. 再生季施发苗肥、施促芽肥、晒田、收割的执行时间由农事规则推荐。
+11. workflowKey / workflowStepKey / generalFlowKey / chainKey 当前不进入第一版表结构，先放 metadata、事件上下文或编排层。
 12. 茎叶除草药前调查日期由 weed_survey_date_diagnosis 接口返回。
 ```
 
@@ -413,8 +441,8 @@ InventoryTransaction
 # 10. 下一步
 
 ```text
-1. 用本文档和业务负责人逐项确认 workflowKey / generalFlowKey / chainKey / taskSubtype。
+1. 用本文档和业务负责人继续收口 `taskSubtype` 建议清单与残余枚举项。
 2. 将确认后的 taskSubtype 回写到 docs/model/data-model.md。
-3. 评估是否在 data-model.md 增加 workflowKey / workflowStepKey / generalFlowKey / chainKey / parentTaskId。
-4. 再生成 docs/model/er-diagram.md。
+3. 将已确认的 parentTaskId / sourceExecutionId / sourceExecutionRecordId / decisionPayload.contextRefs 回写到 docs/model/data-model.md 与 ER 图。
+4. 如后续决定让流程标识字段进入表结构，再单独补 workflowKey / workflowStepKey / generalFlowKey / chainKey。
 ```

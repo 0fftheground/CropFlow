@@ -532,6 +532,9 @@ stageTimeline 第一版保存算法返回的各生育期节点日期。
 | status | enum | 预备农事项状态 |
 | calendarVersion | integer | 日历版本 |
 | sourceSnapshotId | id | 来源预测或日历快照 |
+| parentTaskId | id | 上游前置 FarmingTask，可为空 |
+| sourceExecutionId | id | 触发该农事项的 Execution，可为空 |
+| sourceExecutionRecordId | id | 触发该农事项的 ExecutionRecord，可为空 |
 | generationCondition | json | 正式任务生成条件，可为空 |
 | generatedTaskId | id | 已生成 FarmingTask，可为空 |
 | lastGenerationCheckedAt | datetime | 最近一次生成检查时间，可为空 |
@@ -545,6 +548,7 @@ MVP 第一版不把 TaskGenerationPlan 作为核心对象或独立表。
 CalendarItem 承载预备农事项、建议时间和轻量生成条件。
 TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask。
 并非所有 CalendarItem 都必须绑定生育期；stageCode 只在阶段驱动或算法明确返回阶段上下文时填写。
+如果 CalendarItem 来自运行期任务后的补充调查、复查或评估日期推荐，应记录 parentTaskId 和 sourceExecutionRecordId，保证来源可追溯。
 如果后续出现复杂生成窗口、重试、跳过原因、多次生成计划历史，再考虑重新引入 TaskGenerationPlan。
 ```
 
@@ -558,12 +562,15 @@ TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask�
 | taskSubtype | string | 建议农事子类 |
 | priority | enum | low / normal / high / urgent |
 | status | enum | 任务意图状态 |
-| triggerType | enum | field_condition / sensor / device / feedback / review / manual |
+| triggerType | enum | field_condition / sensor / device / feedback / review / manual / survey_result |
 | triggerSummary | text | 触发摘要 |
 | ruleResult | json | 规则判断结果 |
 | suggestedAction | text | 建议处理方向 |
 | needMoreInfoFields | json | 需要补充的信息 |
 | noActionReason | text | 无需动作原因 |
+| parentTaskId | id | 上游前置 FarmingTask，可为空 |
+| sourceExecutionId | id | 触发该建议的 Execution，可为空 |
+| sourceExecutionRecordId | id | 触发该建议的 ExecutionRecord，可为空 |
 | convertedTaskId | id | 转换后的 FarmingTask，可为空 |
 | sourceEventId | id | 来源事件 |
 | idempotencyKey | string | 幂等键 |
@@ -588,6 +595,9 @@ TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask�
 | status | enum | 正式任务状态 |
 | executionMode | enum | manual / device / drone / third_party |
 | generationReason | text | 任务生成原因 |
+| parentTaskId | id | 上游前置 FarmingTask，可为空 |
+| sourceExecutionId | id | 触发该任务生成的 Execution，可为空 |
+| sourceExecutionRecordId | id | 触发该任务生成的 ExecutionRecord，可为空 |
 | idempotencyKey | string | 幂等键 |
 
 说明：
@@ -595,6 +605,7 @@ TaskDueCheckJob / TaskGenerationService 根据 CalendarItem 生成 FarmingTask�
 ```text
 FarmingTask.targetStageCode 不要求所有任务都有值。
 如果任务来自阶段驱动 CalendarItem，或算法/复核明确给出阶段目标，则填写；否则保持为空。
+如果任务来自运行期调查、补防建议或复核决策，建议同时记录 parentTaskId 和 sourceExecutionRecordId，以区分“来自哪个前置任务”和“由哪次结果录入具体触发”。
 ```
 
 ## 6.10 OperationPlan
@@ -661,7 +672,7 @@ FarmingTask.targetStageCode 不要求所有任务都有值。
 | id | id | 执行记录 ID |
 | plantingPlanId | id | 所属 PlantingPlan |
 | executionId | id | 所属 Execution |
-| recordType | enum | status_update / result / manual_upload / device_callback |
+| recordType | enum | status_update / result / manual_upload / device_callback / survey_result |
 | recordTime | datetime | 记录时间 |
 | actualStartAt | datetime | 实际开始时间 |
 | actualEndAt | datetime | 实际结束时间 |
@@ -685,6 +696,13 @@ FarmingTask.targetStageCode 不要求所有任务都有值。
 | sentAt | datetime | 下发时间 |
 | acknowledgedAt | datetime | 确认时间 |
 | callbackPayload | json | 回调结果 |
+
+说明：
+
+```text
+DeviceCommand 当前仍属于领域模型范围，但尚未纳入 20260521_core_schema_consolidated.sql 这份 consolidated SQL 草案。
+如需进入第一版 DDL，应与 Execution 外部系统集成范围一起单独收口。
+```
 
 ## 6.14 Evaluation
 
@@ -750,7 +768,7 @@ feedbackType 表示业务反馈分类；sourceType / sourceId 表示这条反馈
 | description | text | 复核说明 |
 | assignedUserId | string | 指派复核人，可为空 |
 | decision | enum | approve / reject / need_more_info / no_action / adjust |
-| decisionPayload | json | 复核结论明细 |
+| decisionPayload | json | 复核结论明细，建议包含 contextRefs、adjustments、reason |
 | resolvedBy | string | 实际处理人，可为空 |
 | resolvedAt | datetime | 处理时间 |
 | idempotencyKey | string | 幂等键 |
@@ -761,6 +779,18 @@ feedbackType 表示业务反馈分类；sourceType / sourceId 表示这条反馈
 MVP 阶段 ReviewRequest.decision 先采用简单枚举。
 复杂复核结论暂放 decisionPayload，不单独建复核结论模型。
 assignedUserId / resolvedBy 指向最小 User 表。
+decisionPayload 建议至少支持以下结构：
+{
+  "contextRefs": {
+    "parentTaskId": "...",
+    "sourceExecutionId": "...",
+    "sourceExecutionRecordId": "...",
+    "inputTaskIds": [],
+    "inputExecutionRecordIds": []
+  },
+  "adjustments": {},
+  "reason": ""
+}
 ```
 
 ## 6.17 SystemNotification
@@ -819,6 +849,7 @@ assignedUserId / resolvedBy 指向最小 User 表。
 ```text
 InventoryItem 是药剂和肥料库存主数据。
 MVP 不处理库位、盘点、财务成本和多仓库调拨。
+InventoryItem / InventoryTransaction 当前仍属于领域模型范围，但尚未纳入 20260521_core_schema_consolidated.sql 这份 consolidated SQL 草案。
 ```
 
 ## 6.20 InventoryTransaction
@@ -843,6 +874,7 @@ MVP 不处理库位、盘点、财务成本和多仓库调拨。
 ```text
 药剂入库和肥料入库生成 stock_in 流水。
 施肥、打药是否扣减库存后续在作业方案和执行集成阶段再确认。
+InventoryTransaction 如需进入第一版 DDL，应与库存模块范围一起单独收口。
 ```
 
 ---
@@ -1189,6 +1221,10 @@ ExternalExecutionSystem
 18. 业务基础枚举通过 cf_code_dict 统一维护；cf_code_dict 的结构和初始化数据沿用 agri_code_dict，业务表保存原始 code，不直接保存中文展示值。
 19. expectedHarvestDate 由系统预测生成，不作为创建计划时用户必填字段。
 20. 对算法专用、执行细节不清楚或暂不稳定复用的字段，第一版优先放 metadata / inputPayload / resultPayload，具体开发时再决定是否结构化。
+21. 第一版主键统一采用数据库 `bigserial` / `bigint` 自增主键，不额外引入 UUID 主键。
+22. 第一版不要求所有核心对象都增加业务 `code`；除 `PlantingPlan.planCode` 外，其余对象按需再补可读编号。
+23. `workflowKey / workflowStepKey / generalFlowKey / chainKey` 当前不进入第一版表结构，先放 metadata、事件上下文或编排层。
+24. 药害缓解正式任务使用独立 `taskSubtype=plant_protection.injury_mitigation`。
 ```
 
 ---
@@ -1197,9 +1233,6 @@ ExternalExecutionSystem
 
 ```text
 1. 固定 stageCode 的完整枚举值。
-2. 第一版 taskSubtype 建议清单是否需要进一步收敛。
-3. generalFlowKey / chainKey 是否进入第一版表结构，还是先放 metadata。
-4. ID 生成方式和命名风格。
 ```
 
 ---

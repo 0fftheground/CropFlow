@@ -107,6 +107,7 @@ PlanKeyInfoChangedHandler
 WeatherUpdatedHandler
 ActualStageRecordedHandler
 FieldConditionReportedHandler
+SurveyResultRecordedHandler
 TaskDueCheckTriggeredHandler
 ExecutionStatusUpdatedHandler
 FeedbackGeneratedHandler
@@ -451,6 +452,30 @@ ExecutionStatusUpdated
 ```text
 Execution / ExecutionRecord / DeviceCommand 的状态维护仍属于 Execution Module。
 ExecutionStatusUpdatedHandler 只负责把执行状态更新纳入计划级后续编排。
+```
+
+#### SurveyResultRecordedHandler
+
+负责调查结果录入完成后的运行期触发编排。
+
+```text
+SurveyResultRecorded
+  ↓
+识别前置 FarmingTask / Execution / ExecutionRecord
+  ↓
+按 taskSubtype / strategy 选择对应诊断算法
+  ↓
+生成 TaskIntent / CalendarItem / NoAction
+  ↓
+必要时生成 ReviewRequest
+```
+
+注意：
+
+```text
+调查结果本身不直接生成 FarmingTask。
+先形成 TaskIntent，再通过 ReviewRequestResolved 回到 Plan Orchestrator 生成正式任务。
+TaskIntent 需要记录 parentTaskId 和 sourceExecutionRecordId，保证建议来源可追溯。
 ```
 
 #### FeedbackGeneratedHandler

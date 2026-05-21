@@ -2,6 +2,43 @@
 
 本文件用于指导 Codex 或其他 AI 编程助手开发 CropFlow 项目。
 
+## Session 启动方式
+
+新的 session 不应默认从头扫整个仓库。推荐按以下顺序恢复上下文：
+
+```text
+1. AGENTS.md
+2. project-context/entrypoints.md
+3. project-context/development-plan.md
+4. project-context/current-memory.md
+5. 当前 phase 对应文档
+6. 与当前任务直接相关的 docs/ 或代码文件
+```
+
+原则：
+
+```text
+1. 稳定入口放在 project-context/ 和 docs/ 正式文档中。
+2. current-memory 只记录当前 phase 的压缩状态，不重复维护完整 backlog。
+3. 已完成且对后续无影响的历史讨论，不继续保留在 current-memory。
+4. current-memory 只写结论、现状、阻塞和下一步，不写长推理过程。
+```
+
+推荐优先使用以下 skill：
+
+```text
+1. 开始新一天或恢复上下文时，优先使用 $cropflow-start-work。
+2. 结束当天工作、更新 memory 或准备提交时，优先使用 $cropflow-wrap-up。
+3. 如果只是普通代码实现，不必强制调用 skill；但只要涉及 session 恢复或扫尾，优先走 skill。
+```
+
+推荐触发方式：
+
+```text
+Use $cropflow-start-work to restore current CropFlow progress
+Use $cropflow-wrap-up to summarize today, update memory, and prepare commit actions
+```
+
 ## 项目背景
 
 CropFlow 是一个作物种植计划的 Plan-level MVP 编排系统。系统围绕单个种植计划运行，支持：
@@ -115,6 +152,9 @@ ExecutionModule
 开发前优先阅读：
 
 ```text
+project-context/entrypoints.md
+project-context/development-plan.md
+project-context/current-memory.md
 docs/README.md
 docs/architecture/system-function.md
 docs/architecture/architecture.md
@@ -203,6 +243,13 @@ docs/decisions/
 
 ## 当前技术栈
 
-尚未确定。
+当前已确认的基础口径：
 
-在用户明确技术栈前，不要擅自生成完整工程框架。可以先补充文档、数据结构草案或伪代码。
+```text
+后端：Python + FastAPI
+数据库：PostgreSQL
+部署：Docker
+前端：由前端负责人确定，但需遵循统一 API contract
+```
+
+在正式进入 P2 实现前，仍应先确认当前任务依赖的契约是否已经在当前 phase 内冻结。

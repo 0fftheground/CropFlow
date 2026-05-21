@@ -2,17 +2,45 @@
 
 本目录按文档用途分层，避免所有设计材料堆在同一层级。
 
+## 仓库级入口说明
+
+新的 Codex session 不建议直接从 `docs/` 开始全量阅读。仓库级稳定入口在：
+
+```text
+project-context/entrypoints.md
+project-context/development-plan.md
+project-context/current-memory.md
+```
+
+其中：
+
+```text
+1. project-context/entrypoints.md 负责稳定阅读入口和按任务分类的文档索引。
+2. project-context/development-plan.md 负责全局 phase 计划。
+3. project-context/current-memory.md 只负责当前 phase 的压缩进展快照。
+```
+
+如果当前动作属于 session 恢复或当天扫尾，推荐先显式调用：
+
+```text
+Use $cropflow-start-work to restore current CropFlow progress
+Use $cropflow-wrap-up to summarize today, update memory, and prepare commit actions
+```
+
 ## 推荐阅读顺序
 
 ```text
-1. overview/team-technical-briefing.md
-2. overview/meeting.md
-3. planning/development-roadmap.md
-4. planning/team-work-division.md
-5. planning/agent-development-guidelines.md
-6. model/data-model.md
-7. workflow/task-workflow-matrix.md
-8. workflow/background-job-matrix.md
+1. ../project-context/entrypoints.md
+2. ../project-context/development-plan.md
+3. ../project-context/current-memory.md
+4. overview/team-technical-briefing.md
+5. overview/meeting.md
+6. planning/development-roadmap.md
+7. planning/team-work-division.md
+8. planning/agent-development-guidelines.md
+9. model/data-model.md
+10. workflow/task-workflow-matrix.md
+11. workflow/background-job-matrix.md
 ```
 
 ## 目录结构

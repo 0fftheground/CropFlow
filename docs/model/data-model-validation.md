@@ -332,14 +332,17 @@ field_inspection.lodging_detection
 | 病虫害防治推荐算法是否共用？             | 不共用，按不同病虫害类别调用不同算法 | OperationPlan.algorithmCode |
 | 缺苗识别是否自动触发补苗？              | 不自动触发，由人工判断        | ReviewRequest / TaskIntent |
 | 长势监测异常是否自动触发归因分析？          | 不自动触发，由人工判断        | ReviewRequest / TaskIntent |
-| generalFlowKey / chainKey 是否进入第一版表结构？ | 暂未确定                 | data-model.md 待定 |
+| generalFlowKey / chainKey 是否进入第一版表结构？ | workflow 文档已定义，是否全量入第一版表结构仍待单独确认 | data-model.md 待定 |
+| 运行期触发的新任务是否需要记录前置任务 ID？ | 需要，并扩展到 CalendarItem / TaskIntent / FarmingTask | CalendarItem.parentTaskId / TaskIntent.parentTaskId / FarmingTask.parentTaskId |
+| 运行期触发的新任务是否需要记录来源执行记录？ | 需要，并扩展到 CalendarItem / TaskIntent / FarmingTask | CalendarItem.sourceExecutionRecordId / TaskIntent.sourceExecutionRecordId / FarmingTask.sourceExecutionRecordId |
 
 处理结果：
 
 ```text
 1-5 节已核对内容与当前核心设计无冲突。
 已回写 data-model.md 的字段：Field.fieldName、Field.area、Field.areaUnit、Field.boundaryGeometry，以及 PlantingPlan 中生育期预测和农事日历高频依赖字段。
-仍未回写为第一版字段的内容：generalFlowKey / chainKey，因结论仍为暂未确定。
+仍未回写为第一版字段的内容：generalFlowKey / chainKey 是否全量入表，结论仍需单独确认。
+运行期触发的新农事项、任务建议和正式任务应至少能追溯 parentTaskId 和 sourceExecutionRecordId。
 ```
 
 ---
@@ -378,8 +381,8 @@ field_inspection.lodging_detection
 
 | 问题 | 结论 | 影响 |
 |---|---|---|
-| 植保算法需要哪些输入？ | 已核对：province、year、cultivation_system、cultivation_pattern、strategy；茎叶除草需要 rice_leaf_age / target；突发病虫防治需要 stage；杂草诊断还需要经纬度、栽培日期、杂草萌发日期、调查日期、weed_survey 等 | OperationPlan.parameters / EventRecord.payload / ExecutionRecord.resultPayload |
-| 是否返回药剂、剂量、稀释倍数、作业窗口？ | 返回药剂、剂型、厂商、推荐用量、兑水量；防治日期和处方均由杂草诊断接口直接返回 | OperationPlan.parameters / OperationPlan.operationWindowStart / OperationPlan.operationWindowEnd |
+| 植保算法需要哪些输入？ | 已核对：province、year、cultivation_system、cultivation_pattern、strategy；茎叶除草需要 rice_leaf_age / target；突发病虫防治需要 stage；杂草诊断还需要经纬度、栽培日期、杂草萌发日期、调查日期、weed_survey 等 | TaskIntent.ruleResult / OperationPlan.parameters / EventRecord.payload / ExecutionRecord.resultPayload |
+| 是否返回药剂、剂量、稀释倍数、作业窗口？ | 返回药剂、剂型、厂商、推荐用量、兑水量；防治日期、补防日期和药害缓解建议时间窗均可由杂草诊断接口直接返回 | TaskIntent.ruleResult / OperationPlan.parameters / OperationPlan.operationWindowStart / OperationPlan.operationWindowEnd |
 | 是否需要天气窗口约束？ | 当前接口未显式返回天气窗口；日期推荐可能隐含天气或适宜度判断 | OperationPlan.basis / parameters |
 | 杂草防治和病虫害防治参数是否不同？ | 不同；当前已确认的杂草主线 3 个诊断接口直接返回处方，病虫方向是否保留共用方案接口需后续单独确认 | taskSubtype / OperationPlan.parameters |
 | 是否需要安全间隔期？ | 当前接口未返回安全间隔期，第一版不新增独立字段 | OperationPlan.parameters |
@@ -388,11 +391,12 @@ field_inspection.lodging_detection
 
 ```text
 植保接口文档与当前核心设计总体一致。
-soil_treatment_diagnosis 返回土壤封闭推荐日期和防治方案，归入后台日期维护和方案输入。
+soil_treatment_diagnosis 返回土壤封闭推荐日期和防治方案；如该链路要求人工审核，则先进入 TaskIntent / ReviewRequest，审核通过后再生成正式 FarmingTask，并为其创建 OperationPlan。
 weed_survey_date_diagnosis 返回茎叶除草药前调查日期，归入后台日期维护输入。
-weed_treatment_diagnosis 在药前调查结果录入后调用，可返回重新调查日期或直接返回推荐防治日期与防治方案。
-after_treatment_diagnosis 返回药后调查日期。
-additional_treatment_diagnosis 返回无需补防、需缓解药害、待药害缓解后补充调查、立即补防；立即补防必须人工确认后才能生成补防 TaskIntent / FarmingTask。
+weed_treatment_diagnosis 在药前调查结果录入后调用；重新调查日期映射到 CalendarItem，推荐防治日期与防治方案先落 TaskIntent / ReviewRequest，审核通过后生成正式 FarmingTask，并为该任务创建 OperationPlan。
+after_treatment_diagnosis 返回两个调查日期：安全性调查日期和防效兼安全性调查日期，均映射到调查类 CalendarItem。
+injury_mitigation_diagnosis 返回 need_mitigation、measures 和 recommended_mitigation_date；药害缓解建议在审核通过前先保存在 TaskIntent.ruleResult / ReviewRequest.decisionPayload，审核通过后再生成正式 FarmingTask。
+additional_treatment_diagnosis 返回无需补防、需缓解药害、待药害缓解后补充调查、立即补防等分支；additional_survey_date 和 service_effect_evaluation_date 继续映射 CalendarItem，补防或药害缓解建议先进入 TaskIntent / ReviewRequest，审核通过后生成正式 FarmingTask。
 外部 endpoint 可以共用，但系统内部仍按 strategy / target / stage 区分算法语义。
 ```
 
@@ -461,9 +465,9 @@ additional_treatment_diagnosis 返回无需补防、需缓解药害、待药害�
 当前对杂草防治链路已补充冻结结论：
 
 ```text
-1. 只有当接口结果提示需要新增农事，且系统不能直接落正式任务时，才进入 requiresReview / ReviewRequest。
-2. 农户反馈服务评价默认是一个正式 FarmingTask。
-3. 服务评价结果不满意时，第一版直接创建后续 FarmingTask，不先创建建议态对象。
+1. 运行期调查或诊断返回新的农事建议、补防建议、药害缓解建议时，先创建 TaskIntent，再进入 ReviewRequest。
+2. 只有审核通过后，编排器才创建正式 FarmingTask；如果该任务需要执行方案，再为该正式任务创建 OperationPlan。
+3. 农户反馈服务评价默认是一个正式 FarmingTask。
 ```
 
 ---
@@ -476,11 +480,12 @@ additional_treatment_diagnosis 返回无需补防、需缓解药害、待药害�
 
 | 问题 | 结论 | 影响 |
 |---|---|---|
-| 复核人需要看到哪些上下文？ | pending | ReviewRequest.description / decisionPayload |
+| 复核人需要看到哪些上下文？ | 已补充：至少包含算法来源、触发调查记录、建议任务类型、建议时间窗、建议处方/措施、推荐日期和拒绝理由输入位；结构化部分进入 decisionPayload.contextRefs | ReviewRequest.description / decisionPayload |
 | decision 枚举 approve / reject / need_more_info / no_action / adjust 是否足够？ | pending | ReviewRequest.decision |
-| adjust 是否需要结构化字段？ | pending | decisionPayload |
+| adjust 是否需要结构化字段？ | 需要，至少保留 contextRefs / adjustments / reason | decisionPayload |
 | 复核后是否可能直接触发生育期修正？ | pending | ReviewRequestResolvedHandler |
 | 复核后是否可能生成多个 FarmingTask？ | pending | ReviewRequest / FarmingTask |
+| 复核页是否要展示前置任务和触发调查记录？ | 需要，并建议从 decisionPayload.contextRefs 读取 | ReviewRequest.description / decisionPayload |
 
 ---
 
