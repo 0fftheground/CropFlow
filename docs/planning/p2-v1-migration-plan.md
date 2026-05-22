@@ -248,7 +248,7 @@ chainKey
 当前拆分来源：
 
 ```text
-src/sql/20260521_core_schema_consolidated.sql
+database/sql/20260521_core_schema_consolidated.sql
 ```
 
 拆分原则：
@@ -263,6 +263,6 @@ src/sql/20260521_core_schema_consolidated.sql
 
 建议按以下顺序继续：
 
-1. 先在 `src/sql/migrations/v1/` 维护 SQL 骨架。
+1. 先在 `database/sql/migrations/v1/` 维护 SQL 骨架。
 2. 再从 consolidated SQL 逐段搬运 DDL 到对应文件。
 3. 等后端工程初始化后，再把这些文件转成 Alembic revision 或作为 baseline SQL 纳管。

@@ -1,0 +1,364 @@
+from __future__ import annotations
+
+from datetime import date, timedelta
+from typing import Any
+
+from sqlalchemy import Select, select
+from sqlalchemy.orm import Session
+
+from app.models import (
+    CalendarItem,
+    CodeDict,
+    EventRecord,
+    Execution,
+    ExecutionRecord,
+    Field,
+    FarmingTask,
+    OperationPlan,
+    PlantingPlan,
+    PlantingPlanFieldRelation,
+    RiceVariety,
+    ReviewRequest,
+    TaskIntent,
+)
+
+
+class Repository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def add(self, entity: Any) -> Any:
+        self.session.add(entity)
+        return entity
+
+    def flush(self) -> None:
+        self.session.flush()
+
+    def add_all(self, entities: list[Any]) -> None:
+        self.session.add_all(entities)
+
+
+class PlantingPlanRepository(Repository):
+    def get(self, planting_plan_id: int) -> PlantingPlan | None:
+        return self.session.get(PlantingPlan, planting_plan_id)
+
+    def get_by_plan_code(self, plan_code: str) -> PlantingPlan | None:
+        stmt = select(PlantingPlan).where(PlantingPlan.plan_code == plan_code)
+        return self.session.scalar(stmt)
+
+    def list_by_statuses(self, statuses: list[str] | None = None) -> list[PlantingPlan]:
+        stmt = select(PlantingPlan)
+        if statuses:
+            stmt = stmt.where(PlantingPlan.status.in_(statuses))
+        stmt = stmt.order_by(PlantingPlan.created_at.desc(), PlantingPlan.id.desc())
+        return list(self.session.scalars(stmt))
+
+
+class CodeDictRepository(Repository):
+    def get_by_code(self, code: int) -> CodeDict | None:
+        stmt = select(CodeDict).where(CodeDict.code == code)
+        return self.session.scalar(stmt)
+
+
+class RiceVarietyRepository(Repository):
+    def get(self, rice_variety_id: int) -> RiceVariety | None:
+        return self.session.get(RiceVariety, rice_variety_id)
+
+
+class FieldRepository(Repository):
+    def list_by_ids(self, field_ids: list[int]) -> list[Field]:
+        if not field_ids:
+            return []
+        stmt = select(Field).where(Field.id.in_(field_ids)).order_by(Field.id.asc())
+        return list(self.session.scalars(stmt))
+
+
+class PlantingPlanFieldRelationRepository(Repository):
+    def list_field_ids_by_plan(self, planting_plan_id: int) -> list[int]:
+        stmt = (
+            select(PlantingPlanFieldRelation.field_id)
+            .where(PlantingPlanFieldRelation.planting_plan_id == planting_plan_id)
+            .order_by(PlantingPlanFieldRelation.field_id.asc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def list_field_ids_by_plan_ids(self, planting_plan_ids: list[int]) -> dict[int, list[int]]:
+        if not planting_plan_ids:
+            return {}
+
+        stmt = (
+            select(PlantingPlanFieldRelation.planting_plan_id, PlantingPlanFieldRelation.field_id)
+            .where(PlantingPlanFieldRelation.planting_plan_id.in_(planting_plan_ids))
+            .order_by(
+                PlantingPlanFieldRelation.planting_plan_id.asc(),
+                PlantingPlanFieldRelation.field_id.asc(),
+            )
+        )
+        mapping: dict[int, list[int]] = {}
+        for planting_plan_id, field_id in self.session.execute(stmt):
+            mapping.setdefault(planting_plan_id, []).append(field_id)
+        return mapping
+
+    def replace_for_plan(self, planting_plan_id: int, field_ids: list[int]) -> None:
+        existing_stmt = select(PlantingPlanFieldRelation).where(
+            PlantingPlanFieldRelation.planting_plan_id == planting_plan_id,
+        )
+        existing_relations = list(self.session.scalars(existing_stmt))
+        for relation in existing_relations:
+            self.session.delete(relation)
+
+        self.session.add_all(
+            [
+                PlantingPlanFieldRelation(
+                    planting_plan_id=planting_plan_id,
+                    field_id=field_id,
+                    created_by_type="user",
+                    created_by_id="api",
+                )
+                for field_id in field_ids
+            ],
+        )
+
+
+class EventRecordRepository(Repository):
+    def get(self, event_record_id: int) -> EventRecord | None:
+        return self.session.get(EventRecord, event_record_id)
+
+    def list_by_plan(self, planting_plan_id: int) -> list[EventRecord]:
+        stmt = (
+            select(EventRecord)
+            .where(EventRecord.planting_plan_id == planting_plan_id)
+            .order_by(EventRecord.occurred_at.desc(), EventRecord.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+
+class CalendarItemRepository(Repository):
+    TERMINAL_STATUSES = ("generated", "invalidated")
+
+    def get(self, calendar_item_id: int) -> CalendarItem | None:
+        return self.session.get(CalendarItem, calendar_item_id)
+
+    def list_current_by_plan(self, planting_plan_id: int) -> list[CalendarItem]:
+        stmt = (
+            select(CalendarItem)
+            .where(CalendarItem.planting_plan_id == planting_plan_id)
+            .where(~CalendarItem.status.in_(self.TERMINAL_STATUSES))
+            .order_by(CalendarItem.suggested_start_date.asc(), CalendarItem.id.asc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def list_by_parent_task(self, parent_task_id: int) -> list[CalendarItem]:
+        stmt = select(CalendarItem).where(CalendarItem.parent_task_id == parent_task_id).order_by(CalendarItem.id.asc())
+        return list(self.session.scalars(stmt))
+
+    def list_by_source_execution_record(self, execution_record_id: int) -> list[CalendarItem]:
+        stmt = (
+            select(CalendarItem)
+            .where(CalendarItem.source_execution_record_id == execution_record_id)
+            .order_by(CalendarItem.id.asc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def list_active_by_plan_and_subtype(
+        self,
+        planting_plan_id: int,
+        task_subtype: str,
+        *,
+        parent_task_id: int | None = None,
+        source_execution_record_id: int | None = None,
+    ) -> list[CalendarItem]:
+        stmt = (
+            select(CalendarItem)
+            .where(CalendarItem.planting_plan_id == planting_plan_id)
+            .where(CalendarItem.task_subtype == task_subtype)
+            .where(CalendarItem.status == "active")
+        )
+        if parent_task_id is None:
+            stmt = stmt.where(CalendarItem.parent_task_id.is_(None))
+        else:
+            stmt = stmt.where(CalendarItem.parent_task_id == parent_task_id)
+        if source_execution_record_id is None:
+            stmt = stmt.where(CalendarItem.source_execution_record_id.is_(None))
+        else:
+            stmt = stmt.where(CalendarItem.source_execution_record_id == source_execution_record_id)
+        stmt = stmt.order_by(CalendarItem.id.asc())
+        return list(self.session.scalars(stmt))
+
+    def list_due_for_generation(
+        self,
+        planting_plan_id: int,
+        *,
+        check_date: date,
+        window_days: int,
+    ) -> list[CalendarItem]:
+        latest_start_date = check_date + timedelta(days=window_days)
+        stmt = (
+            select(CalendarItem)
+            .where(CalendarItem.planting_plan_id == planting_plan_id)
+            .where(CalendarItem.status == "active")
+            .where(CalendarItem.generated_task_id.is_(None))
+            .where(CalendarItem.suggested_start_date <= latest_start_date)
+            .order_by(CalendarItem.suggested_start_date.asc(), CalendarItem.id.asc())
+        )
+        return list(self.session.scalars(stmt))
+
+
+class TaskIntentRepository(Repository):
+    TERMINAL_STATUSES = ("converted", "rejected", "no_action")
+
+    def get(self, task_intent_id: int) -> TaskIntent | None:
+        return self.session.get(TaskIntent, task_intent_id)
+
+    def list_current_by_plan(self, planting_plan_id: int) -> list[TaskIntent]:
+        stmt = (
+            select(TaskIntent)
+            .where(TaskIntent.planting_plan_id == planting_plan_id)
+            .where(~TaskIntent.status.in_(self.TERMINAL_STATUSES))
+            .order_by(TaskIntent.created_at.desc(), TaskIntent.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def list_by_parent_task(self, parent_task_id: int) -> list[TaskIntent]:
+        stmt = select(TaskIntent).where(TaskIntent.parent_task_id == parent_task_id).order_by(TaskIntent.id.asc())
+        return list(self.session.scalars(stmt))
+
+    def list_by_source_execution_record(self, execution_record_id: int) -> list[TaskIntent]:
+        stmt = (
+            select(TaskIntent)
+            .where(TaskIntent.source_execution_record_id == execution_record_id)
+            .order_by(TaskIntent.id.asc())
+        )
+        return list(self.session.scalars(stmt))
+
+
+class ReviewRequestRepository(Repository):
+    TERMINAL_STATUSES = ("resolved", "cancelled")
+    SOURCE_ENTITY_MODELS = {
+        "calendar_item": CalendarItem,
+        "cf_calendar_item": CalendarItem,
+        "event_record": EventRecord,
+        "cf_event_record": EventRecord,
+        "execution": Execution,
+        "cf_execution": Execution,
+        "execution_record": ExecutionRecord,
+        "cf_execution_record": ExecutionRecord,
+        "farming_task": FarmingTask,
+        "cf_farming_task": FarmingTask,
+        "operation_plan": OperationPlan,
+        "cf_operation_plan": OperationPlan,
+        "planting_plan": PlantingPlan,
+        "cf_planting_plan": PlantingPlan,
+        "review_request": ReviewRequest,
+        "cf_review_request": ReviewRequest,
+        "task_intent": TaskIntent,
+        "cf_task_intent": TaskIntent,
+    }
+
+    def get(self, review_request_id: int) -> ReviewRequest | None:
+        return self.session.get(ReviewRequest, review_request_id)
+
+    def list_current_by_plan(self, planting_plan_id: int) -> list[ReviewRequest]:
+        stmt = (
+            select(ReviewRequest)
+            .where(ReviewRequest.planting_plan_id == planting_plan_id)
+            .where(~ReviewRequest.status.in_(self.TERMINAL_STATUSES))
+            .order_by(ReviewRequest.created_at.desc(), ReviewRequest.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_source_entity(self, review_request_or_id: ReviewRequest | int) -> Any | None:
+        review_request = (
+            review_request_or_id
+            if isinstance(review_request_or_id, ReviewRequest)
+            else self.get(review_request_or_id)
+        )
+        if review_request is None:
+            return None
+
+        model = self.SOURCE_ENTITY_MODELS.get(review_request.source_entity_type)
+        if model is None:
+            return None
+
+        return self.session.get(model, review_request.source_entity_id)
+
+
+class FarmingTaskRepository(Repository):
+    TERMINAL_STATUSES = ("completed", "failed", "cancelled")
+
+    def get(self, farming_task_id: int) -> FarmingTask | None:
+        return self.session.get(FarmingTask, farming_task_id)
+
+    def list_current_by_plan(self, planting_plan_id: int) -> list[FarmingTask]:
+        stmt = (
+            select(FarmingTask)
+            .where(FarmingTask.planting_plan_id == planting_plan_id)
+            .where(~FarmingTask.status.in_(self.TERMINAL_STATUSES))
+            .order_by(FarmingTask.created_at.desc(), FarmingTask.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def list_by_parent_task(self, parent_task_id: int) -> list[FarmingTask]:
+        stmt = select(FarmingTask).where(FarmingTask.parent_task_id == parent_task_id).order_by(FarmingTask.id.asc())
+        return list(self.session.scalars(stmt))
+
+    def list_by_source_execution_record(self, execution_record_id: int) -> list[FarmingTask]:
+        stmt = (
+            select(FarmingTask)
+            .where(FarmingTask.source_execution_record_id == execution_record_id)
+            .order_by(FarmingTask.id.asc())
+        )
+        return list(self.session.scalars(stmt))
+
+
+class OperationPlanRepository(Repository):
+    def get(self, operation_plan_id: int) -> OperationPlan | None:
+        return self.session.get(OperationPlan, operation_plan_id)
+
+    def list_by_plan(self, planting_plan_id: int) -> list[OperationPlan]:
+        stmt = (
+            select(OperationPlan)
+            .where(OperationPlan.planting_plan_id == planting_plan_id)
+            .order_by(OperationPlan.created_at.desc(), OperationPlan.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_active_by_task(self, farming_task_id: int) -> OperationPlan | None:
+        stmt = select(OperationPlan).where(
+            OperationPlan.farming_task_id == farming_task_id,
+            OperationPlan.status == "active",
+        )
+        return self.session.scalar(stmt)
+
+
+class ExecutionRepository(Repository):
+    def get(self, execution_id: int) -> Execution | None:
+        return self.session.get(Execution, execution_id)
+
+    def list_by_task(self, farming_task_id: int) -> list[Execution]:
+        stmt = select(Execution).where(Execution.farming_task_id == farming_task_id).order_by(Execution.id.desc())
+        return list(self.session.scalars(stmt))
+
+
+class ExecutionRecordRepository(Repository):
+    def get(self, execution_record_id: int) -> ExecutionRecord | None:
+        return self.session.get(ExecutionRecord, execution_record_id)
+
+    def list_by_execution(self, execution_id: int) -> list[ExecutionRecord]:
+        stmt = (
+            select(ExecutionRecord)
+            .where(ExecutionRecord.execution_id == execution_id)
+            .order_by(ExecutionRecord.record_time.desc(), ExecutionRecord.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_latest_survey_record_for_task(self, farming_task_id: int) -> ExecutionRecord | None:
+        stmt: Select[tuple[ExecutionRecord]] = (
+            select(ExecutionRecord)
+            .join(Execution, Execution.id == ExecutionRecord.execution_id)
+            .where(Execution.farming_task_id == farming_task_id)
+            .where(ExecutionRecord.record_type == "survey_result")
+            .order_by(ExecutionRecord.record_time.desc(), ExecutionRecord.id.desc())
+            .limit(1)
+        )
+        return self.session.scalar(stmt)

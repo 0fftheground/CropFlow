@@ -1,0 +1,33 @@
+from app.repositories.core import (
+    CalendarItemRepository,
+    CodeDictRepository,
+    EventRecordRepository,
+    ExecutionRecordRepository,
+    ExecutionRepository,
+    FieldRepository,
+    FarmingTaskRepository,
+    OperationPlanRepository,
+    PlantingPlanRepository,
+    PlantingPlanFieldRelationRepository,
+    RiceVarietyRepository,
+    Repository,
+    ReviewRequestRepository,
+    TaskIntentRepository,
+)
+
+__all__ = [
+    "CalendarItemRepository",
+    "CodeDictRepository",
+    "EventRecordRepository",
+    "ExecutionRecordRepository",
+    "ExecutionRepository",
+    "FieldRepository",
+    "FarmingTaskRepository",
+    "OperationPlanRepository",
+    "PlantingPlanRepository",
+    "PlantingPlanFieldRelationRepository",
+    "RiceVarietyRepository",
+    "Repository",
+    "ReviewRequestRepository",
+    "TaskIntentRepository",
+]

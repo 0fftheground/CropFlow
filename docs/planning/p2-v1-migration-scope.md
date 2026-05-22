@@ -18,7 +18,7 @@ docs/model/data-model.md
 docs/model/data-model-validation.md
 docs/model/er-diagram.md
 docs/workflow/task-workflow-matrix.md
-src/sql/20260521_core_schema_consolidated.sql
+database/sql/20260521_core_schema_consolidated.sql
 ```
 
 ## 1. Scope
@@ -360,6 +360,6 @@ active OperationPlan 唯一索引
 
 基于本清单，后续执行顺序建议是：
 
-1. 从 [20260521_core_schema_consolidated.sql](/F:/workspace/CropFlow/src/sql/20260521_core_schema_consolidated.sql:1) 拆出正式 migration 顺序。
+1. 从 [20260521_core_schema_consolidated.sql](/F:/workspace/CropFlow/database/sql/20260521_core_schema_consolidated.sql:1) 拆出正式 migration 顺序。
 2. 先落第一条最小实现链路所需表和外键。
 3. `DeviceCommand / Inventory* / workflowKey*` 保持 deferred，不在第一版 migration 中顺手落库。

@@ -29,7 +29,7 @@
 3. docs/planning/team-work-division/plant-protection.md
 4. docs/planning/team-work-division/frontend.md
 5. docs/api/weed_diagnosis_api.md
-6. src/sql/20260518_weed_protection_closed_loop.sql
+6. database/sql/20260518_weed_protection_closed_loop.sql
 ```
 
 ## 完成标准

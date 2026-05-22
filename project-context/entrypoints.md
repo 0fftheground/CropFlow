@@ -118,7 +118,7 @@ docs/model/domain-model.md
 docs/model/data-model.md
 docs/model/data-model-validation.md
 docs/model/glossary.md
-src/sql/
+database/sql/
 ```
 
 简要说明：
@@ -136,7 +136,7 @@ docs/model/data-model-validation.md
 docs/model/glossary.md
   适合快速统一术语，避免把同一概念写成不同名字。
 
-src/sql/
+database/sql/
   适合查看当前 DDL 草案、字典和品种数据输入文件，判断实现层准备情况。
 ```
 

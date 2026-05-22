@@ -1,0 +1,291 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
+from decimal import Decimal
+from typing import Any
+
+from app.core.constants import (
+    EVENT_PROCESSING_STATUS_RECEIVED,
+    EVENT_TYPE_PLAN_CREATED,
+    EVENT_TYPE_PLAN_KEY_INFO_CHANGED,
+)
+from app.models import EventRecord, Field, PlantingPlan, RiceVariety
+from app.repositories import (
+    EventRecordRepository,
+    FieldRepository,
+    PlantingPlanFieldRelationRepository,
+    PlantingPlanRepository,
+    RiceVarietyRepository,
+)
+
+
+class PlanEventDispatcher:
+    def handle(self, event_record: EventRecord):
+        raise NotImplementedError
+
+PLANTING_PLAN_ALLOWED_STATUSES = {"draft", "active", "completed", "cancelled"}
+
+
+@dataclass(slots=True)
+class PlantingPlanDetails:
+    planting_plan: PlantingPlan
+    field_ids: list[int]
+
+
+@dataclass(slots=True)
+class PlantingPlanCreateInput:
+    plan_code: str
+    plan_name: str
+    farm_id: int
+    field_ids: list[int]
+    culti_type_code: int
+    planting_method_code: int
+    crop_name: str
+    variety_id: int
+    sowing_date: date
+    year: int | None = None
+    transplant_date: date | None = None
+    harvest_date: date | None = None
+    transplant_leaf_age: Decimal | None = None
+    previous_harvest_date: date | None = None
+    ratoon_first_season_harvest_date: date | None = None
+    expected_harvest_date: date | None = None
+    status: str = "draft"
+    task_generation_window_days: int = 14
+    metadata_payload: dict[str, Any] | None = None
+
+
+@dataclass(slots=True)
+class PlantingPlanUpdateInput:
+    plan_name: str | None = None
+    farm_id: int | None = None
+    field_ids: list[int] | None = None
+    culti_type_code: int | None = None
+    planting_method_code: int | None = None
+    crop_name: str | None = None
+    variety_id: int | None = None
+    sowing_date: date | None = None
+    year: int | None = None
+    transplant_date: date | None = None
+    harvest_date: date | None = None
+    transplant_leaf_age: Decimal | None = None
+    previous_harvest_date: date | None = None
+    ratoon_first_season_harvest_date: date | None = None
+    expected_harvest_date: date | None = None
+    status: str | None = None
+    task_generation_window_days: int | None = None
+    metadata_payload: dict[str, Any] | None = None
+
+
+class PlantingPlanService:
+    def __init__(
+        self,
+        planting_plan_repository: PlantingPlanRepository,
+        field_repository: FieldRepository,
+        planting_plan_field_relation_repository: PlantingPlanFieldRelationRepository,
+        rice_variety_repository: RiceVarietyRepository,
+        event_record_repository: EventRecordRepository | None = None,
+        plan_orchestrator: PlanEventDispatcher | None = None,
+    ) -> None:
+        self.planting_plan_repository = planting_plan_repository
+        self.field_repository = field_repository
+        self.planting_plan_field_relation_repository = planting_plan_field_relation_repository
+        self.rice_variety_repository = rice_variety_repository
+        self.event_record_repository = event_record_repository
+        self.plan_orchestrator = plan_orchestrator
+
+    def create(self, payload: PlantingPlanCreateInput) -> PlantingPlanDetails:
+        self._validate_status(payload.status)
+        self._validate_field_ids(payload.field_ids)
+        if self.planting_plan_repository.get_by_plan_code(payload.plan_code) is not None:
+            raise ValueError(f"Planting plan code {payload.plan_code} already exists.")
+
+        variety = self._get_variety(payload.variety_id)
+        self._ensure_fields_exist(payload.field_ids)
+
+        planting_plan = PlantingPlan(
+            plan_code=payload.plan_code,
+            plan_name=payload.plan_name,
+            farm_id=payload.farm_id,
+            year=payload.year,
+            culti_type_code=payload.culti_type_code,
+            planting_method_code=payload.planting_method_code,
+            crop_name=payload.crop_name,
+            variety_id=payload.variety_id,
+            variety_name=variety.name,
+            sowing_date=payload.sowing_date,
+            transplant_date=payload.transplant_date,
+            harvest_date=payload.harvest_date,
+            transplant_leaf_age=payload.transplant_leaf_age,
+            previous_harvest_date=payload.previous_harvest_date,
+            ratoon_first_season_harvest_date=payload.ratoon_first_season_harvest_date,
+            expected_harvest_date=payload.expected_harvest_date,
+            status=payload.status,
+            task_generation_window_days=payload.task_generation_window_days,
+            metadata_payload=payload.metadata_payload or {},
+            created_by_type="user",
+            created_by_id="api",
+        )
+        self.planting_plan_repository.add(planting_plan)
+        self.planting_plan_repository.flush()
+        self.planting_plan_field_relation_repository.replace_for_plan(planting_plan.id, payload.field_ids)
+        self._record_and_dispatch_plan_event(
+            planting_plan.id,
+            event_type=EVENT_TYPE_PLAN_CREATED,
+            payload={"planCode": planting_plan.plan_code},
+            idempotency_key=f"plan-created:{planting_plan.id}",
+        )
+        return self.get_details(planting_plan.id)
+
+    def get_details(self, planting_plan_id: int) -> PlantingPlanDetails:
+        planting_plan = self.planting_plan_repository.get(planting_plan_id)
+        if planting_plan is None:
+            raise LookupError(f"Planting plan {planting_plan_id} does not exist.")
+
+        field_ids = self.planting_plan_field_relation_repository.list_field_ids_by_plan(planting_plan_id)
+        return PlantingPlanDetails(planting_plan=planting_plan, field_ids=field_ids)
+
+    def list_by_statuses(self, statuses: list[str] | None = None) -> list[PlantingPlanDetails]:
+        if statuses:
+            for status in statuses:
+                self._validate_status(status)
+        planting_plans = self.planting_plan_repository.list_by_statuses(statuses)
+        if not planting_plans:
+            return []
+
+        plan_ids = [plan.id for plan in planting_plans]
+        field_ids_map = self.planting_plan_field_relation_repository.list_field_ids_by_plan_ids(plan_ids)
+        return [
+            PlantingPlanDetails(
+                planting_plan=plan,
+                field_ids=field_ids_map.get(plan.id, []),
+            )
+            for plan in planting_plans
+        ]
+
+    def update(self, planting_plan_id: int, payload: PlantingPlanUpdateInput) -> PlantingPlanDetails:
+        planting_plan = self.planting_plan_repository.get(planting_plan_id)
+        if planting_plan is None:
+            raise LookupError(f"Planting plan {planting_plan_id} does not exist.")
+
+        refresh_calendar = False
+
+        if payload.plan_name is not None:
+            planting_plan.plan_name = payload.plan_name
+        if payload.farm_id is not None:
+            planting_plan.farm_id = payload.farm_id
+        if payload.year is not None:
+            planting_plan.year = payload.year
+        if payload.culti_type_code is not None:
+            planting_plan.culti_type_code = payload.culti_type_code
+            refresh_calendar = True
+        if payload.planting_method_code is not None:
+            planting_plan.planting_method_code = payload.planting_method_code
+            refresh_calendar = True
+        if payload.crop_name is not None:
+            planting_plan.crop_name = payload.crop_name
+        if payload.variety_id is not None and payload.variety_id != planting_plan.variety_id:
+            variety = self._get_variety(payload.variety_id)
+            planting_plan.variety_id = payload.variety_id
+            planting_plan.variety_name = variety.name
+            refresh_calendar = True
+        if payload.sowing_date is not None:
+            planting_plan.sowing_date = payload.sowing_date
+            refresh_calendar = True
+        if payload.transplant_date is not None:
+            planting_plan.transplant_date = payload.transplant_date
+            refresh_calendar = True
+        if payload.harvest_date is not None:
+            planting_plan.harvest_date = payload.harvest_date
+        if payload.transplant_leaf_age is not None:
+            planting_plan.transplant_leaf_age = payload.transplant_leaf_age
+        if payload.previous_harvest_date is not None:
+            planting_plan.previous_harvest_date = payload.previous_harvest_date
+        if payload.ratoon_first_season_harvest_date is not None:
+            planting_plan.ratoon_first_season_harvest_date = payload.ratoon_first_season_harvest_date
+        if payload.expected_harvest_date is not None:
+            planting_plan.expected_harvest_date = payload.expected_harvest_date
+        if payload.status is not None:
+            self._validate_status(payload.status)
+            planting_plan.status = payload.status
+        if payload.task_generation_window_days is not None:
+            planting_plan.task_generation_window_days = payload.task_generation_window_days
+        if payload.metadata_payload is not None:
+            planting_plan.metadata_payload = payload.metadata_payload
+        if payload.field_ids is not None:
+            self._validate_field_ids(payload.field_ids)
+            self._ensure_fields_exist(payload.field_ids)
+            self.planting_plan_field_relation_repository.replace_for_plan(planting_plan_id, payload.field_ids)
+
+        planting_plan.updated_at = _utcnow()
+        self.planting_plan_repository.flush()
+
+        if refresh_calendar and planting_plan.status in {"draft", "active"}:
+            self._record_and_dispatch_plan_event(
+                planting_plan.id,
+                event_type=EVENT_TYPE_PLAN_KEY_INFO_CHANGED,
+                payload={"refreshCalendar": True},
+                idempotency_key=f"plan-key-info-changed:{planting_plan.id}:{_utcnow().isoformat()}",
+            )
+
+        return self.get_details(planting_plan.id)
+
+    def _record_and_dispatch_plan_event(
+        self,
+        planting_plan_id: int,
+        *,
+        event_type: str,
+        payload: dict[str, Any],
+        idempotency_key: str,
+    ) -> EventRecord | None:
+        if self.event_record_repository is None:
+            return None
+
+        event_record = EventRecord(
+            planting_plan_id=planting_plan_id,
+            event_type=event_type,
+            event_category="plan",
+            event_source="api",
+            source_system="cropflow",
+            payload=payload,
+            occurred_at=_utcnow(),
+            processing_status=EVENT_PROCESSING_STATUS_RECEIVED,
+            idempotency_key=idempotency_key,
+            created_by_type="user",
+            created_by_id="api",
+        )
+        self.event_record_repository.add(event_record)
+        if hasattr(self.event_record_repository, "flush"):
+            self.event_record_repository.flush()
+        if self.plan_orchestrator is not None:
+            self.plan_orchestrator.handle(event_record)
+        return event_record
+
+    def _get_variety(self, variety_id: int) -> RiceVariety:
+        variety = self.rice_variety_repository.get(variety_id)
+        if variety is None:
+            raise ValueError(f"Rice variety {variety_id} does not exist.")
+        return variety
+
+    def _ensure_fields_exist(self, field_ids: list[int]) -> list[Field]:
+        fields = self.field_repository.list_by_ids(field_ids)
+        if len(fields) != len(set(field_ids)):
+            existing_ids = {field.id for field in fields}
+            missing_ids = sorted(set(field_ids) - existing_ids)
+            raise ValueError(f"Fields {missing_ids} do not exist.")
+        return fields
+
+    def _validate_field_ids(self, field_ids: list[int]) -> None:
+        if not field_ids:
+            raise ValueError("At least one field id is required.")
+
+    def _validate_status(self, status: str) -> None:
+        if status not in PLANTING_PLAN_ALLOWED_STATUSES:
+            raise ValueError(
+                f"Unsupported planting plan status: {status}. Allowed values: {sorted(PLANTING_PLAN_ALLOWED_STATUSES)}.",
+            )
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)

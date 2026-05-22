@@ -231,7 +231,7 @@ erDiagram
 说明：
 
 ```text
-1. 本图对应 src/sql/20260518_weed_protection_closed_loop.sql 的当前主表关系。
+1. 本图对应 database/sql/20260518_weed_protection_closed_loop.sql 的当前主表关系。
 2. ReviewRequest.sourceEntityType/sourceEntityId 是多态来源，不在图中画成固定外键。
 3. InventoryItem / InventoryTransaction 不在当前杂草防治闭环 DDL 范围内，因此未在图中展开。
 4. 当前主链路为 PlantingPlan -> CalendarItem -> FarmingTask -> Execution -> ExecutionRecord -> Evaluation / Feedback -> ReviewRequest。
