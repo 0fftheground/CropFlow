@@ -3,7 +3,7 @@ from typing import Sequence
 from app.db.migration_sql import run_sql_file
 
 # revision identifiers, used by Alembic.
-revision: str = "001_create_base_reference_tables"
+revision: str = "cf001_base_reference"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

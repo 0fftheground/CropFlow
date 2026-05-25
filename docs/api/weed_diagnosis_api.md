@@ -10,10 +10,12 @@
 
 | 项目 | 说明 |
 |------|------|
-| 接口地址 | `localhost` |
+| 接口地址 | `http://47.99.129.235:3319` |
 | 请求方式 | `POST` |
 | Content-Type | `application/json` |
 | 日期格式 | `YYYYmmdd`，例如 `20260410` |
+
+> CropFlow 后端通过环境变量 `CROPFLOW_WEED_DIAGNOSIS_BASE_URL` 配置该基地址。
 
 ## 三、状态码说明
 
@@ -104,6 +106,8 @@
 | 防效兼安全性调查后诊断 | 否 | - | - |
 
 > 示例中的 `weather_data` 仅展示字段格式；实际调用时需按上述范围传入完整连续逐日数据。
+
+> 当前联调服务对 `weed_survey_date_diagnosis` 的直播模式要求与字段名一致：虽然仍传 `cultivation_date=播种日期`，但 `weather_data` 需要从 `weed_germination_date` 起算；按现网行为等价于“播种前 1 天”开始的连续 46 天闭区间数据。
 
 ### 4. 药前调查数据
 

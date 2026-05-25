@@ -26,6 +26,7 @@ from app.core.constants import (
     FARMING_TASK_STATUS_PENDING,
     OPERATION_PLAN_STATUS_ACTIVE,
     REVIEW_REQUEST_STATUS_OPEN,
+    TASK_INTENT_STATUS_REJECTED,
     TASK_INTENT_STATUS_CONVERTED,
     TASK_INTENT_STATUS_PENDING_MORE_INFO,
     SURVEY_DATE_RECOMMENDATION_JOB,
@@ -36,6 +37,7 @@ from app.core.constants import (
     TASK_SUBTYPE_CONTROL_EFFECT_SURVEY,
     TASK_SUBTYPE_INJURY_MITIGATION,
     TASK_SUBTYPE_RICE_SAFETY_SURVEY,
+    TASK_SUBTYPE_SOIL_SEALING_WEED_CONTROL,
     TASK_SUBTYPE_STEM_LEAF_WEED_CONTROL,
     TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
     TASK_SUBTYPE_STEM_LEAF_WEED_RECONTROL_PRE_SURVEY,
@@ -51,6 +53,7 @@ from app.repositories import (
     TaskIntentRepository,
 )
 from app.services.calendar_tasks import (
+    SoilTreatmentDiagnosisResult,
     PlantProtectionPlanContextResolver,
     SurveyDateRecommendationService,
     WeatherProvider,
@@ -105,30 +108,244 @@ class PlanCalendarRefreshHandler:
         self,
         survey_date_recommendation_service: SurveyDateRecommendationService,
         event_record_repository: EventRecordRepository,
+        task_intent_repository: TaskIntentRepository,
+        review_request_repository: ReviewRequestRepository,
     ) -> None:
         self.survey_date_recommendation_service = survey_date_recommendation_service
         self.event_record_repository = event_record_repository
+        self.task_intent_repository = task_intent_repository
+        self.review_request_repository = review_request_repository
 
     def handle(self, event_record: EventRecord) -> OrchestratorResult:
         if event_record.planting_plan_id is None:
             return OrchestratorResult()
 
+        calendar_items: list[CalendarItem] = []
+        task_intents: list[TaskIntent] = []
+        review_requests: list[ReviewRequest] = []
+
         try:
-            calendar_item = self.survey_date_recommendation_service.recommend_pre_treatment_survey(
+            soil_diagnosis = self.survey_date_recommendation_service.diagnose_soil_treatment(
                 event_record.planting_plan_id,
             )
+            task_intent, review_request = self._upsert_soil_treatment_review(
+                event_record=event_record,
+                diagnosis=soil_diagnosis,
+            )
+            task_intents.append(task_intent)
+            review_requests.append(review_request)
         except Exception as exc:
-            self._record_calendar_refresh_failure(event_record.planting_plan_id, exc)
+            self._record_calendar_refresh_failure(
+                event_record.planting_plan_id,
+                TASK_SUBTYPE_SOIL_SEALING_WEED_CONTROL,
+                exc,
+            )
+            logger.warning(
+                "Failed to refresh soil-treatment recommendation for planting plan %s.",
+                event_record.planting_plan_id,
+                exc_info=True,
+            )
+
+        try:
+            calendar_items.append(
+                self.survey_date_recommendation_service.recommend_pre_treatment_survey(
+                    event_record.planting_plan_id,
+                ),
+            )
+        except Exception as exc:
+            self._record_calendar_refresh_failure(
+                event_record.planting_plan_id,
+                TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
+                exc,
+            )
             logger.warning(
                 "Failed to refresh pre-treatment survey recommendation for planting plan %s.",
                 event_record.planting_plan_id,
                 exc_info=True,
             )
-            return OrchestratorResult()
+        return OrchestratorResult(
+            calendar_items=calendar_items,
+            task_intents=task_intents,
+            review_requests=review_requests,
+        )
 
-        return OrchestratorResult(calendar_items=[calendar_item])
+    def _upsert_soil_treatment_review(
+        self,
+        *,
+        event_record: EventRecord,
+        diagnosis: SoilTreatmentDiagnosisResult,
+    ) -> tuple[TaskIntent, ReviewRequest]:
+        planting_plan_id = int(event_record.planting_plan_id)
+        existing_task_intent = next(
+            (
+                item
+                for item in self.task_intent_repository.list_current_by_plan(planting_plan_id)
+                if item.task_subtype == TASK_SUBTYPE_SOIL_SEALING_WEED_CONTROL
+            ),
+            None,
+        )
+        idempotency_key = (
+            f"task-intent:soil-treatment:{planting_plan_id}:"
+            f"{diagnosis.recommended_date[0].isoformat()}:{diagnosis.recommended_date[1].isoformat()}"
+        )
+        trigger_summary = "soil_treatment_diagnosis recommended a soil-sealing treatment window."
+        rule_result = {
+            "algorithmCode": "soil_treatment_diagnosis",
+            "branchType": "soil_treatment",
+            "proposedTask": {
+                "title": "土壤封闭除草",
+                "recommendedControlDate": _format_date_range(diagnosis.recommended_date),
+                "operationAction": diagnosis.farming_operation,
+            },
+            "proposedPlan": {
+                "controlPlan": diagnosis.control_plan,
+                "operationAction": diagnosis.farming_operation,
+            },
+            "parentTaskId": None,
+            "sourceExecutionId": None,
+            "sourceExecutionRecordId": None,
+            "inputExecutionRecordIds": [],
+            "rawResponse": diagnosis.raw_response,
+        }
+        if existing_task_intent is None:
+            task_intent = TaskIntent(
+                planting_plan_id=planting_plan_id,
+                task_category=TASK_CATEGORY_PLANT_PROTECTION,
+                task_subtype=TASK_SUBTYPE_SOIL_SEALING_WEED_CONTROL,
+                status=TASK_INTENT_STATUS_PENDING,
+                trigger_type=event_record.event_type,
+                trigger_summary=trigger_summary,
+                rule_result=rule_result,
+                suggested_action="建议执行土壤封闭除草",
+                source_event_id=event_record.id,
+                idempotency_key=idempotency_key,
+                created_by_type="system",
+                created_by_id="PlanCalendarRefreshHandler",
+            )
+            self.task_intent_repository.add(task_intent)
+            self.task_intent_repository.flush()
+            self._record_soil_followup_event(EVENT_TYPE_TASK_INTENT_CREATED, task_intent, event_record)
+        else:
+            task_intent = existing_task_intent
+            task_intent.trigger_type = event_record.event_type
+            task_intent.trigger_summary = trigger_summary
+            task_intent.rule_result = rule_result
+            task_intent.suggested_action = "建议执行土壤封闭除草"
+            task_intent.source_event_id = event_record.id
+            task_intent.idempotency_key = idempotency_key
 
-    def _record_calendar_refresh_failure(self, planting_plan_id: int, exc: Exception) -> EventRecord:
+        existing_review_request = next(
+            (
+                item
+                for item in self.review_request_repository.list_current_by_plan(planting_plan_id)
+                if item.source_entity_type in {"task_intent", "cf_task_intent"}
+                and item.source_entity_id == task_intent.id
+            ),
+            None,
+        )
+        review_idempotency_key = f"review-request:task-intent:{task_intent.id}:soil_treatment_recommendation"
+        if existing_review_request is None:
+            review_request = ReviewRequest(
+                planting_plan_id=planting_plan_id,
+                review_type="soil_treatment_recommendation",
+                status=REVIEW_REQUEST_STATUS_OPEN,
+                source_entity_type="task_intent",
+                source_entity_id=task_intent.id,
+                title="土壤封闭建议待审核",
+                description="计划初始化后生成了土壤封闭建议，需审核后再生成正式任务。",
+                decision_payload={
+                    "contextRefs": {
+                        "taskIntentId": task_intent.id,
+                        "parentTaskId": None,
+                        "sourceExecutionId": None,
+                        "sourceExecutionRecordId": None,
+                    },
+                },
+                idempotency_key=review_idempotency_key,
+                created_by_type="system",
+                created_by_id="PlanCalendarRefreshHandler",
+            )
+            self.review_request_repository.add(review_request)
+            self.review_request_repository.flush()
+            self._record_soil_followup_event(EVENT_TYPE_REVIEW_REQUEST_CREATED, review_request, event_record)
+        else:
+            review_request = existing_review_request
+            review_request.review_type = "soil_treatment_recommendation"
+            review_request.status = REVIEW_REQUEST_STATUS_OPEN
+            review_request.source_entity_type = "task_intent"
+            review_request.source_entity_id = task_intent.id
+            review_request.title = "土壤封闭建议待审核"
+            review_request.description = "计划初始化后生成了土壤封闭建议，需审核后再生成正式任务。"
+            review_request.decision = None
+            review_request.resolved_by = None
+            review_request.resolved_at = None
+            review_request.decision_payload = {
+                "contextRefs": {
+                    "taskIntentId": task_intent.id,
+                    "parentTaskId": None,
+                    "sourceExecutionId": None,
+                    "sourceExecutionRecordId": None,
+                },
+            }
+            review_request.idempotency_key = review_idempotency_key
+
+        self._close_stale_soil_reviews(planting_plan_id, task_intent.id, review_request.id)
+        return task_intent, review_request
+
+    def _close_stale_soil_reviews(
+        self,
+        planting_plan_id: int,
+        active_task_intent_id: int,
+        active_review_request_id: int,
+    ) -> None:
+        for item in self.task_intent_repository.list_current_by_plan(planting_plan_id):
+            if item.id == active_task_intent_id or item.task_subtype != TASK_SUBTYPE_SOIL_SEALING_WEED_CONTROL:
+                continue
+            item.status = TASK_INTENT_STATUS_REJECTED
+            item.no_action_reason = "Superseded by a newer soil treatment recommendation."
+        for item in self.review_request_repository.list_current_by_plan(planting_plan_id):
+            if item.id == active_review_request_id:
+                continue
+            if item.review_type != "soil_treatment_recommendation":
+                continue
+            item.status = "cancelled"
+            item.decision = None
+
+    def _record_soil_followup_event(
+        self,
+        event_type: str,
+        entity: TaskIntent | ReviewRequest,
+        event_record: EventRecord,
+    ) -> None:
+        self.event_record_repository.add(
+            EventRecord(
+                planting_plan_id=event_record.planting_plan_id,
+                event_type=event_type,
+                event_category="plan",
+                event_source="orchestrator",
+                source_system="cropflow",
+                source_record_id=str(entity.id),
+                payload={
+                    "branchType": "soil_treatment",
+                    "entityType": entity.__tablename__,
+                    "entityId": entity.id,
+                    "sourceEventId": event_record.id,
+                },
+                occurred_at=_utcnow(),
+                processing_status=EVENT_PROCESSING_STATUS_PROCESSED,
+                processed_at=_utcnow(),
+                idempotency_key=f"{event_type}:{entity.__tablename__}:{entity.id}",
+                created_by_type="system",
+                created_by_id="PlanCalendarRefreshHandler",
+            ),
+        )
+
+    def _record_calendar_refresh_failure(
+        self,
+        planting_plan_id: int,
+        task_subtype: str,
+        exc: Exception,
+    ) -> EventRecord:
         now = _utcnow()
         event_record = EventRecord(
             planting_plan_id=planting_plan_id,
@@ -138,13 +355,15 @@ class PlanCalendarRefreshHandler:
             source_system="cropflow",
             payload={
                 "jobKey": SURVEY_DATE_RECOMMENDATION_JOB,
-                "calendarItemSubtype": TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
+                "calendarItemSubtype": task_subtype,
                 "error": str(exc),
             },
             occurred_at=now,
             processing_status=EVENT_PROCESSING_STATUS_FAILED,
             processed_at=now,
-            idempotency_key=f"{SURVEY_DATE_RECOMMENDATION_JOB}:{planting_plan_id}:pre-treatment:failed:{uuid4()}",
+            idempotency_key=(
+                f"{SURVEY_DATE_RECOMMENDATION_JOB}:{planting_plan_id}:{task_subtype}:failed:{uuid4()}"
+            ),
             error_message=str(exc),
             created_by_type="system",
             created_by_id=SURVEY_DATE_RECOMMENDATION_JOB,
@@ -933,6 +1152,8 @@ def build_plan_orchestrator(
     plan_refresh_handler = PlanCalendarRefreshHandler(
         survey_date_recommendation_service=survey_date_recommendation_service,
         event_record_repository=event_record_repository,
+        task_intent_repository=task_intent_repository,
+        review_request_repository=review_request_repository,
     )
     return PlanOrchestrator(
         handlers={

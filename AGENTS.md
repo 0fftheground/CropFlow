@@ -8,11 +8,12 @@
 
 ```text
 1. AGENTS.md
-2. project-context/entrypoints.md
-3. project-context/development-plan.md
-4. project-context/current-memory.md
-5. 当前 phase 对应文档
-6. 与当前任务直接相关的 docs/ 或代码文件
+2. docs/ai/README.md
+3. project-context/entrypoints.md
+4. project-context/development-plan.md
+5. project-context/current-memory.md
+6. 当前 phase 对应文档
+7. 与当前任务直接相关的 docs/ 或代码文件
 ```
 
 原则：
@@ -22,6 +23,7 @@
 2. current-memory 只记录当前 phase 的压缩状态，不重复维护完整 backlog。
 3. 已完成且对后续无影响的历史讨论，不继续保留在 current-memory。
 4. current-memory 只写结论、现状、阻塞和下一步，不写长推理过程。
+5. docs/ai/README.md 是 Codex 和 Claude Code 的共享入口，只做索引和通用规则，不复制完整项目事实。
 ```
 
 推荐优先使用以下 skill：
@@ -152,6 +154,7 @@ ExecutionModule
 开发前优先阅读：
 
 ```text
+docs/ai/README.md
 project-context/entrypoints.md
 project-context/development-plan.md
 project-context/current-memory.md

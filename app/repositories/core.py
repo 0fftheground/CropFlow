@@ -124,6 +124,10 @@ class EventRecordRepository(Repository):
     def get(self, event_record_id: int) -> EventRecord | None:
         return self.session.get(EventRecord, event_record_id)
 
+    def get_by_idempotency_key(self, idempotency_key: str) -> EventRecord | None:
+        stmt = select(EventRecord).where(EventRecord.idempotency_key == idempotency_key)
+        return self.session.scalar(stmt)
+
     def list_by_plan(self, planting_plan_id: int) -> list[EventRecord]:
         stmt = (
             select(EventRecord)

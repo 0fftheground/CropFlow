@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
-from urllib import request
+from urllib import error, request
 
 from app.core.constants import (
     CALENDAR_STATUS_ACTIVE,
@@ -45,6 +45,15 @@ class EventDispatcher(Protocol):
 
 
 class WeedDiagnosisClient(Protocol):
+    def diagnose_soil_treatment(
+        self,
+        *,
+        province: str,
+        cultivation_system: str,
+        cultivation_pattern: str,
+        cultivation_date: date,
+    ) -> "SoilTreatmentDiagnosisResult": ...
+
     def recommend_pre_treatment_survey_date(
         self,
         *,
@@ -139,6 +148,14 @@ class AdditionalTreatmentDiagnosisResult:
 
 
 @dataclass(slots=True)
+class SoilTreatmentDiagnosisResult:
+    recommended_date: tuple[date, date]
+    farming_operation: str
+    control_plan: dict[str, Any]
+    raw_response: dict[str, Any]
+
+
+@dataclass(slots=True)
 class PlantProtectionPlanContext:
     rice_type: str
     cultivation_system: str
@@ -150,6 +167,34 @@ class HttpWeedDiagnosisClient:
     def __init__(self, base_url: str, timeout_seconds: float = 10.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+
+    def diagnose_soil_treatment(
+        self,
+        *,
+        province: str,
+        cultivation_system: str,
+        cultivation_pattern: str,
+        cultivation_date: date,
+    ) -> SoilTreatmentDiagnosisResult:
+        response = self._post_json(
+            "/api/soil_treatment_diagnosis",
+            {
+                "province": province,
+                "cultivation_system": cultivation_system,
+                "cultivation_pattern": cultivation_pattern,
+                "cultivation_date": cultivation_date.strftime("%Y%m%d"),
+            },
+        )
+        data = response["data"]
+        recommended_date = _parse_api_date_range(data["soil_treatment_recommended_date"])
+        if recommended_date is None:
+            raise ValueError("soil_treatment_diagnosis did not return soil_treatment_recommended_date.")
+        return SoilTreatmentDiagnosisResult(
+            recommended_date=recommended_date,
+            farming_operation=str(data.get("farming_operation") or "苗后封闭"),
+            control_plan=dict(data.get("control_plan") or {}),
+            raw_response=response,
+        )
 
     def recommend_pre_treatment_survey_date(
         self,
@@ -294,11 +339,58 @@ class HttpWeedDiagnosisClient:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with request.urlopen(http_request, timeout=self.timeout_seconds) as response:
-            return json.loads(response.read().decode("utf-8"))
+        try:
+            with request.urlopen(http_request, timeout=self.timeout_seconds) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except error.HTTPError as exc:
+            raw_response = exc.read().decode("utf-8", errors="replace")
+            message = f"Weed diagnosis API {path} returned HTTP {exc.code}"
+            if raw_response:
+                message = f"{message}: {raw_response}"
+            raise ValueError(message) from exc
+        except error.URLError as exc:
+            raise RuntimeError(f"Weed diagnosis API {path} is unreachable: {exc.reason}") from exc
 
 
 class MockWeedDiagnosisClient:
+    def diagnose_soil_treatment(
+        self,
+        *,
+        province: str,
+        cultivation_system: str,
+        cultivation_pattern: str,
+        cultivation_date: date,
+    ) -> SoilTreatmentDiagnosisResult:
+        recommended_start = cultivation_date + timedelta(days=8)
+        recommended_end = cultivation_date + timedelta(days=11)
+        control_plan = {
+            "prescriptions": [
+                {
+                    "pesticide": "60%苄·丁",
+                    "formulation": "OD",
+                    "manufacturer": "示例厂商",
+                    "recommended_dosage": "100 g/亩",
+                },
+            ],
+            "water_volume": "3 L/亩",
+        }
+        return SoilTreatmentDiagnosisResult(
+            recommended_date=(recommended_start, recommended_end),
+            farming_operation="苗后封闭",
+            control_plan=control_plan,
+            raw_response={
+                "mock": True,
+                "data": {
+                    "soil_treatment_recommended_date": [
+                        recommended_start.strftime("%Y%m%d"),
+                        recommended_end.strftime("%Y%m%d"),
+                    ],
+                    "farming_operation": "苗后封闭",
+                    "control_plan": control_plan,
+                },
+            },
+        )
+
     def recommend_pre_treatment_survey_date(
         self,
         *,
@@ -573,7 +665,7 @@ class SurveyDateRecommendationService:
     ) -> CalendarItem:
         planting_plan = self._get_plan(planting_plan_id)
         context = self.context_resolver.resolve(planting_plan)
-        start_date = context.cultivation_date
+        start_date = self._resolve_pre_treatment_weather_start_date(context)
         end_date = start_date + timedelta(days=45)
         weather_data = self.weather_provider.get_daily_weather(planting_plan, start_date, end_date)
         recommendation = self.diagnosis_client.recommend_pre_treatment_survey_date(
@@ -588,7 +680,7 @@ class SurveyDateRecommendationService:
             task_subtype=TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
             title="茎叶除草药前调查",
             description="由 weed_survey_date_diagnosis 推荐的茎叶除草药前调查日期。",
-            suggested_date=recommendation.recommendation_date,
+            suggested_start_date=recommendation.recommendation_date,
             generation_condition={
                 "algorithmCode": "weed_survey_date_diagnosis",
                 "jobKey": SURVEY_DATE_RECOMMENDATION_JOB,
@@ -610,6 +702,27 @@ class SurveyDateRecommendationService:
         )
         return calendar_item
 
+    def diagnose_soil_treatment(
+        self,
+        planting_plan_id: int,
+    ) -> SoilTreatmentDiagnosisResult:
+        planting_plan = self._get_plan(planting_plan_id)
+        context = self.context_resolver.resolve(planting_plan)
+        metadata_payload = planting_plan.metadata_payload or {}
+        province = str(metadata_payload.get("province") or "湖南省")
+        return self.diagnosis_client.diagnose_soil_treatment(
+            province=province,
+            cultivation_system=context.cultivation_system,
+            cultivation_pattern=context.cultivation_pattern,
+            cultivation_date=context.cultivation_date,
+        )
+
+    def _resolve_pre_treatment_weather_start_date(self, context: PlantProtectionPlanContext) -> date:
+        if context.cultivation_pattern == "直播":
+            # The live algorithm expects direct-seeded plans to include the day before sowing.
+            return context.cultivation_date - timedelta(days=1)
+        return context.cultivation_date
+
     def recommend_post_treatment_surveys(
         self,
         planting_plan_id: int,
@@ -626,7 +739,7 @@ class SurveyDateRecommendationService:
             task_subtype=TASK_SUBTYPE_RICE_SAFETY_SURVEY,
             title="茎叶除草安全性调查",
             description="由 after_treatment_survey_date_diagnosis 推荐的药后安全性调查日期。",
-            suggested_date=recommendation.rice_safety_survey_date,
+            suggested_start_date=recommendation.rice_safety_survey_date,
             generation_condition={
                 "algorithmCode": "after_treatment_survey_date_diagnosis",
                 "jobKey": SURVEY_DATE_RECOMMENDATION_JOB,
@@ -643,7 +756,7 @@ class SurveyDateRecommendationService:
             task_subtype=TASK_SUBTYPE_CONTROL_EFFECT_SURVEY,
             title="茎叶除草防效兼安全性调查",
             description="由 after_treatment_survey_date_diagnosis 推荐的药后防效兼安全性调查日期。",
-            suggested_date=recommendation.control_effect_survey_date,
+            suggested_start_date=recommendation.control_effect_survey_date,
             generation_condition={
                 "algorithmCode": "after_treatment_survey_date_diagnosis",
                 "jobKey": SURVEY_DATE_RECOMMENDATION_JOB,
@@ -691,7 +804,7 @@ class SurveyDateRecommendationService:
             task_subtype=TASK_SUBTYPE_STEM_LEAF_WEED_RECONTROL_PRE_SURVEY,
             title="补防回流药前调查",
             description="由运行期补防分支回流的药前调查日期。",
-            suggested_date=suggested_date,
+            suggested_start_date=suggested_date,
             generation_condition={
                 "triggerType": "additional_treatment_diagnosis",
                 "jobKey": SURVEY_DATE_RECOMMENDATION_JOB,
@@ -717,7 +830,7 @@ class SurveyDateRecommendationService:
             task_subtype=TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
             title="茎叶除草药前复查",
             description="由 weed_treatment_diagnosis 返回的下一次药前调查日期。",
-            suggested_date=suggested_date,
+            suggested_start_date=suggested_date,
             generation_condition={
                 "triggerType": "weed_treatment_diagnosis",
                 "jobKey": SURVEY_DATE_RECOMMENDATION_JOB,
@@ -743,7 +856,7 @@ class SurveyDateRecommendationService:
             task_subtype=TASK_SUBTYPE_SERVICE_EFFECT_EVALUATION,
             title="杂草防治服务效果评估",
             description="由补防诊断分支返回的服务效果评估日期。",
-            suggested_date=suggested_date,
+            suggested_start_date=suggested_date,
             generation_condition={
                 "triggerType": "additional_treatment_diagnosis",
                 "jobKey": SURVEY_DATE_RECOMMENDATION_JOB,
@@ -767,13 +880,15 @@ class SurveyDateRecommendationService:
         task_subtype: str,
         title: str,
         description: str,
-        suggested_date: date,
+        suggested_start_date: date,
+        suggested_end_date: date | None = None,
         generation_condition: dict[str, Any],
         idempotency_scope: str,
         parent_task_id: int | None = None,
         source_execution_id: int | None = None,
         source_execution_record_id: int | None = None,
     ) -> CalendarItem:
+        suggested_end_date = suggested_end_date or suggested_start_date
         existing_items = self.calendar_item_repository.list_active_by_plan_and_subtype(
             planting_plan.id,
             task_subtype,
@@ -782,7 +897,10 @@ class SurveyDateRecommendationService:
         )
         matched_item = None
         for item in existing_items:
-            if item.suggested_start_date == suggested_date and item.suggested_end_date == suggested_date:
+            if (
+                item.suggested_start_date == suggested_start_date
+                and item.suggested_end_date == suggested_end_date
+            ):
                 matched_item = item
             else:
                 item.status = CALENDAR_STATUS_INVALIDATED
@@ -796,8 +914,8 @@ class SurveyDateRecommendationService:
                 task_subtype=task_subtype,
                 title=title,
                 description=description,
-                suggested_start_date=suggested_date,
-                suggested_end_date=suggested_date,
+                suggested_start_date=suggested_start_date,
+                suggested_end_date=suggested_end_date,
                 status=CALENDAR_STATUS_ACTIVE,
                 generation_condition=generation_condition,
                 idempotency_key=f"calendar-item:{planting_plan.id}:{idempotency_scope}",
@@ -811,6 +929,8 @@ class SurveyDateRecommendationService:
         else:
             matched_item.title = title
             matched_item.description = description
+            matched_item.suggested_start_date = suggested_start_date
+            matched_item.suggested_end_date = suggested_end_date
             matched_item.generation_condition = generation_condition
             matched_item.status = CALENDAR_STATUS_ACTIVE
             matched_item.parent_task_id = parent_task_id
@@ -828,6 +948,17 @@ class SurveyDateRecommendationService:
         payload: dict[str, Any],
         idempotency_key: str,
     ) -> EventRecord:
+        existing_event = None
+        if hasattr(self.event_record_repository, "get_by_idempotency_key"):
+            existing_event = self.event_record_repository.get_by_idempotency_key(idempotency_key)
+        if existing_event is not None:
+            existing_event.payload = payload
+            existing_event.event_type = event_type
+            existing_event.processing_status = "processed"
+            existing_event.processed_at = _utcnow()
+            existing_event.error_message = None
+            return existing_event
+
         event_record = EventRecord(
             planting_plan_id=planting_plan_id,
             event_type=event_type,
@@ -889,6 +1020,12 @@ class TaskGenerationService:
         payload: dict[str, Any],
         idempotency_key: str,
     ) -> EventRecord:
+        existing_event = None
+        if hasattr(self.event_record_repository, "get_by_idempotency_key"):
+            existing_event = self.event_record_repository.get_by_idempotency_key(idempotency_key)
+        if existing_event is not None:
+            return existing_event
+
         event_record = EventRecord(
             planting_plan_id=planting_plan_id,
             event_type=event_type,

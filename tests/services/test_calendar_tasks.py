@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
+from io import BytesIO
 from typing import Any
+from urllib.error import HTTPError, URLError
+
+import pytest
 
 from app.core.constants import (
     CALENDAR_STATUS_GENERATED,
@@ -15,9 +19,11 @@ from app.core.constants import (
 from app.models import CalendarItem, CodeDict, EventRecord, FarmingTask, PlantingPlan, RiceVariety
 from app.orchestrator.core import PlanOrchestrator, TaskDueCheckTriggeredHandler
 from app.services.calendar_tasks import (
+    HttpWeedDiagnosisClient,
     MockWeatherProvider,
     PostTreatmentSurveyRecommendation,
     PreTreatmentSurveyRecommendation,
+    SoilTreatmentDiagnosisResult,
     SurveyDateRecommendationService,
     TaskGenerationService,
 )
@@ -120,17 +126,47 @@ class FakeFarmingTaskRepository:
                 self.next_id += 1
 
 
+@dataclass
 class FakeWeatherProvider:
+    requests: list[tuple[date, date]] = field(default_factory=list)
+
     def get_daily_weather(
         self,
         planting_plan: PlantingPlan,
         start_date: date,
         end_date: date,
     ) -> list[dict[str, Any]]:
+        self.requests.append((start_date, end_date))
         return [{"DATE": start_date.strftime("%Y%m%d"), "TEMP": 26}]
 
 
 class FakeDiagnosisClient:
+    def diagnose_soil_treatment(
+        self,
+        *,
+        province: str,
+        cultivation_system: str,
+        cultivation_pattern: str,
+        cultivation_date: date,
+    ) -> SoilTreatmentDiagnosisResult:
+        assert province == "湖南省"
+        assert cultivation_system == "早稻"
+        assert cultivation_pattern == "直播"
+        assert cultivation_date == date(2026, 4, 10)
+        return SoilTreatmentDiagnosisResult(
+            recommended_date=(date(2026, 4, 12), date(2026, 4, 15)),
+            farming_operation="苗后封闭",
+            control_plan={"water_volume": "3 L/亩"},
+            raw_response={
+                "code": 200,
+                "data": {
+                    "soil_treatment_recommended_date": ["20260412", "20260415"],
+                    "farming_operation": "苗后封闭",
+                    "control_plan": {"water_volume": "3 L/亩"},
+                },
+            },
+        )
+
     def recommend_pre_treatment_survey_date(
         self,
         *,
@@ -199,13 +235,14 @@ def make_code_dicts() -> dict[int, CodeDict]:
 def test_recommend_pre_treatment_survey_creates_calendar_item_and_event() -> None:
     calendar_repo = FakeCalendarItemRepository()
     event_repo = FakeEventRecordRepository()
+    weather_provider = FakeWeatherProvider()
     service = SurveyDateRecommendationService(
         planting_plan_repository=FakePlantingPlanRepository(make_plan()),
         rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
         code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
         calendar_item_repository=calendar_repo,
         event_record_repository=event_repo,
-        weather_provider=FakeWeatherProvider(),
+        weather_provider=weather_provider,
         diagnosis_client=FakeDiagnosisClient(),
     )
 
@@ -215,7 +252,7 @@ def test_recommend_pre_treatment_survey_creates_calendar_item_and_event() -> Non
     assert item.suggested_start_date == date(2026, 4, 18)
     assert item.title == "茎叶除草药前调查"
     assert event_repo.items[-1].event_type == EVENT_TYPE_CALENDAR_ITEM_UPDATED
-
+    assert weather_provider.requests == [(date(2026, 4, 9), date(2026, 5, 24))]
 
 def test_recommend_post_treatment_surveys_creates_two_traceable_calendar_items() -> None:
     calendar_repo = FakeCalendarItemRepository()
@@ -296,3 +333,39 @@ def test_mock_weather_provider_returns_closed_interval_weather_data() -> None:
 
     assert [item["DATE"] for item in weather_data] == ["20260410", "20260411", "20260412"]
     assert {item["TEMP"] for item in weather_data} == {26}
+
+
+def test_http_weed_diagnosis_client_surfaces_http_error_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = HttpWeedDiagnosisClient("http://diagnosis.local")
+
+    def fake_urlopen(*args, **kwargs):
+        raise HTTPError(
+            url="http://diagnosis.local/api/injury_mitigation_diagnosis",
+            code=400,
+            msg="Bad Request",
+            hdrs=None,
+            fp=BytesIO(b'{"code":400,"msg":"bad payload"}'),
+        )
+
+    monkeypatch.setattr("app.services.calendar_tasks.request.urlopen", fake_urlopen)
+
+    with pytest.raises(ValueError, match='HTTP 400: \\{"code":400,"msg":"bad payload"\\}'):
+        client.diagnose_injury_mitigation(
+            survey_date=date(2026, 4, 22),
+            rice_injury_level="无",
+        )
+
+
+def test_http_weed_diagnosis_client_surfaces_connectivity_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = HttpWeedDiagnosisClient("http://diagnosis.local")
+
+    def fake_urlopen(*args, **kwargs):
+        raise URLError("connection refused")
+
+    monkeypatch.setattr("app.services.calendar_tasks.request.urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="connection refused"):
+        client.diagnose_injury_mitigation(
+            survey_date=date(2026, 4, 22),
+            rice_injury_level="无",
+        )

@@ -21,6 +21,7 @@ EVENT_PROCESSING_STATUS_FAILED = "failed"
 
 TASK_CATEGORY_PLANT_PROTECTION = "plant_protection"
 
+TASK_SUBTYPE_SOIL_SEALING_WEED_CONTROL = "plant_protection.soil_sealing_weed_control"
 TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY = "plant_protection.stem_leaf_weed_pre_survey"
 TASK_SUBTYPE_STEM_LEAF_WEED_RECONTROL_PRE_SURVEY = "plant_protection.stem_leaf_weed_recontrol_pre_survey"
 TASK_SUBTYPE_STEM_LEAF_WEED_CONTROL = "plant_protection.stem_leaf_weed_control"
