@@ -98,6 +98,7 @@
 | WF_GROWTH_MONITOR | field_inspection | growth_monitoring | GENERAL_GROWTH_MONITORING | 长势监测 | ndviGrowthMonitoringAlgorithm / abnormalCauseRecognitionAlgorithm | 不包含稳肥变量推荐和产量预测 |
 | WF_PANICLE_FERTILIZER_EFFECT_CHECK | fertilization | panicle_fertilizer_effect_check | GENERAL_GROWTH_MONITORING | 穗肥施肥效果抽查 | growthMonitoringAlgorithm | 穗肥后 7-10 天，不适用于所有施肥 |
 | WF_PLANT_PROTECTION_SERVICE_EVALUATION | plant_protection | service_effect_evaluation | none | 植保服务效果评估收集 | none | 与收割前晒田分开 |
+| WF_PLANT_PROTECTION_SERVICE_EFFECT_SURVEY | plant_protection | service_effect_survey | GENERAL_PLANT_PROTECTION_SURVEY | 植保服务效果现场确认 | none | 服务评估不满意后直接生成正式 FarmingTask |
 | WF_PRE_HARVEST_DRAIN | harvest | pre_harvest_drain | none | 收割前晒田 | none | 收割前 12 天 |
 | WF_HARVEST | harvest | harvest | none | 收割 | none | 不细分人工/机械 |
 | WF_LODGING_DETECTION | field_inspection | lodging_detection | none | 倒伏识别 | lodgingDetectionAlgorithm | 触发任务状态更新 |

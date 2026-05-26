@@ -59,10 +59,26 @@ class CodeDictRepository(Repository):
         stmt = select(CodeDict).where(CodeDict.code == code)
         return self.session.scalar(stmt)
 
+    def list_active_by_category(self, category: str) -> list[CodeDict]:
+        stmt = (
+            select(CodeDict)
+            .where(CodeDict.category == category)
+            .where(CodeDict.is_active.is_(True))
+            .order_by(CodeDict.code.asc())
+        )
+        return list(self.session.scalars(stmt))
+
 
 class RiceVarietyRepository(Repository):
     def get(self, rice_variety_id: int) -> RiceVariety | None:
         return self.session.get(RiceVariety, rice_variety_id)
+
+    def search_by_name(self, query: str | None, *, limit: int) -> list[RiceVariety]:
+        stmt = select(RiceVariety)
+        if query and query.strip():
+            stmt = stmt.where(RiceVariety.name.ilike(f"%{query.strip()}%"))
+        stmt = stmt.order_by(RiceVariety.name.asc()).limit(limit)
+        return list(self.session.scalars(stmt))
 
 
 class FieldRepository(Repository):
@@ -132,6 +148,14 @@ class EventRecordRepository(Repository):
         stmt = (
             select(EventRecord)
             .where(EventRecord.planting_plan_id == planting_plan_id)
+            .order_by(EventRecord.occurred_at.desc(), EventRecord.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def list_by_source_record_id(self, source_record_id: str) -> list[EventRecord]:
+        stmt = (
+            select(EventRecord)
+            .where(EventRecord.source_record_id == source_record_id)
             .order_by(EventRecord.occurred_at.desc(), EventRecord.id.desc())
         )
         return list(self.session.scalars(stmt))
@@ -271,6 +295,19 @@ class ReviewRequestRepository(Repository):
         )
         return list(self.session.scalars(stmt))
 
+    def list_by_source_entity(
+        self,
+        source_entity_type: str,
+        source_entity_id: int,
+    ) -> list[ReviewRequest]:
+        stmt = (
+            select(ReviewRequest)
+            .where(ReviewRequest.source_entity_type == source_entity_type)
+            .where(ReviewRequest.source_entity_id == source_entity_id)
+            .order_by(ReviewRequest.created_at.desc(), ReviewRequest.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
     def get_source_entity(self, review_request_or_id: ReviewRequest | int) -> Any | None:
         review_request = (
             review_request_or_id
@@ -327,6 +364,14 @@ class OperationPlanRepository(Repository):
         )
         return list(self.session.scalars(stmt))
 
+    def list_by_task(self, farming_task_id: int) -> list[OperationPlan]:
+        stmt = (
+            select(OperationPlan)
+            .where(OperationPlan.farming_task_id == farming_task_id)
+            .order_by(OperationPlan.version.desc(), OperationPlan.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
     def get_active_by_task(self, farming_task_id: int) -> OperationPlan | None:
         stmt = select(OperationPlan).where(
             OperationPlan.farming_task_id == farming_task_id,
@@ -352,6 +397,15 @@ class ExecutionRecordRepository(Repository):
         stmt = (
             select(ExecutionRecord)
             .where(ExecutionRecord.execution_id == execution_id)
+            .order_by(ExecutionRecord.record_time.desc(), ExecutionRecord.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def list_by_task(self, farming_task_id: int) -> list[ExecutionRecord]:
+        stmt: Select[tuple[ExecutionRecord]] = (
+            select(ExecutionRecord)
+            .join(Execution, Execution.id == ExecutionRecord.execution_id)
+            .where(Execution.farming_task_id == farming_task_id)
             .order_by(ExecutionRecord.record_time.desc(), ExecutionRecord.id.desc())
         )
         return list(self.session.scalars(stmt))

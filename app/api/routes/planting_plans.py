@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_planting_plan_query_service, get_planting_plan_service
 from app.db.session import get_db
-from app.models import CalendarItem, FarmingTask, ReviewRequest, TaskIntent
+from app.models import CalendarItem, EventRecord, FarmingTask, ReviewRequest, TaskIntent
 from app.services import (
     PlantingPlanCreateInput,
     PlantingPlanDetails,
@@ -23,7 +23,6 @@ router = APIRouter(prefix="/planting-plans")
 
 
 class PlantingPlanCreateRequest(BaseModel):
-    plan_code: str
     plan_name: str
     farm_id: int
     field_ids: list[int]
@@ -176,6 +175,24 @@ class ReviewRequestResponse(BaseModel):
     updated_at: datetime | None
 
 
+class EventRecordResponse(BaseModel):
+    id: int
+    planting_plan_id: int | None
+    event_type: str
+    event_category: str
+    event_source: str
+    source_system: str | None
+    source_record_id: str | None
+    payload: dict[str, Any]
+    occurred_at: datetime
+    received_at: datetime | None
+    processed_at: datetime | None
+    processing_status: str
+    error_message: str | None
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
 @router.post("", response_model=PlantingPlanResponse, status_code=status.HTTP_201_CREATED)
 def create_planting_plan(
     payload: PlantingPlanCreateRequest,
@@ -185,7 +202,6 @@ def create_planting_plan(
     try:
         result = service.create(
             PlantingPlanCreateInput(
-                plan_code=payload.plan_code,
                 plan_name=payload.plan_name,
                 farm_id=payload.farm_id,
                 field_ids=payload.field_ids,
@@ -259,6 +275,18 @@ def list_planting_plan_review_requests(
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return [_serialize_review_request(item) for item in result]
+
+
+@router.get("/{planting_plan_id}/event-records", response_model=list[EventRecordResponse])
+def list_planting_plan_event_records(
+    planting_plan_id: int,
+    service: PlantingPlanQueryService = Depends(get_planting_plan_query_service),
+) -> list[EventRecordResponse]:
+    try:
+        result = service.list_event_records(planting_plan_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return [_serialize_event_record(item) for item in result]
 
 
 @router.get("/{planting_plan_id}", response_model=PlantingPlanResponse)
@@ -445,4 +473,24 @@ def _serialize_review_request(review_request: ReviewRequest) -> ReviewRequestRes
         resolved_at=review_request.resolved_at,
         created_at=review_request.created_at,
         updated_at=review_request.updated_at,
+    )
+
+
+def _serialize_event_record(event_record: EventRecord) -> EventRecordResponse:
+    return EventRecordResponse(
+        id=event_record.id,
+        planting_plan_id=event_record.planting_plan_id,
+        event_type=event_record.event_type,
+        event_category=event_record.event_category,
+        event_source=event_record.event_source,
+        source_system=event_record.source_system,
+        source_record_id=event_record.source_record_id,
+        payload=event_record.payload,
+        occurred_at=event_record.occurred_at,
+        received_at=event_record.received_at,
+        processed_at=event_record.processed_at,
+        processing_status=event_record.processing_status,
+        error_message=event_record.error_message,
+        created_at=event_record.created_at,
+        updated_at=event_record.updated_at,
     )

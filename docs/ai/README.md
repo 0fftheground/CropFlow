@@ -48,7 +48,7 @@ docs/workflow/flows/
 docs/decisions/
 docs/planning/development-roadmap.md
 docs/planning/team-work-division.md
-docs/planning/agent-development-guidelines.md
+docs/planning/guides/agent-development-guidelines.md
 ```
 
 ## 工具入口职责

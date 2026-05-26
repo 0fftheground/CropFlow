@@ -168,7 +168,7 @@ docs/workflow/task-workflow-matrix.md
 docs/workflow/background-job-matrix.md
 docs/planning/development-roadmap.md
 docs/planning/team-work-division.md
-docs/planning/agent-development-guidelines.md
+docs/planning/guides/agent-development-guidelines.md
 docs/architecture/modules.md
 docs/architecture/events.md
 docs/architecture/orchestration-design.md

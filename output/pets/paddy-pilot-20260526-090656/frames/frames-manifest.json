@@ -1,0 +1,50 @@
+{
+  "pet_id": "paddy-pilot",
+  "rows": [
+    {
+      "state": "idle",
+      "frames": 6,
+      "method": "components"
+    },
+    {
+      "state": "running-right",
+      "frames": 8,
+      "method": "components"
+    },
+    {
+      "state": "running-left",
+      "frames": 8,
+      "method": "components"
+    },
+    {
+      "state": "waving",
+      "frames": 4,
+      "method": "components"
+    },
+    {
+      "state": "jumping",
+      "frames": 5,
+      "method": "components"
+    },
+    {
+      "state": "failed",
+      "frames": 8,
+      "method": "components"
+    },
+    {
+      "state": "waiting",
+      "frames": 6,
+      "method": "components"
+    },
+    {
+      "state": "running",
+      "frames": 6,
+      "method": "components"
+    },
+    {
+      "state": "review",
+      "frames": 6,
+      "method": "components"
+    }
+  ]
+}

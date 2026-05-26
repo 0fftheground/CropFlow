@@ -24,12 +24,16 @@ from app.repositories import (
     TaskIntentRepository,
 )
 from app.services import (
+    CodeDictQueryService,
+    FarmingTaskQueryService,
     HttpWeedDiagnosisClient,
     MockWeatherProvider,
     MockWeedDiagnosisClient,
     PlantingPlanQueryService,
     PlantingPlanService,
     PlantProtectionPlanContextResolver,
+    RiceVarietyQueryService,
+    ReviewRequestQueryService,
     ReviewRequestService,
     SurveyDateRecommendationService,
     SurveyResultService,
@@ -130,6 +134,39 @@ def get_planting_plan_query_service(db: Session = Depends(get_db)) -> Generator[
         farming_task_repository=FarmingTaskRepository(db),
         task_intent_repository=TaskIntentRepository(db),
         review_request_repository=ReviewRequestRepository(db),
+        event_record_repository=EventRecordRepository(db),
+    )
+
+
+def get_code_dict_query_service(db: Session = Depends(get_db)) -> Generator[CodeDictQueryService, None, None]:
+    yield CodeDictQueryService(code_dict_repository=CodeDictRepository(db))
+
+
+def get_rice_variety_query_service(db: Session = Depends(get_db)) -> Generator[RiceVarietyQueryService, None, None]:
+    yield RiceVarietyQueryService(rice_variety_repository=RiceVarietyRepository(db))
+
+
+def get_farming_task_query_service(db: Session = Depends(get_db)) -> Generator[FarmingTaskQueryService, None, None]:
+    yield FarmingTaskQueryService(
+        farming_task_repository=FarmingTaskRepository(db),
+        operation_plan_repository=OperationPlanRepository(db),
+        execution_repository=ExecutionRepository(db),
+        execution_record_repository=ExecutionRecordRepository(db),
+        review_request_repository=ReviewRequestRepository(db),
+        task_intent_repository=TaskIntentRepository(db),
+        calendar_item_repository=CalendarItemRepository(db),
+        event_record_repository=EventRecordRepository(db),
+    )
+
+
+def get_review_request_query_service(db: Session = Depends(get_db)) -> Generator[ReviewRequestQueryService, None, None]:
+    yield ReviewRequestQueryService(
+        review_request_repository=ReviewRequestRepository(db),
+        task_intent_repository=TaskIntentRepository(db),
+        farming_task_repository=FarmingTaskRepository(db),
+        operation_plan_repository=OperationPlanRepository(db),
+        execution_record_repository=ExecutionRecordRepository(db),
+        event_record_repository=EventRecordRepository(db),
     )
 
 

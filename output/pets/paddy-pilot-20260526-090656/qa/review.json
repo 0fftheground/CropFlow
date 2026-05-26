@@ -1,0 +1,962 @@
+{
+  "ok": true,
+  "frames_root": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames",
+  "errors": [],
+  "warnings": [],
+  "rows": [
+    {
+      "state": "idle",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\idle\\00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9464,
+          "bbox": [
+            25,
+            26,
+            167,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\idle\\01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9960,
+          "bbox": [
+            24,
+            29,
+            168,
+            189
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\idle\\02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9960,
+          "bbox": [
+            24,
+            29,
+            168,
+            189
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\idle\\03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9464,
+          "bbox": [
+            25,
+            26,
+            167,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\idle\\04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9951,
+          "bbox": [
+            24,
+            20,
+            168,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\idle\\05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9951,
+          "bbox": [
+            24,
+            20,
+            168,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ]
+    },
+    {
+      "state": "running-right",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-right\\00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9937,
+          "bbox": [
+            19,
+            20,
+            155,
+            188
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-right\\01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9942,
+          "bbox": [
+            21,
+            18,
+            162,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-right\\02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9912,
+          "bbox": [
+            24,
+            17,
+            168,
+            183
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-right\\03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9877,
+          "bbox": [
+            27,
+            21,
+            172,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-right\\04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9862,
+          "bbox": [
+            29,
+            22,
+            173,
+            187
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-right\\05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9905,
+          "bbox": [
+            26,
+            20,
+            170,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 6,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-right\\06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9930,
+          "bbox": [
+            23,
+            19,
+            164,
+            184
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 7,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-right\\07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 10009,
+          "bbox": [
+            21,
+            21,
+            160,
+            187
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ]
+    },
+    {
+      "state": "running-left",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-left\\00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9907,
+          "bbox": [
+            32,
+            23,
+            176,
+            187
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-left\\01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9921,
+          "bbox": [
+            27,
+            20,
+            172,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-left\\02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9977,
+          "bbox": [
+            25,
+            19,
+            168,
+            183
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-left\\03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 10008,
+          "bbox": [
+            23,
+            22,
+            162,
+            187
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-left\\04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9977,
+          "bbox": [
+            24,
+            22,
+            160,
+            188
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-left\\05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 10004,
+          "bbox": [
+            24,
+            20,
+            165,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 6,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-left\\06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9936,
+          "bbox": [
+            26,
+            19,
+            170,
+            184
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 7,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running-left\\07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9892,
+          "bbox": [
+            29,
+            21,
+            174,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ]
+    },
+    {
+      "state": "waving",
+      "expected_frames": 4,
+      "actual_frames": 4,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\waving\\00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 10021,
+          "bbox": [
+            25,
+            25,
+            167,
+            187
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\waving\\01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 10037,
+          "bbox": [
+            25,
+            25,
+            168,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\waving\\02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 10009,
+          "bbox": [
+            25,
+            26,
+            161,
+            187
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\waving\\03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9998,
+          "bbox": [
+            25,
+            26,
+            168,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ]
+    },
+    {
+      "state": "jumping",
+      "expected_frames": 5,
+      "actual_frames": 5,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\jumping\\00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9504,
+          "bbox": [
+            25,
+            25,
+            167,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\jumping\\01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9501,
+          "bbox": [
+            26,
+            16,
+            166,
+            175
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\jumping\\02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9506,
+          "bbox": [
+            29,
+            8,
+            163,
+            167
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\jumping\\03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9531,
+          "bbox": [
+            25,
+            17,
+            167,
+            175
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\jumping\\04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9523,
+          "bbox": [
+            25,
+            28,
+            167,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ]
+    },
+    {
+      "state": "failed",
+      "expected_frames": 8,
+      "actual_frames": 8,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\failed\\00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9844,
+          "bbox": [
+            32,
+            26,
+            159,
+            189
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\failed\\01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9876,
+          "bbox": [
+            31,
+            27,
+            159,
+            190
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\failed\\02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9902,
+          "bbox": [
+            31,
+            28,
+            159,
+            191
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\failed\\03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 10112,
+          "bbox": [
+            30,
+            26,
+            160,
+            189
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\failed\\04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 10112,
+          "bbox": [
+            30,
+            27,
+            160,
+            190
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\failed\\05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 10086,
+          "bbox": [
+            31,
+            28,
+            159,
+            191
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 6,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\failed\\06.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9876,
+          "bbox": [
+            31,
+            26,
+            159,
+            189
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 7,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\failed\\07.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9845,
+          "bbox": [
+            32,
+            27,
+            159,
+            190
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ]
+    },
+    {
+      "state": "waiting",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\waiting\\00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9935,
+          "bbox": [
+            30,
+            26,
+            168,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\waiting\\01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9898,
+          "bbox": [
+            32,
+            26,
+            168,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\waiting\\02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9928,
+          "bbox": [
+            30,
+            25,
+            168,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\waiting\\03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9931,
+          "bbox": [
+            28,
+            22,
+            168,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\waiting\\04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9826,
+          "bbox": [
+            29,
+            25,
+            167,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\waiting\\05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9965,
+          "bbox": [
+            31,
+            25,
+            168,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ]
+    },
+    {
+      "state": "running",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running\\00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9905,
+          "bbox": [
+            30,
+            24,
+            164,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running\\01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9946,
+          "bbox": [
+            27,
+            25,
+            167,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running\\02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9969,
+          "bbox": [
+            26,
+            23,
+            169,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running\\03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9910,
+          "bbox": [
+            29,
+            25,
+            167,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running\\04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9871,
+          "bbox": [
+            31,
+            24,
+            164,
+            185
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\running\\05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9950,
+          "bbox": [
+            27,
+            23,
+            167,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ]
+    },
+    {
+      "state": "review",
+      "expected_frames": 6,
+      "actual_frames": 6,
+      "extraction_method": "components",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "frames": [
+        {
+          "index": 0,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\review\\00.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9864,
+          "bbox": [
+            39,
+            23,
+            162,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 1,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\review\\01.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9829,
+          "bbox": [
+            39,
+            24,
+            162,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 2,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\review\\02.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9857,
+          "bbox": [
+            39,
+            26,
+            162,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 3,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\review\\03.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9858,
+          "bbox": [
+            39,
+            25,
+            162,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 4,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\review\\04.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9851,
+          "bbox": [
+            39,
+            23,
+            162,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        },
+        {
+          "index": 5,
+          "file": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\frames\\review\\05.png",
+          "width": 192,
+          "height": 208,
+          "nontransparent_pixels": 9864,
+          "bbox": [
+            39,
+            23,
+            162,
+            186
+          ],
+          "edge_pixels": 0,
+          "chroma_adjacent_pixels": 0
+        }
+      ]
+    }
+  ]
+}

@@ -2,8 +2,8 @@
 
 > 本文档用于说明 CropFlow MVP 的通用分工原则、统一提交模板和各方向子文档入口。  
 > 系统架构和核心流转见 `docs/overview/team-technical-briefing.md`，阶段推进见 `docs/planning/development-roadmap.md`。  
-> 使用 AI agent 分工开发时，任务模板和验收规则见 `docs/planning/agent-development-guidelines.md`。
-> 当前阶段各方向统一提交“非代码接入包”时，建议使用 `docs/planning/non-code-integration-package-template.md`。
+> 使用 AI agent 分工开发时，任务模板和验收规则见 `docs/planning/guides/agent-development-guidelines.md`。
+> 当前阶段各方向统一提交“非代码接入包”时，建议使用 `docs/planning/guides/non-code-integration-package-template.md`。
 
 ---
 

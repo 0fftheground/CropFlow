@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
+import socket
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
 from urllib import error, request
+from urllib.parse import urlsplit
 
+from app.core.logging import LogTimer, summarize_for_log
 from app.core.constants import (
     CALENDAR_STATUS_ACTIVE,
     CALENDAR_STATUS_INVALIDATED,
@@ -29,6 +33,8 @@ from app.repositories import (
     PlantingPlanRepository,
     RiceVarietyRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class WeatherProvider(Protocol):
@@ -185,7 +191,7 @@ class HttpWeedDiagnosisClient:
                 "cultivation_date": cultivation_date.strftime("%Y%m%d"),
             },
         )
-        data = response["data"]
+        data = self._get_response_data(response, "soil_treatment_diagnosis")
         recommended_date = _parse_api_date_range(data["soil_treatment_recommended_date"])
         if recommended_date is None:
             raise ValueError("soil_treatment_diagnosis did not return soil_treatment_recommended_date.")
@@ -213,7 +219,10 @@ class HttpWeedDiagnosisClient:
             "cultivation_date": cultivation_date.strftime("%Y%m%d"),
         }
         response = self._post_json("/api/weed_survey_date_diagnosis", payload)
-        recommendation_date = _parse_api_date(response["data"]["pre_stem_leaf_herbicide_survey_date"])
+        data = self._get_response_data(response, "weed_survey_date_diagnosis")
+        recommendation_date = _parse_api_date(
+            self._require_data_field(data, "pre_stem_leaf_herbicide_survey_date", "weed_survey_date_diagnosis"),
+        )
         return PreTreatmentSurveyRecommendation(
             recommendation_date=recommendation_date,
             raw_response=response,
@@ -226,10 +235,14 @@ class HttpWeedDiagnosisClient:
     ) -> PostTreatmentSurveyRecommendation:
         payload = {"operation_date": operation_date.strftime("%Y%m%d")}
         response = self._post_json("/api/after_treatment_survey_date_diagnosis", payload)
-        data = response["data"]
+        data = self._get_response_data(response, "after_treatment_survey_date_diagnosis")
         return PostTreatmentSurveyRecommendation(
-            rice_safety_survey_date=_parse_api_date(data["rice_safety_survey_date"]),
-            control_effect_survey_date=_parse_api_date(data["control_effect_survey_date"]),
+            rice_safety_survey_date=_parse_api_date(
+                self._require_data_field(data, "rice_safety_survey_date", "after_treatment_survey_date_diagnosis"),
+            ),
+            control_effect_survey_date=_parse_api_date(
+                self._require_data_field(data, "control_effect_survey_date", "after_treatment_survey_date_diagnosis"),
+            ),
             raw_response=response,
         )
 
@@ -258,7 +271,7 @@ class HttpWeedDiagnosisClient:
                 "last_survey_date": last_survey_date.strftime("%Y%m%d") if last_survey_date else None,
             },
         )
-        data = response["data"]
+        data = self._get_response_data(response, "weed_treatment_diagnosis")
         next_survey_date = data.get("pre_stem_leaf_herbicide_survey_date")
         return WeedTreatmentDiagnosisResult(
             branch_type="resurvey" if next_survey_date else "control",
@@ -282,9 +295,9 @@ class HttpWeedDiagnosisClient:
                 "rice_injury_level": rice_injury_level,
             },
         )
-        data = response["data"]
+        data = self._get_response_data(response, "injury_mitigation_diagnosis")
         return InjuryMitigationDiagnosisResult(
-            need_mitigation=bool(data["need_mitigation"]),
+            need_mitigation=bool(self._require_data_field(data, "need_mitigation", "injury_mitigation_diagnosis")),
             measures=list(data.get("measures") or []),
             recommended_mitigation_date=_parse_api_date_range(data.get("recommended_mitigation_date")),
             raw_response=response,
@@ -315,11 +328,11 @@ class HttpWeedDiagnosisClient:
                 "survey_data_after_treatment": survey_data_after_treatment,
             },
         )
-        data = response["data"]
+        data = self._get_response_data(response, "additional_treatment_diagnosis")
         additional_survey_date = data.get("additional_survey_date")
         service_effect_evaluation_date = data.get("service_effect_evaluation_date")
         return AdditionalTreatmentDiagnosisResult(
-            need_recontrol=bool(data["need_recontrol"]),
+            need_recontrol=bool(self._require_data_field(data, "need_recontrol", "additional_treatment_diagnosis")),
             recontrol_target=data.get("recontrol_target"),
             recommended_recontrol_date=_parse_api_date_range(data.get("recommended_recontrol_date")),
             control_plan=data.get("control_plan"),
@@ -333,23 +346,73 @@ class HttpWeedDiagnosisClient:
 
     def _post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         body = json.dumps(payload).encode("utf-8")
+        url = f"{self.base_url}{path}"
         http_request = request.Request(
-            f"{self.base_url}{path}",
+            url,
             data=body,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
+        timer = LogTimer()
+        logger.info(
+            "Calling weed diagnosis API path=%s host=%s payload=%s",
+            path,
+            urlsplit(url).netloc,
+            summarize_for_log(payload),
+        )
         try:
             with request.urlopen(http_request, timeout=self.timeout_seconds) as response:
-                return json.loads(response.read().decode("utf-8"))
+                response_payload = json.loads(response.read().decode("utf-8"))
+                logger.info(
+                    "Weed diagnosis API succeeded path=%s status=%s duration_ms=%.2f response=%s",
+                    path,
+                    getattr(response, "status", 200),
+                    timer.elapsed_ms,
+                    summarize_for_log(response_payload),
+                )
+                return response_payload
         except error.HTTPError as exc:
             raw_response = exc.read().decode("utf-8", errors="replace")
+            logger.warning(
+                "Weed diagnosis API returned HTTP error path=%s status=%s duration_ms=%.2f payload=%s response=%s",
+                path,
+                exc.code,
+                timer.elapsed_ms,
+                summarize_for_log(payload),
+                summarize_for_log(raw_response),
+            )
             message = f"Weed diagnosis API {path} returned HTTP {exc.code}"
             if raw_response:
                 message = f"{message}: {raw_response}"
             raise ValueError(message) from exc
         except error.URLError as exc:
+            logger.error(
+                "Weed diagnosis API is unreachable path=%s duration_ms=%.2f payload=%s reason=%s",
+                path,
+                timer.elapsed_ms,
+                summarize_for_log(payload),
+                exc.reason,
+            )
             raise RuntimeError(f"Weed diagnosis API {path} is unreachable: {exc.reason}") from exc
+        except (TimeoutError, socket.timeout) as exc:
+            logger.error(
+                "Weed diagnosis API timed out path=%s duration_ms=%.2f payload=%s",
+                path,
+                timer.elapsed_ms,
+                summarize_for_log(payload),
+            )
+            raise RuntimeError(f"Weed diagnosis API {path} timed out.") from exc
+
+    def _get_response_data(self, response: dict[str, Any], api_name: str) -> dict[str, Any]:
+        data = response.get("data")
+        if not isinstance(data, dict):
+            raise ValueError(f"{api_name} did not return a valid data object.")
+        return data
+
+    def _require_data_field(self, data: dict[str, Any], field: str, api_name: str) -> Any:
+        if field not in data:
+            raise ValueError(f"{api_name} did not return {field}.")
+        return data[field]
 
 
 class MockWeedDiagnosisClient:

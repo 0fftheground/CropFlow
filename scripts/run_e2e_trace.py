@@ -69,7 +69,6 @@ def main() -> None:
 
         unique_suffix = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         plan_payload = {
-            "plan_code": f"E2E-TRACE-{unique_suffix}",
             "plan_name": f"E2E Trace {unique_suffix}",
             "farm_id": 1,
             "field_ids": [10, 11],

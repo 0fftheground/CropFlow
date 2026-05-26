@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import get_planting_plan_query_service, get_planting_plan_service
 from app.db.session import get_db
 from app.main import app
-from app.models import CalendarItem, FarmingTask, PlantingPlan, ReviewRequest, TaskIntent
+from app.models import CalendarItem, EventRecord, FarmingTask, PlantingPlan, ReviewRequest, TaskIntent
 from app.services import PlantingPlanDetails
 
 
@@ -141,6 +141,24 @@ class FakePlantingPlanQueryService:
             ),
         ]
 
+    def list_event_records(self, planting_plan_id: int):
+        if planting_plan_id == 404:
+            raise LookupError("missing")
+        return [
+            EventRecord(
+                id=9,
+                planting_plan_id=planting_plan_id,
+                event_type="PlanCreated",
+                event_category="plan",
+                event_source="api",
+                source_system="cropflow",
+                payload={"planCode": "PLAN-001"},
+                occurred_at=datetime(2026, 5, 22, 10, 0, 0),
+                processing_status="processed",
+                idempotency_key="event:9",
+            ),
+        ]
+
 
 class DummySession:
     def commit(self) -> None:
@@ -159,7 +177,6 @@ def test_create_and_list_planting_plans_routes() -> None:
     create_response = client.post(
         "/api/planting-plans",
         json={
-            "plan_code": "PLAN-001",
             "plan_name": "早稻计划",
             "farm_id": 1,
             "field_ids": [10, 11],
@@ -174,6 +191,7 @@ def test_create_and_list_planting_plans_routes() -> None:
 
     assert create_response.status_code == 201
     assert create_response.json()["plan_code"] == "PLAN-001"
+    assert fake_service.created_payload.plan_code is None
     assert list_response.status_code == 200
     assert list_response.json()[0]["status"] == "active"
     assert fake_service.list_statuses == ["active"]
@@ -206,6 +224,7 @@ def test_list_calendar_items_and_tasks_routes() -> None:
     tasks_response = client.get("/api/planting-plans/1/tasks")
     intents_response = client.get("/api/planting-plans/1/task-intents")
     reviews_response = client.get("/api/planting-plans/1/review-requests")
+    events_response = client.get("/api/planting-plans/1/event-records")
 
     assert calendar_response.status_code == 200
     assert calendar_response.json()[0]["task_subtype"] == "plant_protection.stem_leaf_weed_pre_survey"
@@ -215,5 +234,7 @@ def test_list_calendar_items_and_tasks_routes() -> None:
     assert intents_response.json()[0]["status"] == "pending"
     assert reviews_response.status_code == 200
     assert reviews_response.json()[0]["source_entity_type"] == "task_intent"
+    assert events_response.status_code == 200
+    assert events_response.json()[0]["event_type"] == "PlanCreated"
 
     app.dependency_overrides.clear()

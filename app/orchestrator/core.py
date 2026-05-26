@@ -37,11 +37,14 @@ from app.core.constants import (
     TASK_SUBTYPE_CONTROL_EFFECT_SURVEY,
     TASK_SUBTYPE_INJURY_MITIGATION,
     TASK_SUBTYPE_RICE_SAFETY_SURVEY,
+    TASK_SUBTYPE_SERVICE_EFFECT_EVALUATION,
+    TASK_SUBTYPE_SERVICE_EFFECT_SURVEY,
     TASK_SUBTYPE_SOIL_SEALING_WEED_CONTROL,
     TASK_SUBTYPE_STEM_LEAF_WEED_CONTROL,
     TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
     TASK_SUBTYPE_STEM_LEAF_WEED_RECONTROL_PRE_SURVEY,
 )
+from app.core.logging import summarize_for_log
 from app.models import CalendarItem, EventRecord, FarmingTask, OperationPlan, ReviewRequest, TaskIntent
 from app.repositories import (
     CalendarItemRepository,
@@ -84,22 +87,51 @@ class PlanOrchestrator:
     def handle(self, event_record: EventRecord) -> OrchestratorResult:
         handler = self.handlers.get(event_record.event_type)
         if handler is None:
+            logger.info(
+                "No orchestrator handler registered event_id=%s event_type=%s planting_plan_id=%s",
+                event_record.id,
+                event_record.event_type,
+                event_record.planting_plan_id,
+            )
             event_record.processing_status = EVENT_PROCESSING_STATUS_PROCESSED
             event_record.processed_at = _utcnow()
             return OrchestratorResult()
 
         event_record.processing_status = EVENT_PROCESSING_STATUS_PROCESSING
+        logger.info(
+            "Handling orchestrator event event_id=%s event_type=%s planting_plan_id=%s handler=%s payload=%s",
+            event_record.id,
+            event_record.event_type,
+            event_record.planting_plan_id,
+            handler.__class__.__name__,
+            summarize_for_log(event_record.payload),
+        )
         try:
             result = handler.handle(event_record)
         except Exception as exc:
             event_record.processing_status = EVENT_PROCESSING_STATUS_FAILED
             event_record.processed_at = _utcnow()
             event_record.error_message = str(exc)
+            logger.exception(
+                "Orchestrator event failed event_id=%s event_type=%s planting_plan_id=%s handler=%s",
+                event_record.id,
+                event_record.event_type,
+                event_record.planting_plan_id,
+                handler.__class__.__name__,
+            )
             raise
 
         event_record.processing_status = EVENT_PROCESSING_STATUS_PROCESSED
         event_record.processed_at = _utcnow()
         event_record.error_message = None
+        logger.info(
+            "Orchestrator event handled event_id=%s event_type=%s planting_plan_id=%s handler=%s results=%s",
+            event_record.id,
+            event_record.event_type,
+            event_record.planting_plan_id,
+            handler.__class__.__name__,
+            summarize_for_log(_summarize_orchestrator_result(result)),
+        )
         return result
 
 
@@ -504,6 +536,8 @@ class SurveyResultRecordedHandler:
             return self._handle_rice_safety_survey(event, event_record)
         if event.task_subtype == TASK_SUBTYPE_CONTROL_EFFECT_SURVEY:
             return self._handle_control_effect_survey(event, farming_task, event_record)
+        if event.task_subtype == TASK_SUBTYPE_SERVICE_EFFECT_EVALUATION:
+            return self._handle_service_effect_evaluation(event, farming_task, event_record)
         return OrchestratorResult()
 
     def _handle_pre_treatment_survey(
@@ -712,6 +746,56 @@ class SurveyResultRecordedHandler:
 
         return result
 
+    def _handle_service_effect_evaluation(
+        self,
+        event: "_SurveyResultRecorded",
+        farming_task: FarmingTask,
+        event_record: EventRecord,
+    ) -> OrchestratorResult:
+        is_satisfied = _parse_required_payload_bool(event.result_payload, "is_satisfied", "isSatisfied")
+        if is_satisfied:
+            return OrchestratorResult()
+
+        followup_task = FarmingTask(
+            planting_plan_id=event.planting_plan_id,
+            task_category=TASK_CATEGORY_PLANT_PROTECTION,
+            task_subtype=TASK_SUBTYPE_SERVICE_EFFECT_SURVEY,
+            title="服务人员现场确认",
+            description="服务效果评估结果为不满意，需安排服务人员现场确认并补充记录。",
+            planned_start_at=_parse_optional_payload_datetime(
+                event.result_payload,
+                "evaluated_at",
+                "evaluatedAt",
+            )
+            or event_record.occurred_at,
+            planned_end_at=_parse_optional_payload_datetime(
+                event.result_payload,
+                "evaluated_at",
+                "evaluatedAt",
+            )
+            or event_record.occurred_at,
+            status=FARMING_TASK_STATUS_PENDING,
+            execution_mode=farming_task.execution_mode or EXECUTION_MODE_MANUAL,
+            generation_reason=f"survey_result:{event.execution_record_id}:service_evaluation_unsatisfied",
+            parent_task_id=farming_task.id,
+            source_execution_id=event.execution_id,
+            source_execution_record_id=event.execution_record_id,
+            idempotency_key=(
+                f"farming-task:service-effect-evaluation:{event.execution_record_id}:{TASK_SUBTYPE_SERVICE_EFFECT_SURVEY}"
+            ),
+            created_by_type="system",
+            created_by_id="SurveyResultRecordedHandler",
+        )
+        self.farming_task_repository.add(followup_task)
+        self.farming_task_repository.flush()
+        self._record_followup_farming_task_event(
+            followup_task,
+            event=event,
+            event_record=event_record,
+            branch_type="service_effect_survey",
+        )
+        return OrchestratorResult(farming_tasks=[followup_task])
+
     def _create_task_intent(
         self,
         *,
@@ -868,6 +952,38 @@ class SurveyResultRecordedHandler:
                 processing_status=EVENT_PROCESSING_STATUS_PROCESSED,
                 processed_at=_utcnow(),
                 idempotency_key=f"{event_type}:{entity.__tablename__}:{entity.id}",
+                created_by_type="system",
+                created_by_id="SurveyResultRecordedHandler",
+            ),
+        )
+
+    def _record_followup_farming_task_event(
+        self,
+        farming_task: FarmingTask,
+        *,
+        event: "_SurveyResultRecorded",
+        event_record: EventRecord,
+        branch_type: str,
+    ) -> None:
+        self.event_record_repository.add(
+            EventRecord(
+                planting_plan_id=event.planting_plan_id,
+                event_type=EVENT_TYPE_FARMING_TASK_CREATED,
+                event_category="runtime",
+                event_source="orchestrator",
+                source_system="cropflow",
+                source_record_id=str(farming_task.id),
+                payload={
+                    "branchType": branch_type,
+                    "sourceEventId": event_record.id,
+                    "sourceExecutionRecordId": event.execution_record_id,
+                    "farmingTaskId": farming_task.id,
+                    "parentTaskId": farming_task.parent_task_id,
+                },
+                occurred_at=_utcnow(),
+                processing_status=EVENT_PROCESSING_STATUS_PROCESSED,
+                processed_at=_utcnow(),
+                idempotency_key=f"{EVENT_TYPE_FARMING_TASK_CREATED}:farming-task:{farming_task.id}",
                 created_by_type="system",
                 created_by_id="SurveyResultRecordedHandler",
             ),
@@ -1200,6 +1316,37 @@ def _parse_payload_date(payload: dict[str, Any], key: str) -> date:
     return datetime.strptime(str(raw_value), "%Y%m%d").date()
 
 
+def _parse_required_payload_bool(payload: dict[str, Any], *keys: str) -> bool:
+    raw_value = _get_payload_value(payload, *keys)
+    if isinstance(raw_value, bool):
+        return raw_value
+    if isinstance(raw_value, int) and raw_value in {0, 1}:
+        return bool(raw_value)
+    if isinstance(raw_value, str):
+        normalized = raw_value.strip().lower()
+        if normalized in {"true", "1", "yes", "y"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+    raise ValueError(f"Expected boolean payload field in keys {keys!r}.")
+
+
+def _parse_optional_payload_datetime(payload: dict[str, Any], *keys: str) -> datetime | None:
+    raw_value = _get_payload_value(payload, *keys, required=False)
+    if raw_value is None:
+        return None
+    return _parse_datetime_or_date(raw_value, time.min)
+
+
+def _get_payload_value(payload: dict[str, Any], *keys: str, required: bool = True) -> Any:
+    for key in keys:
+        if key in payload:
+            return payload[key]
+    if required:
+        raise ValueError(f"Missing required payload field. expected one of {keys!r}.")
+    return None
+
+
 def _format_date_range(raw_value: tuple[date, date] | None) -> list[str] | None:
     if raw_value is None:
         return None
@@ -1236,3 +1383,13 @@ def _parse_datetime_or_date(raw_value: Any, default_time: time) -> datetime:
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _summarize_orchestrator_result(result: OrchestratorResult) -> dict[str, int]:
+    return {
+        "calendar_items": len(result.calendar_items),
+        "farming_tasks": len(result.farming_tasks),
+        "task_intents": len(result.task_intents),
+        "review_requests": len(result.review_requests),
+        "operation_plans": len(result.operation_plans),
+    }

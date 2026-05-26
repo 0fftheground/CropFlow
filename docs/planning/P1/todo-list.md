@@ -1,7 +1,7 @@
 # P1 Todo List
 
 > 目标：收口植保方向 P1 阶段需要冻结的范围、契约、页面和待决事项。  
-> 对齐依据：`docs/planning/plant-protection-closed-loop-schedule.md`、`docs/planning/team-work-division/plant-protection.md`、`docs/planning/team-work-division/frontend.md`、`docs/planning/team-work-division/calendar-stage.md`。
+> 对齐依据：`docs/planning/P1/plant-protection-closed-loop-schedule.md`、`docs/planning/team-work-division/plant-protection.md`、`docs/planning/team-work-division/frontend.md`、`docs/planning/team-work-division/calendar-stage.md`。
 
 ---
 

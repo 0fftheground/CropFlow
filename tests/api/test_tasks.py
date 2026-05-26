@@ -9,7 +9,7 @@ from app.api.deps import get_survey_result_service
 from app.api.deps import get_task_execution_service
 from app.db.session import get_db
 from app.main import app
-from app.models import CalendarItem, EventRecord, Execution, ExecutionRecord, ReviewRequest, TaskIntent
+from app.models import CalendarItem, EventRecord, Execution, ExecutionRecord, FarmingTask, ReviewRequest, TaskIntent
 from app.services import SurveyResultProcessingResult, TaskExecutionCompleteInput, TaskExecutionCompleteResult
 
 
@@ -25,6 +25,8 @@ class FakeSurveyResultService:
     ) -> SurveyResultProcessingResult:
         if farming_task_id == 404:
             raise LookupError("missing")
+        if farming_task_id == 400:
+            raise ValueError("invalid service evaluation payload")
         return SurveyResultProcessingResult(
             execution_record=ExecutionRecord(
                 id=11,
@@ -43,29 +45,53 @@ class FakeSurveyResultService:
                 occurred_at=datetime(2026, 5, 22, 10, 0, 0),
                 idempotency_key="event:12",
             ),
-            task_intents=[
-                TaskIntent(
-                    id=13,
-                    planting_plan_id=1,
-                    task_category="plant_protection",
-                    task_subtype="plant_protection.stem_leaf_weed_control",
-                    trigger_type="SurveyResultRecorded",
-                    rule_result={},
-                    idempotency_key="intent:13",
-                ),
-            ],
-            review_requests=[
-                ReviewRequest(
-                    id=14,
-                    planting_plan_id=1,
-                    review_type="weed_control_recommendation",
-                    source_entity_type="task_intent",
-                    source_entity_id=13,
-                    title="待审核",
-                    decision_payload={},
-                    idempotency_key="review:14",
-                ),
-            ],
+            farming_tasks=(
+                [
+                    FarmingTask(
+                        id=15,
+                        planting_plan_id=1,
+                        task_category="plant_protection",
+                        task_subtype="plant_protection.service_effect_survey",
+                        title="服务人员现场确认",
+                        status="pending",
+                        execution_mode="manual",
+                        idempotency_key="task:15",
+                    ),
+                ]
+                if farming_task_id == 11
+                else []
+            ),
+            task_intents=(
+                []
+                if farming_task_id == 11
+                else [
+                    TaskIntent(
+                        id=13,
+                        planting_plan_id=1,
+                        task_category="plant_protection",
+                        task_subtype="plant_protection.stem_leaf_weed_control",
+                        trigger_type="SurveyResultRecorded",
+                        rule_result={},
+                        idempotency_key="intent:13",
+                    ),
+                ]
+            ),
+            review_requests=(
+                []
+                if farming_task_id == 11
+                else [
+                    ReviewRequest(
+                        id=14,
+                        planting_plan_id=1,
+                        review_type="weed_control_recommendation",
+                        source_entity_type="task_intent",
+                        source_entity_id=13,
+                        title="待审核",
+                        decision_payload={},
+                        idempotency_key="review:14",
+                    ),
+                ]
+            ),
         )
 
 
@@ -154,6 +180,7 @@ def test_create_survey_result_route_returns_m3_outputs() -> None:
     assert response.json() == {
         "execution_record_id": 11,
         "event_record_id": 12,
+        "farming_task_ids": [],
         "task_intent_ids": [13],
         "review_request_ids": [14],
     }
@@ -169,6 +196,37 @@ def test_create_survey_result_route_returns_404_for_missing_task() -> None:
     response = client.post("/api/tasks/404/survey-results", json={"result_payload": {}})
 
     assert response.status_code == 404
+
+    app.dependency_overrides.clear()
+
+
+def test_create_survey_result_route_returns_followup_task_ids() -> None:
+    app.dependency_overrides[get_survey_result_service] = lambda: FakeSurveyResultService()
+    app.dependency_overrides[get_db] = lambda: DummySession()
+    client = TestClient(app)
+
+    response = client.post("/api/tasks/11/survey-results", json={"result_payload": {"is_satisfied": False}})
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "execution_record_id": 11,
+        "event_record_id": 12,
+        "farming_task_ids": [15],
+        "task_intent_ids": [],
+        "review_request_ids": [],
+    }
+
+    app.dependency_overrides.clear()
+
+
+def test_create_survey_result_route_returns_400_for_invalid_payload() -> None:
+    app.dependency_overrides[get_survey_result_service] = lambda: FakeSurveyResultService()
+    app.dependency_overrides[get_db] = lambda: DummySession()
+    client = TestClient(app)
+
+    response = client.post("/api/tasks/400/survey-results", json={"result_payload": {}})
+
+    assert response.status_code == 400
 
     app.dependency_overrides.clear()
 

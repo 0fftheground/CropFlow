@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.models import CalendarItem, FarmingTask, PlantingPlan, ReviewRequest, TaskIntent
+from app.models import CalendarItem, EventRecord, FarmingTask, PlantingPlan, ReviewRequest, TaskIntent
 from app.repositories import (
     CalendarItemRepository,
+    EventRecordRepository,
     FarmingTaskRepository,
     PlantingPlanRepository,
     ReviewRequestRepository,
@@ -19,6 +20,7 @@ class PlantingPlanM2Snapshot:
     farming_tasks: list[FarmingTask]
     task_intents: list[TaskIntent]
     review_requests: list[ReviewRequest]
+    event_records: list[EventRecord]
 
 
 class PlantingPlanQueryService:
@@ -29,12 +31,14 @@ class PlantingPlanQueryService:
         farming_task_repository: FarmingTaskRepository,
         task_intent_repository: TaskIntentRepository,
         review_request_repository: ReviewRequestRepository,
+        event_record_repository: EventRecordRepository,
     ) -> None:
         self.planting_plan_repository = planting_plan_repository
         self.calendar_item_repository = calendar_item_repository
         self.farming_task_repository = farming_task_repository
         self.task_intent_repository = task_intent_repository
         self.review_request_repository = review_request_repository
+        self.event_record_repository = event_record_repository
 
     def list_calendar_items(self, planting_plan_id: int) -> list[CalendarItem]:
         self._get_plan(planting_plan_id)
@@ -52,6 +56,10 @@ class PlantingPlanQueryService:
         self._get_plan(planting_plan_id)
         return self.review_request_repository.list_current_by_plan(planting_plan_id)
 
+    def list_event_records(self, planting_plan_id: int) -> list[EventRecord]:
+        self._get_plan(planting_plan_id)
+        return self.event_record_repository.list_by_plan(planting_plan_id)
+
     def get_m2_snapshot(self, planting_plan_id: int) -> PlantingPlanM2Snapshot:
         planting_plan = self._get_plan(planting_plan_id)
         return PlantingPlanM2Snapshot(
@@ -60,6 +68,7 @@ class PlantingPlanQueryService:
             farming_tasks=self.farming_task_repository.list_current_by_plan(planting_plan_id),
             task_intents=self.task_intent_repository.list_current_by_plan(planting_plan_id),
             review_requests=self.review_request_repository.list_current_by_plan(planting_plan_id),
+            event_records=self.event_record_repository.list_by_plan(planting_plan_id),
         )
 
     def _get_plan(self, planting_plan_id: int) -> PlantingPlan:

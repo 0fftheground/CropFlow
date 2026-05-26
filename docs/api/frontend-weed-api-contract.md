@@ -1,0 +1,701 @@
+# 杂草防治前端 API Contract
+
+> 本文档面向前端联调，描述当前后端已实现接口的真实出入参。  
+> 口径以当前 FastAPI 路由和响应模型为准。
+
+适用阶段：
+
+```text
+P2 - 杂草防治样板链路前后端联调
+```
+
+基础信息：
+
+```text
+Base URL: {host}/api
+Content-Type: application/json
+```
+
+通用返回说明：
+
+1. 成功返回 `200` 或 `201`
+2. 参数或业务校验失败返回 `400`
+3. 资源不存在返回 `404`
+4. 请求体结构错误返回 `422`
+5. 未处理异常返回 `500`
+6. 响应头会回写 `X-Request-ID`
+
+错误响应格式：
+
+```json
+{
+  "detail": "error message"
+}
+```
+
+---
+
+## 1. 接口目录
+
+| 用途 | method | path |
+|---|---|---|
+| 健康检查 | `GET` | `/health` |
+| 字典查询 | `GET` | `/code-dicts` |
+| 品种模糊查询 | `GET` | `/rice-varieties` |
+| 创建计划 | `POST` | `/planting-plans` |
+| 计划列表 | `GET` | `/planting-plans` |
+| 计划详情 | `GET` | `/planting-plans/{plantingPlanId}` |
+| 更新计划 | `PATCH` | `/planting-plans/{plantingPlanId}` |
+| 计划下 CalendarItem 列表 | `GET` | `/planting-plans/{plantingPlanId}/calendar-items` |
+| 计划下 FarmingTask 列表 | `GET` | `/planting-plans/{plantingPlanId}/tasks` |
+| 计划下 TaskIntent 列表 | `GET` | `/planting-plans/{plantingPlanId}/task-intents` |
+| 计划下 ReviewRequest 列表 | `GET` | `/planting-plans/{plantingPlanId}/review-requests` |
+| 计划下 EventRecord 列表 | `GET` | `/planting-plans/{plantingPlanId}/event-records` |
+| 任务详情 | `GET` | `/tasks/{taskId}` |
+| 调查结果录入 | `POST` | `/tasks/{taskId}/survey-results` |
+| 执行结果录入 | `POST` | `/tasks/{taskId}/execution-completions` |
+| 复核详情 | `GET` | `/review-requests/{reviewRequestId}` |
+| 复核处理 | `POST` | `/review-requests/{reviewRequestId}/resolve` |
+
+---
+
+## 2. 公共响应对象
+
+### 2.1 `PlantingPlanResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 主键 |
+| `plan_code` | `string` | 计划编码；由后端生成 |
+| `plan_name` | `string` | 计划名称 |
+| `farm_id` | `int` | 农场 id |
+| `field_ids` | `int[]` | 地块 id 列表 |
+| `year` | `int \| null` | 年份 |
+| `culti_type_code` | `int` | 稻作类型编码 |
+| `planting_method_code` | `int` | 种植方式编码 |
+| `crop_name` | `string` | 作物名称 |
+| `variety_id` | `int` | 品种 id |
+| `variety_name` | `string` | 品种名称 |
+| `sowing_date` | `date` | 播种日期 |
+| `transplant_date` | `date \| null` | 移栽日期 |
+| `harvest_date` | `date \| null` | 收获日期 |
+| `transplant_leaf_age` | `decimal \| null` | 移栽叶龄 |
+| `previous_harvest_date` | `date \| null` | 上季收获日期 |
+| `ratoon_first_season_harvest_date` | `date \| null` | 再生稻首季收获日期 |
+| `expected_harvest_date` | `date \| null` | 预计收获日期 |
+| `status` | `string` | 当前状态 |
+| `task_generation_window_days` | `int` | 任务生成窗口天数 |
+| `metadata` | `object` | 扩展信息 |
+| `created_at` | `datetime \| null` | 创建时间 |
+| `updated_at` | `datetime \| null` | 更新时间 |
+
+### 2.2 `CalendarItemResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 主键 |
+| `planting_plan_id` | `int` | 计划 id |
+| `stage_code` | `string \| null` | 阶段编码 |
+| `task_category` | `string` | 大类 |
+| `task_subtype` | `string` | 子类 |
+| `title` | `string` | 标题 |
+| `description` | `string \| null` | 描述 |
+| `suggested_start_date` | `date` | 建议开始日期 |
+| `suggested_end_date` | `date` | 建议结束日期 |
+| `status` | `string` | `active / generated / invalidated` |
+| `generation_condition` | `object` | 生成条件 |
+| `parent_task_id` | `int \| null` | 上游任务 id |
+| `source_execution_id` | `int \| null` | 上游执行 id |
+| `source_execution_record_id` | `int \| null` | 上游执行记录 id |
+| `generated_task_id` | `int \| null` | 已生成的正式任务 id |
+| `created_at` | `datetime \| null` | 创建时间 |
+| `updated_at` | `datetime \| null` | 更新时间 |
+
+### 2.3 `FarmingTaskResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 主键 |
+| `planting_plan_id` | `int` | 计划 id |
+| `calendar_item_id` | `int \| null` | 来源 CalendarItem |
+| `task_intent_id` | `int \| null` | 来源 TaskIntent |
+| `review_request_id` | `int \| null` | 来源 ReviewRequest |
+| `task_category` | `string` | 大类 |
+| `task_subtype` | `string` | 子类 |
+| `title` | `string` | 标题 |
+| `description` | `string \| null` | 描述 |
+| `target_stage_code` | `string \| null` | 目标阶段 |
+| `planned_start_at` | `datetime \| null` | 计划开始时间 |
+| `planned_end_at` | `datetime \| null` | 计划结束时间 |
+| `priority` | `string` | 优先级 |
+| `status` | `string` | 当前状态 |
+| `execution_mode` | `string` | 执行方式 |
+| `generation_reason` | `string \| null` | 生成原因 |
+| `parent_task_id` | `int \| null` | 上游任务 id |
+| `source_execution_id` | `int \| null` | 上游执行 id |
+| `source_execution_record_id` | `int \| null` | 上游执行记录 id |
+| `created_at` | `datetime \| null` | 创建时间 |
+| `updated_at` | `datetime \| null` | 更新时间 |
+
+### 2.4 `TaskIntentResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 主键 |
+| `planting_plan_id` | `int` | 计划 id |
+| `task_category` | `string` | 大类 |
+| `task_subtype` | `string` | 子类 |
+| `priority` | `string` | 优先级 |
+| `status` | `string` | `pending / converted / rejected / no_action / pending_more_info` |
+| `trigger_type` | `string` | 触发事件类型 |
+| `trigger_summary` | `string \| null` | 触发摘要 |
+| `rule_result` | `object` | 结构化建议 |
+| `suggested_action` | `string \| null` | 建议动作 |
+| `need_more_info_fields` | `object` | 补充信息字段 |
+| `no_action_reason` | `string \| null` | 无需处理原因 |
+| `parent_task_id` | `int \| null` | 上游任务 id |
+| `source_execution_id` | `int \| null` | 上游执行 id |
+| `source_execution_record_id` | `int \| null` | 上游执行记录 id |
+| `converted_task_id` | `int \| null` | 转出的正式任务 id |
+| `source_event_id` | `int \| null` | 来源事件 id |
+| `created_at` | `datetime \| null` | 创建时间 |
+| `updated_at` | `datetime \| null` | 更新时间 |
+
+### 2.5 `ReviewRequestResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 主键 |
+| `planting_plan_id` | `int` | 计划 id |
+| `review_type` | `string` | 复核类型 |
+| `status` | `string` | `open / resolved` |
+| `priority` | `string` | 优先级 |
+| `assigned_user_id` | `string \| null` | 指派人 |
+| `source_entity_type` | `string` | 来源对象类型 |
+| `source_entity_id` | `int` | 来源对象 id |
+| `title` | `string` | 标题 |
+| `description` | `string \| null` | 描述 |
+| `decision` | `string \| null` | 复核结论 |
+| `decision_payload` | `object` | 复核上下文和输入 |
+| `resolved_by` | `string \| null` | 处理人 |
+| `resolved_at` | `datetime \| null` | 处理时间 |
+| `created_at` | `datetime \| null` | 创建时间 |
+| `updated_at` | `datetime \| null` | 更新时间 |
+
+### 2.6 `EventRecordResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 主键 |
+| `planting_plan_id` | `int \| null` | 计划 id |
+| `event_type` | `string` | 事件类型 |
+| `event_category` | `string` | 事件分类 |
+| `event_source` | `string` | 来源 |
+| `source_system` | `string \| null` | 来源系统 |
+| `source_record_id` | `string \| null` | 来源记录 id |
+| `payload` | `object` | 事件内容 |
+| `occurred_at` | `datetime` | 发生时间 |
+| `received_at` | `datetime \| null` | 接收时间 |
+| `processed_at` | `datetime \| null` | 处理时间 |
+| `processing_status` | `string` | `received / processing / processed / failed` |
+| `error_message` | `string \| null` | 错误信息 |
+| `created_at` | `datetime \| null` | 创建时间 |
+| `updated_at` | `datetime \| null` | 更新时间 |
+
+---
+
+## 3. 计划接口
+
+### 3.1 创建计划
+
+`POST /api/planting-plans`
+
+当前注意：
+
+```text
+1. `plan_code` 已改为后端自动生成。
+2. 前端创建计划时不再传这个字段。
+```
+
+请求体：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `plan_name` | `string` | yes | 计划名称 |
+| `farm_id` | `int` | yes | 农场 id |
+| `field_ids` | `int[]` | yes | 地块 id 列表 |
+| `culti_type_code` | `int` | yes | 稻作类型编码 |
+| `planting_method_code` | `int` | yes | 种植方式编码 |
+| `crop_name` | `string` | yes | 作物名称 |
+| `variety_id` | `int` | yes | 品种 id |
+| `sowing_date` | `date` | yes | 播种日期 |
+| `year` | `int \| null` | no | 年份 |
+| `transplant_date` | `date \| null` | no | 移栽日期 |
+| `harvest_date` | `date \| null` | no | 收获日期 |
+| `transplant_leaf_age` | `decimal \| null` | no | 移栽叶龄 |
+| `previous_harvest_date` | `date \| null` | no | 上季收获日期 |
+| `ratoon_first_season_harvest_date` | `date \| null` | no | 再生稻首季收获日期 |
+| `expected_harvest_date` | `date \| null` | no | 预计收获日期 |
+| `status` | `string` | no | 默认 `draft` |
+| `task_generation_window_days` | `int` | no | 默认 `14` |
+| `metadata` | `object` | no | 默认 `{}` |
+
+成功响应：
+
+1. `201 Created`
+2. 响应体为 `PlantingPlanResponse`
+
+建议前端展示口径：
+
+1. `plan_code`：展示即可，不让用户手填
+2. `culti_type_code`：UI 文案使用“稻作类型”
+3. `planting_method_code`：UI 文案使用“种植方式”
+4. `variety_id`：UI 文案使用“品种”
+
+### 3.0 创建计划前的选项查询
+
+#### 3.0.1 字典查询
+
+`GET /api/code-dicts?category={category}`
+
+当前前端会用到：
+
+1. `category=culti_type`
+2. `category=sowingmtd`
+
+响应体：
+
+```json
+[
+  {
+    "code": 5,
+    "name": "早稻",
+    "category": "culti_type"
+  }
+]
+```
+
+字段说明：
+
+| field | type | notes |
+|---|---|---|
+| `code` | `int` | 实际提交值 |
+| `name` | `string` | 展示名称 |
+| `category` | `string` | 字典分类 |
+
+#### 3.0.2 品种模糊查询
+
+`GET /api/rice-varieties?query={keyword}&limit=20`
+
+Query 参数：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `query` | `string \| null` | no | 品种名模糊匹配关键词 |
+| `limit` | `int` | no | 默认 `20`，范围 `1~100` |
+
+响应体：
+
+```json
+[
+  {
+    "id": 1,
+    "name": "黄广农占",
+    "culti_type_code": 5,
+    "sub_type_code": 9
+  }
+]
+```
+
+字段说明：
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 实际提交的 `variety_id` |
+| `name` | `string` | 品种名称 |
+| `culti_type_code` | `int \| null` | 对应稻作类型编码 |
+| `sub_type_code` | `int \| null` | 品种子类型编码 |
+
+### 3.2 计划列表
+
+`GET /api/planting-plans`
+
+Query 参数：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `statuses` | `string[]` | no | 可多值过滤 |
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `PlantingPlanResponse[]`
+
+### 3.3 计划详情
+
+`GET /api/planting-plans/{plantingPlanId}`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `PlantingPlanResponse`
+
+### 3.4 更新计划
+
+`PATCH /api/planting-plans/{plantingPlanId}`
+
+请求体字段与创建计划一致，但全部可选。
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `PlantingPlanResponse`
+
+### 3.5 计划下 CalendarItem 列表
+
+`GET /api/planting-plans/{plantingPlanId}/calendar-items`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `CalendarItemResponse[]`
+
+### 3.6 计划下 FarmingTask 列表
+
+`GET /api/planting-plans/{plantingPlanId}/tasks`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `FarmingTaskResponse[]`
+
+### 3.7 计划下 TaskIntent 列表
+
+`GET /api/planting-plans/{plantingPlanId}/task-intents`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `TaskIntentResponse[]`
+
+### 3.8 计划下 ReviewRequest 列表
+
+`GET /api/planting-plans/{plantingPlanId}/review-requests`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `ReviewRequestResponse[]`
+
+### 3.9 计划下 EventRecord 列表
+
+`GET /api/planting-plans/{plantingPlanId}/event-records`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `EventRecordResponse[]`
+
+---
+
+## 4. 任务接口
+
+### 4.1 任务详情
+
+`GET /api/tasks/{taskId}`
+
+响应体：
+
+| field | type | notes |
+|---|---|---|
+| `task` | `FarmingTaskResponse` | 任务主对象 |
+| `operation_plans` | `OperationPlanResponse[]` | 方案列表 |
+| `executions` | `ExecutionResponse[]` | 执行列表 |
+| `execution_records` | `ExecutionRecordResponse[]` | 执行记录列表 |
+| `review_request` | `TaskDetailReviewRequestResponse \| null` | 关联复核 |
+| `source_task_intent` | `TaskDetailTaskIntentResponse \| null` | 来源建议 |
+| `source_calendar_item` | `TaskDetailCalendarItemResponse \| null` | 来源预备事项 |
+| `source_execution_record` | `ExecutionRecordResponse \| null` | 来源执行记录 |
+| `downstream_calendar_items` | `TaskDetailCalendarItemResponse[]` | 下游日历项 |
+| `event_records` | `EventRecordResponse[]` | 相关事件 |
+
+#### `OperationPlanResponse`
+
+| field | type |
+|---|---|
+| `id` | `int` |
+| `farming_task_id` | `int` |
+| `plan_type` | `string` |
+| `status` | `string` |
+| `version` | `int` |
+| `algorithm_code` | `string \| null` |
+| `algorithm_version` | `string \| null` |
+| `operation_area` | `object` |
+| `operation_window_start` | `datetime \| null` |
+| `operation_window_end` | `datetime \| null` |
+| `execution_mode` | `string` |
+| `parameters` | `object` |
+| `prescription_map` | `object` |
+| `acceptance_criteria` | `object` |
+| `basis` | `string \| null` |
+| `source_event_id` | `int \| null` |
+| `created_at` | `datetime \| null` |
+| `updated_at` | `datetime \| null` |
+
+#### `ExecutionResponse`
+
+| field | type |
+|---|---|
+| `id` | `int` |
+| `planting_plan_id` | `int` |
+| `farming_task_id` | `int` |
+| `operation_plan_id` | `int \| null` |
+| `execution_mode` | `string` |
+| `status` | `string` |
+| `assigned_to_type` | `string \| null` |
+| `assigned_to_id` | `string \| null` |
+| `external_system_code` | `string \| null` |
+| `external_execution_id` | `string \| null` |
+| `started_at` | `datetime \| null` |
+| `completed_at` | `datetime \| null` |
+| `failure_reason` | `string \| null` |
+| `created_at` | `datetime \| null` |
+| `updated_at` | `datetime \| null` |
+
+#### `ExecutionRecordResponse`
+
+| field | type |
+|---|---|
+| `id` | `int` |
+| `planting_plan_id` | `int` |
+| `execution_id` | `int` |
+| `record_type` | `string` |
+| `record_time` | `datetime` |
+| `actual_start_at` | `datetime \| null` |
+| `actual_end_at` | `datetime \| null` |
+| `actual_area` | `decimal \| null` |
+| `actual_amount` | `decimal \| null` |
+| `amount_unit` | `string \| null` |
+| `result_payload` | `object` |
+| `attachments` | `array` |
+| `created_at` | `datetime \| null` |
+| `updated_at` | `datetime \| null` |
+
+### 4.2 调查结果录入
+
+`POST /api/tasks/{taskId}/survey-results`
+
+通用请求体：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `result_payload` | `object` | yes | 业务表单主体 |
+| `actual_start_at` | `datetime \| null` | no | 实际开始时间 |
+| `actual_end_at` | `datetime \| null` | no | 实际结束时间 |
+
+成功响应：
+
+| field | type | notes |
+|---|---|---|
+| `execution_record_id` | `int` | 新建执行记录 id |
+| `event_record_id` | `int` | 新建事件 id |
+| `farming_task_ids` | `int[]` | 直接生成的正式任务 |
+| `task_intent_ids` | `int[]` | 新建建议 |
+| `review_request_ids` | `int[]` | 新建待审核事项 |
+
+#### 当前已支持的 `result_payload` 口径
+
+##### `plant_protection.stem_leaf_weed_pre_survey`
+
+最小示例：
+
+```json
+{
+  "survey_date": "20260418",
+  "rice_leaf_age": 4.5,
+  "BaiCao": { "leaf_age": 2, "mass": 100 },
+  "QianJinZi": { "leaf_age": 0, "mass": 0 },
+  "KuoYeCao": { "mass": 0 },
+  "SuoCao": { "mass": 0 }
+}
+```
+
+##### `plant_protection.rice_safety_survey`
+
+最小示例：
+
+```json
+{
+  "survey_date": "20260423",
+  "rice_injury_level": "无"
+}
+```
+
+##### `plant_protection.control_effect_survey`
+
+最小示例：
+
+```json
+{
+  "survey_date": "20260427",
+  "control_date": "20260420",
+  "previous_injury_level": "无",
+  "survey_data_before_treatment": {},
+  "rice_leaf_age": 4.5,
+  "rice_injury_level": "无",
+  "BaiCao": { "control_effect": 1, "leaf_age": 0, "mass": 0 },
+  "QianJinZi": { "control_effect": 1, "leaf_age": 0, "mass": 0 },
+  "KuoYeCao": { "control_effect": 1, "mass": 0 },
+  "SuoCao": { "control_effect": 1, "mass": 0 }
+}
+```
+
+##### `plant_protection.service_effect_evaluation`
+
+| field | type | required | notes |
+|---|---|---|---|
+| `is_satisfied` / `isSatisfied` | `bool` | yes | 是否满意 |
+| `evaluated_at` / `evaluatedAt` | `datetime` | no | 评价时间 |
+| `evaluator_name` / `evaluatorName` | `string` | no | 评价人 |
+| `contact_info` / `contactInfo` | `string` | no | 联系方式 |
+| `comment` | `string` | no | 备注 |
+
+行为：
+
+1. `true`：结束
+2. `false`：会创建一个 `plant_protection.service_effect_survey` 正式任务，返回到 `farming_task_ids`
+
+##### `plant_protection.service_effect_survey`
+
+| field | type | required | notes |
+|---|---|---|---|
+| `survey_date` / `surveyDate` | `date` | yes | 现场确认日期 |
+| `actual_situation` / `actualSituation` | `string` | yes | 现场实际情况 |
+| `reason` | `string` | yes | 原因 |
+| `comment` | `string` | no | 备注 |
+
+行为：
+
+1. 当前录入后链路结束
+2. 当前不会新增 `TaskIntent`、`ReviewRequest`、`FarmingTask`
+
+### 4.3 执行结果录入
+
+`POST /api/tasks/{taskId}/execution-completions`
+
+请求体：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `result_payload` | `object` | no | 默认 `{}` |
+| `operation_date` | `datetime` | yes | 作业日期 |
+| `actual_start_at` | `datetime \| null` | no | 实际开始时间 |
+| `actual_end_at` | `datetime \| null` | no | 实际结束时间 |
+| `actual_area` | `decimal \| null` | no | 实际面积 |
+| `actual_amount` | `decimal \| null` | no | 实际药量/肥量 |
+| `amount_unit` | `string \| null` | no | 单位 |
+
+成功响应：
+
+| field | type | notes |
+|---|---|---|
+| `execution_id` | `int` | 执行 id |
+| `execution_record_id` | `int` | 执行记录 id |
+| `event_record_id` | `int` | 事件 id |
+| `calendar_item_ids` | `int[]` | 新生成的下游 CalendarItem |
+
+---
+
+## 5. 复核接口
+
+### 5.1 复核详情
+
+`GET /api/review-requests/{reviewRequestId}`
+
+响应体：
+
+| field | type | notes |
+|---|---|---|
+| `review_request_id` | `int` | 主键 |
+| `planting_plan_id` | `int` | 计划 id |
+| `review_type` | `string` | 复核类型 |
+| `status` | `string` | 当前状态 |
+| `decision` | `string \| null` | 已提交结论 |
+| `title` | `string` | 标题 |
+| `description` | `string \| null` | 描述 |
+| `decision_payload` | `object` | 决策上下文 |
+| `resolved_by` | `string \| null` | 处理人 |
+| `resolved_at` | `datetime \| null` | 处理时间 |
+| `source_task_intent` | `ReviewRequestTaskIntentResponse \| null` | 来源建议 |
+| `linked_farming_task` | `ReviewRequestFarmingTaskResponse \| null` | 已关联正式任务 |
+| `operation_plans` | `ReviewRequestOperationPlanResponse[]` | 候选方案 |
+| `source_execution_record` | `ReviewRequestExecutionRecordResponse \| null` | 来源调查记录 |
+| `event_records` | `ReviewRequestEventRecordResponse[]` | 相关事件 |
+
+### 5.2 复核处理
+
+`POST /api/review-requests/{reviewRequestId}/resolve`
+
+请求体：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `decision` | `string` | yes | 见下方枚举 |
+| `decision_payload` | `object` | no | 默认 `{}` |
+| `decision_note` | `string \| null` | no | 备注 |
+| `resolved_by` | `string \| null` | no | 处理人 |
+
+允许的 `decision`：
+
+1. `approve`
+2. `reject`
+3. `adjust`
+4. `no_action`
+5. `need_more_info`
+
+成功响应：
+
+| field | type | notes |
+|---|---|---|
+| `review_request_id` | `int` | 复核 id |
+| `event_record_id` | `int` | 事件 id |
+| `decision` | `string \| null` | 最终结论 |
+| `status` | `string` | 当前状态 |
+| `task_intent_ids` | `int[]` | 受影响建议 |
+| `farming_task_ids` | `int[]` | 新建正式任务 |
+| `operation_plan_ids` | `int[]` | 新建方案 |
+| `resolved_at` | `datetime \| null` | 处理时间 |
+
+---
+
+## 6. 前端实现时的接口消费建议
+
+1. 所有写接口成功后都用返回 id 刷新详情页
+2. `survey-results` 是多分支接口，前端必须检查 `farming_task_ids`、`task_intent_ids`、`review_request_ids`
+3. `task_subtype` 是页面表单切换的主分流字段
+4. `404` 统一可按“对象不存在或已删除”处理
+5. `400` 统一可按业务校验失败处理，直接展示 `detail`
+6. 如果要排查后端日志或联调问题，记录响应头中的 `X-Request-ID`
+
+---
+
+## 7. 当前需要特别注意的 code / id 字段
+
+### 7.1 前端需要传编码，且已有查询接口
+
+| field | UI 应显示什么 | 当前真实传值 | 当前问题 |
+|---|---|---|---|
+| `culti_type_code` | 稻作类型 | code_dict.code | 用 `/api/code-dicts?category=culti_type` 查询 |
+| `planting_method_code` | 种植方式 | code_dict.code | 用 `/api/code-dicts?category=sowingmtd` 查询 |
+| `variety_id` | 品种 | rice_variety.id | 用 `/api/rice-varieties?query=` 查询 |
+
+### 7.2 当前只适合机器分流，不适合直接展示给用户
+
+这些字段当前建议由前端本地映射中文文案，不要直接裸展示：
+
+1. `task_subtype`
+2. `review_type`
+3. `event_type`
+4. `record_type`
+5. `stage_code`
+6. 各类 `status`

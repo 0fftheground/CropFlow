@@ -1,6 +1,6 @@
 # CropFlow Docs
 
-本目录按文档用途分层，避免所有设计材料堆在同一层级。
+本目录只保留当前仍有持续维护价值的正式文档，并按用途分层，避免设计材料和一次性协作文档混在一起。
 
 ## 仓库级入口说明
 
@@ -34,13 +34,20 @@ Use $cropflow-wrap-up to summarize today, update memory, and prepare commit acti
 2. ../project-context/development-plan.md
 3. ../project-context/current-memory.md
 4. overview/team-technical-briefing.md
-5. overview/meeting.md
-6. planning/development-roadmap.md
-7. planning/team-work-division.md
-8. planning/agent-development-guidelines.md
-9. model/data-model.md
-10. workflow/task-workflow-matrix.md
-11. workflow/background-job-matrix.md
+5. planning/development-roadmap.md
+6. planning/team-work-division.md
+7. planning/agent-development-guidelines.md
+8. model/data-model.md
+9. workflow/task-workflow-matrix.md
+10. workflow/background-job-matrix.md
+```
+
+说明：
+
+```text
+1. 一次性会议议程、历史 session 记录和重复二级入口已经移除或并入稳定入口。
+2. 如果只是恢复当前工作，不要顺着 docs/ 目录逐个打开，先看 project-context/ 下的稳定入口。
+3. docs/planning/team-work-division/、docs/planning/P1/ 和 docs/planning/P2/ 仍然保留，但建议通过 project-context/entrypoints.md 按任务定向进入。
 ```
 
 ## 目录结构
@@ -49,12 +56,20 @@ Use $cropflow-wrap-up to summarize today, update memory, and prepare commit acti
 docs/
 ├── README.md
 ├── overview/
-│   ├── team-technical-briefing.md
-│   └── meeting.md
+│   └── team-technical-briefing.md
 ├── planning/
+│   ├── README.md
+│   ├── P1/
+│   │   └── plant-protection-closed-loop-schedule.md
+│   ├── P2/
+│   │   ├── p2-backend-runbook.md
+│   │   ├── p2-backend-weed-implementation-breakdown.md
+│   │   ├── p2-v1-migration-plan.md
+│   │   └── p2-v1-migration-scope.md
 │   ├── development-roadmap.md
-│   ├── non-code-integration-package-template.md
-│   ├── plant-protection-closed-loop-schedule.md
+│   ├── guides/
+│   │   ├── agent-development-guidelines.md
+│   │   └── non-code-integration-package-template.md
 │   ├── team-work-division.md
 │   ├── team-work-division/
 │   │   ├── product-architecture-owner.md
@@ -64,8 +79,8 @@ docs/
 │   │   ├── irrigation.md
 │   │   ├── fertilization.md
 │   │   ├── remote-sensing.md
-│   │   └── frontend.md
-│   └── agent-development-guidelines.md
+│   │   ├── frontend.md
+│   │   └── frontend-weed-handoff.md
 ├── architecture/
 │   ├── architecture.md
 │   ├── system-function.md
@@ -97,6 +112,14 @@ docs/
 | `workflow/` | 农事项流程、后台任务、流程图来源和流程拆解 |
 | `api/` | 外部算法接口、后续 OpenAPI / API contract |
 | `decisions/` | 设计决策记录 |
+
+## 精简规则
+
+```text
+1. 一次性会议材料、阶段性 session 手记、重复目录入口不再单独保留。
+2. 已被 project-context/ 或正式设计文档替代的说明稿，优先合并后删除。
+3. 如果一份文档只服务某个短期联调动作，优先并入对应正式 runbook 或 handoff 文档。
+```
 
 ## 维护规则
 

@@ -1,3 +1,4 @@
+from app.services.code_dict_queries import CodeDictOption, CodeDictQueryService
 from app.services.calendar_tasks import (
     AdditionalTreatmentDiagnosisResult,
     HttpWeedDiagnosisClient,
@@ -23,6 +24,8 @@ from app.services.planting_plans import (
     PlantingPlanUpdateInput,
 )
 from app.services.planting_plan_queries import PlantingPlanM2Snapshot, PlantingPlanQueryService
+from app.services.rice_variety_queries import RiceVarietyOption, RiceVarietyQueryService
+from app.services.review_request_queries import ReviewRequestDetail, ReviewRequestQueryService
 from app.services.review_requests import (
     ALLOWED_REVIEW_DECISIONS,
     ReviewRequestResolveInput,
@@ -39,10 +42,13 @@ from app.services.task_executions import (
     TaskExecutionCompleteResult,
     TaskExecutionService,
 )
+from app.services.task_queries import FarmingTaskDetail, FarmingTaskQueryService
 
 __all__ = [
     "AdditionalTreatmentDiagnosisResult",
     "ALLOWED_REVIEW_DECISIONS",
+    "CodeDictOption",
+    "CodeDictQueryService",
     "HttpWeedDiagnosisClient",
     "InjuryMitigationDiagnosisResult",
     "MockWeatherProvider",
@@ -59,7 +65,11 @@ __all__ = [
     "PostTreatmentSurveyRecommendation",
     "PreTreatmentSurveyRecommendation",
     "SoilTreatmentDiagnosisResult",
+    "RiceVarietyOption",
+    "RiceVarietyQueryService",
     "ReviewRequestResolveInput",
+    "ReviewRequestDetail",
+    "ReviewRequestQueryService",
     "ReviewRequestResolveResult",
     "ReviewRequestService",
     "SurveyDateRecommendationService",
@@ -69,6 +79,8 @@ __all__ = [
     "TaskExecutionCompleteInput",
     "TaskExecutionCompleteResult",
     "TaskExecutionService",
+    "FarmingTaskDetail",
+    "FarmingTaskQueryService",
     "TaskGenerationService",
     "WeatherProvider",
     "WeedDiagnosisClient",

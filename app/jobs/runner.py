@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 from app.core.config import get_settings
+from app.core.logging import configure_logging
 from app.db.session import get_session_factory
 from app.jobs.scheduler import BackgroundJobScheduler
 
@@ -28,10 +29,7 @@ async def run_scheduler_forever() -> None:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging()
     try:
         asyncio.run(run_scheduler_forever())
     except KeyboardInterrupt:

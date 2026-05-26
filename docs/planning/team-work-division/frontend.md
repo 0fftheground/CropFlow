@@ -8,6 +8,14 @@
 
 因此本方向当前任务以非代码交付为主，用于补齐页面信息架构和字段需求，而不是立即交付正式页面代码。
 
+当前如果要支持杂草防治样板链路联调，请优先阅读：
+
+```text
+docs/planning/team-work-division/frontend-weed-handoff.md
+```
+
+该文档只保留“当前后端已实现、前端可直接接入”的页面需求和接口契约。
+
 ## 当前阶段任务总表
 
 | 方向 | 当前要交什么 | 产出形式 | 依赖谁拍板 |
@@ -149,8 +157,8 @@
 | `survey_entry` | 调查录入 | 任务详情 | `FarmingTask` / 调查表单 | 提交药前调查、药后调查结果 | `task_detail` | `task_detail` / `review_request` | 药前与药后调查可共用页面骨架 |
 | `execution_feedback` | 执行反馈 | 任务详情 | `ExecutionRecord` / `Feedback` | 提交执行结果、附件、异常说明 | `task_detail` | `plan_detail` | 适用于土壤封闭、茎叶除草、补防 |
 | `review_request` | 人工复核 | 计划详情 / 任务详情 | `ReviewRequest` / `OperationPlan` / 调查结果 | approve / reject / adjust / no_action / need_more_info | `plan_detail` / `task_detail` | `task_detail` / `plan_detail` | 主要用于立即补防和药害缓解 |
-| `evaluation_entry` | 服务评价录入 | 计划详情 / 服务评价入口 | `Evaluation` | 提交满意度、评价人、联系方式 | `plan_detail` | `service_effect_survey` / `plan_detail` | 满意则结束，不满意进入服务效果调查 |
-| `service_effect_survey` | 服务效果调查 | 服务评价不满意后 | `FarmingTask` / `Feedback` / `ReviewRequest` | 录入现场复查结果 | `evaluation_entry` | `plan_detail` | 当前以人工录入为主 |
+| `evaluation_entry` | 服务评价录入 | 计划详情 / 服务评价入口 | `FarmingTask` / `ExecutionRecord` | 提交满意度、评价人、联系方式 | `plan_detail` | `service_effect_survey` / `plan_detail` | 当前后端复用 `POST /tasks/{id}/survey-results`；满意则结束，不满意进入服务效果调查 |
+| `service_effect_survey` | 服务效果调查 | 服务评价不满意后 | `FarmingTask` / `ExecutionRecord` | 录入现场实际情况、原因和备注 | `evaluation_entry` | `plan_detail` | 当前以人工录入为主，录入后链路结束 |
 
 ### 2. 页面字段缺口建议稿
 

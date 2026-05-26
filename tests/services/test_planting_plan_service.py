@@ -107,11 +107,11 @@ def test_create_plan_derives_variety_name_and_field_relations() -> None:
         rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
         event_record_repository=FakeEventRecordRepository(),
         plan_orchestrator=plan_orchestrator,
+        plan_code_factory=lambda: "PLAN-AUTO-001",
     )
 
     result = service.create(
         PlantingPlanCreateInput(
-            plan_code="PLAN-001",
             plan_name="早稻计划",
             farm_id=1,
             field_ids=[10, 11],
@@ -124,6 +124,7 @@ def test_create_plan_derives_variety_name_and_field_relations() -> None:
         ),
     )
 
+    assert result.planting_plan.plan_code == "PLAN-AUTO-001"
     assert result.planting_plan.variety_name == "黄广农占"
     assert result.field_ids == [10, 11]
     assert plan_orchestrator.triggered_plan_ids == [result.planting_plan.id]
@@ -236,11 +237,11 @@ def test_create_plan_records_plan_created_event_before_orchestration() -> None:
         rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
         event_record_repository=event_repository,
         plan_orchestrator=plan_orchestrator,
+        plan_code_factory=lambda: "PLAN-AUTO-002",
     )
 
     result = service.create(
         PlantingPlanCreateInput(
-            plan_code="PLAN-001",
             plan_name="早稻计划",
             farm_id=1,
             field_ids=[10],
@@ -253,6 +254,7 @@ def test_create_plan_records_plan_created_event_before_orchestration() -> None:
     )
 
     assert result.planting_plan.id is not None
+    assert result.planting_plan.plan_code == "PLAN-AUTO-002"
     assert event_repository.items[-1].event_type == "PlanCreated"
     assert event_repository.items[-1].processing_status == "received"
     assert plan_orchestrator.triggered_plan_ids == [result.planting_plan.id]

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Callable
+from uuid import uuid4
 from typing import Any
 
 from app.core.constants import (
@@ -35,7 +37,6 @@ class PlantingPlanDetails:
 
 @dataclass(slots=True)
 class PlantingPlanCreateInput:
-    plan_code: str
     plan_name: str
     farm_id: int
     field_ids: list[int]
@@ -44,6 +45,7 @@ class PlantingPlanCreateInput:
     crop_name: str
     variety_id: int
     sowing_date: date
+    plan_code: str | None = None
     year: int | None = None
     transplant_date: date | None = None
     harvest_date: date | None = None
@@ -87,6 +89,7 @@ class PlantingPlanService:
         rice_variety_repository: RiceVarietyRepository,
         event_record_repository: EventRecordRepository | None = None,
         plan_orchestrator: PlanEventDispatcher | None = None,
+        plan_code_factory: Callable[[], str] | None = None,
     ) -> None:
         self.planting_plan_repository = planting_plan_repository
         self.field_repository = field_repository
@@ -94,18 +97,20 @@ class PlantingPlanService:
         self.rice_variety_repository = rice_variety_repository
         self.event_record_repository = event_record_repository
         self.plan_orchestrator = plan_orchestrator
+        self.plan_code_factory = plan_code_factory
 
     def create(self, payload: PlantingPlanCreateInput) -> PlantingPlanDetails:
         self._validate_status(payload.status)
         self._validate_field_ids(payload.field_ids)
-        if self.planting_plan_repository.get_by_plan_code(payload.plan_code) is not None:
-            raise ValueError(f"Planting plan code {payload.plan_code} already exists.")
+        plan_code = payload.plan_code or self._generate_plan_code()
+        if self.planting_plan_repository.get_by_plan_code(plan_code) is not None:
+            raise ValueError(f"Planting plan code {plan_code} already exists.")
 
         variety = self._get_variety(payload.variety_id)
         self._ensure_fields_exist(payload.field_ids)
 
         planting_plan = PlantingPlan(
-            plan_code=payload.plan_code,
+            plan_code=plan_code,
             plan_name=payload.plan_name,
             farm_id=payload.farm_id,
             year=payload.year,
@@ -137,6 +142,13 @@ class PlantingPlanService:
             idempotency_key=f"plan-created:{planting_plan.id}",
         )
         return self.get_details(planting_plan.id)
+
+    def _generate_plan_code(self) -> str:
+        for _ in range(10):
+            candidate = self.plan_code_factory() if self.plan_code_factory is not None else _default_plan_code()
+            if self.planting_plan_repository.get_by_plan_code(candidate) is None:
+                return candidate
+        raise ValueError("Unable to generate unique planting plan code.")
 
     def get_details(self, planting_plan_id: int) -> PlantingPlanDetails:
         planting_plan = self.planting_plan_repository.get(planting_plan_id)
@@ -289,3 +301,7 @@ class PlantingPlanService:
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _default_plan_code() -> str:
+    return f"PLAN-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid4().hex[:6].upper()}"

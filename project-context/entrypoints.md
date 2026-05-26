@@ -213,11 +213,15 @@ docs/planning/team-work-division.md
 
 docs/planning/team-work-division/
   适合按具体角色或方向定向阅读，不必每次看完整总文档。
-  进入前建议先读 project-context/entrypoints-team-work-division.md。
+  建议按当前任务直接进入对应子文档：
+  - 范围冻结、规则拍板、跨方向收口：product-architecture-owner.md
+  - 核心对象、API contract、编排骨架：core-backend.md
+  - 业务方向细节：calendar-stage.md / plant-protection.md / irrigation.md / fertilization.md / remote-sensing.md
+  - 页面范围和联调：frontend.md / frontend-weed-handoff.md
 
 docs/planning/P1/
-  适合看杂草样板闭环当前阶段的具体清单、冻结口径和剩余事项。
-  进入前建议先读 project-context/entrypoints-p1.md。
+  适合回看杂草样板闭环的历史收口材料和业务语义。
+  建议先读 todo-list.md 了解已确认项和剩余事项；只有在需要逐项核对业务链路时，再读 植保清单.md。
 ```
 
 ### 算法接口 / 契约

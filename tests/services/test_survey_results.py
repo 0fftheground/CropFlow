@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
+import pytest
+
 from app.models import (
     CalendarItem,
     CodeDict,
@@ -38,9 +40,22 @@ class FakePlantingPlanRepository:
 @dataclass
 class FakeFarmingTaskRepository:
     tasks: dict[int, FarmingTask]
+    items: list[FarmingTask] = field(default_factory=list)
+    next_id: int = 11
 
     def get(self, farming_task_id: int) -> FarmingTask | None:
         return self.tasks.get(farming_task_id)
+
+    def add(self, farming_task: FarmingTask) -> FarmingTask:
+        self.items.append(farming_task)
+        return farming_task
+
+    def flush(self) -> None:
+        for farming_task in self.items:
+            if farming_task.id is None:
+                farming_task.id = self.next_id
+                self.next_id += 1
+            self.tasks[farming_task.id] = farming_task
 
 
 @dataclass
@@ -314,3 +329,93 @@ def test_control_effect_survey_creates_service_evaluation_calendar_item_and_no_a
     assert calendar_repo.items[0].task_subtype == "plant_protection.service_effect_evaluation"
     assert task_intent_repo.items[0].status == "no_action"
     assert review_repo.items == []
+
+
+def test_service_effect_evaluation_satisfied_ends_without_followup_task() -> None:
+    service, task_intent_repo, review_repo, calendar_repo = make_service("plant_protection.service_effect_evaluation")
+
+    result = service.record_survey_result(
+        10,
+        {
+            "is_satisfied": True,
+            "evaluated_at": "2026-04-30T09:30:00",
+            "evaluator_name": "张三",
+            "contact_info": "13800138000",
+        },
+    )
+
+    assert result.farming_tasks == []
+    assert task_intent_repo.items == []
+    assert review_repo.items == []
+    assert calendar_repo.items == []
+
+
+def test_service_effect_evaluation_unsatisfied_creates_followup_task() -> None:
+    service, task_intent_repo, review_repo, calendar_repo = make_service("plant_protection.service_effect_evaluation")
+
+    result = service.record_survey_result(
+        10,
+        {
+            "is_satisfied": False,
+            "evaluated_at": "2026-04-30T09:30:00",
+            "evaluator_name": "张三",
+            "contact_info": "13800138000",
+            "comment": "需要上门确认药后情况。",
+        },
+    )
+
+    assert len(result.farming_tasks) == 1
+    assert result.farming_tasks[0].task_subtype == "plant_protection.service_effect_survey"
+    assert result.farming_tasks[0].title == "服务人员现场确认"
+    assert result.farming_tasks[0].parent_task_id == 10
+    assert result.farming_tasks[0].source_execution_record_id == result.execution_record.id
+    assert task_intent_repo.items == []
+    assert review_repo.items == []
+    assert calendar_repo.items == []
+
+
+def test_service_effect_evaluation_requires_satisfaction_field() -> None:
+    service, _, _, _ = make_service("plant_protection.service_effect_evaluation")
+
+    with pytest.raises(ValueError, match="Missing required payload field"):
+        service.record_survey_result(
+            10,
+            {
+                "evaluated_at": "2026-04-30T09:30:00",
+                "evaluator_name": "张三",
+                "contact_info": "13800138000",
+            },
+        )
+
+
+def test_service_effect_survey_records_manual_result_and_ends() -> None:
+    service, task_intent_repo, review_repo, calendar_repo = make_service("plant_protection.service_effect_survey")
+
+    result = service.record_survey_result(
+        10,
+        {
+            "survey_date": "20260501",
+            "actual_situation": "现场确认局部杂草残留，未继续扩散。",
+            "reason": "前期喷施覆盖不均匀。",
+            "comment": "已向农户说明情况。",
+        },
+    )
+
+    assert result.farming_tasks == []
+    assert task_intent_repo.items == []
+    assert review_repo.items == []
+    assert calendar_repo.items == []
+
+
+def test_service_effect_survey_requires_actual_situation_and_reason() -> None:
+    service, _, _, _ = make_service("plant_protection.service_effect_survey")
+
+    with pytest.raises(ValueError, match="Expected non-empty string payload field"):
+        service.record_survey_result(
+            10,
+            {
+                "survey_date": "20260501",
+                "actual_situation": "",
+                "reason": "前期喷施覆盖不均匀。",
+            },
+        )

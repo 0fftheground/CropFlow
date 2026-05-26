@@ -29,6 +29,7 @@ TASK_SUBTYPE_INJURY_MITIGATION = "plant_protection.injury_mitigation"
 TASK_SUBTYPE_RICE_SAFETY_SURVEY = "plant_protection.rice_safety_survey"
 TASK_SUBTYPE_CONTROL_EFFECT_SURVEY = "plant_protection.control_effect_survey"
 TASK_SUBTYPE_SERVICE_EFFECT_EVALUATION = "plant_protection.service_effect_evaluation"
+TASK_SUBTYPE_SERVICE_EFFECT_SURVEY = "plant_protection.service_effect_survey"
 
 CALENDAR_STATUS_ACTIVE = "active"
 CALENDAR_STATUS_GENERATED = "generated"

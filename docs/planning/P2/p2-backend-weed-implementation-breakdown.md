@@ -361,6 +361,49 @@ plant_protection.injury_mitigation
 | 审核处理 | `POST /review-requests/{id}/resolve` |
 | 执行回调 | `POST /executions/{id}/status-callback` |
 
+服务评价与现场确认当前约定：
+
+```json
+POST /tasks/{service_effect_evaluation_task_id}/survey-results
+{
+  "result_payload": {
+    "is_satisfied": false,
+    "evaluated_at": "2026-05-26T10:30:00",
+    "evaluator_name": "张三",
+    "contact_info": "13800138000",
+    "comment": "需要现场复查"
+  }
+}
+```
+
+```json
+201 Created
+{
+  "execution_record_id": 101,
+  "event_record_id": 201,
+  "farming_task_ids": [301],
+  "task_intent_ids": [],
+  "review_request_ids": []
+}
+```
+
+```json
+POST /tasks/{service_effect_survey_task_id}/survey-results
+{
+  "result_payload": {
+    "survey_date": "20260501",
+    "actual_situation": "现场确认局部杂草残留，未继续扩散。",
+    "reason": "前期喷施覆盖不均匀。",
+    "comment": "已向农户说明情况。"
+  }
+}
+```
+
+```text
+1. service_effect_evaluation 要求至少传 is_satisfied；为 false 时会直接生成 service_effect_survey 正式 FarmingTask。
+2. service_effect_survey 当前要求 survey_date、actual_situation、reason；录入完成后链路结束，不自动生成后续对象。
+```
+
 联调优先级：
 
 ```text

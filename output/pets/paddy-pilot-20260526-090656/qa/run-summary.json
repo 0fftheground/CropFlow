@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "run_dir": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656",
+  "spritesheet": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\final\\spritesheet.webp",
+  "validation": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\final\\validation.json",
+  "contact_sheet": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\qa\\contact-sheet.png",
+  "review": "F:\\workspace\\CropFlow\\output\\pets\\paddy-pilot-20260526-090656\\qa\\review.json",
+  "package": "C:\\Users\\00778807\\.codex\\pets\\paddy-pilot"
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date
 from io import BytesIO
@@ -356,6 +357,38 @@ def test_http_weed_diagnosis_client_surfaces_http_error_body(monkeypatch: pytest
         )
 
 
+def test_http_weed_diagnosis_client_logs_response_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client = HttpWeedDiagnosisClient("http://diagnosis.local")
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return b'{"code":200,"data":{"need_mitigation":true,"measures":["\\u5c3f\\u7d203\\u516c\\u65a4/\\u4ea9"]}}'
+
+    monkeypatch.setattr("app.services.calendar_tasks.request.urlopen", lambda *args, **kwargs: FakeResponse())
+
+    with caplog.at_level(logging.INFO):
+        result = client.diagnose_injury_mitigation(
+            survey_date=date(2026, 4, 22),
+            rice_injury_level="中",
+        )
+
+    assert result.need_mitigation is True
+    assert "Calling weed diagnosis API" in caplog.text
+    assert "Weed diagnosis API succeeded" in caplog.text
+    assert "need_mitigation" in caplog.text
+
+
 def test_http_weed_diagnosis_client_surfaces_connectivity_error(monkeypatch: pytest.MonkeyPatch) -> None:
     client = HttpWeedDiagnosisClient("http://diagnosis.local")
 
@@ -365,6 +398,45 @@ def test_http_weed_diagnosis_client_surfaces_connectivity_error(monkeypatch: pyt
     monkeypatch.setattr("app.services.calendar_tasks.request.urlopen", fake_urlopen)
 
     with pytest.raises(RuntimeError, match="connection refused"):
+        client.diagnose_injury_mitigation(
+            survey_date=date(2026, 4, 22),
+            rice_injury_level="无",
+        )
+
+
+def test_http_weed_diagnosis_client_surfaces_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = HttpWeedDiagnosisClient("http://diagnosis.local")
+
+    def fake_urlopen(*args, **kwargs):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr("app.services.calendar_tasks.request.urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="timed out"):
+        client.diagnose_injury_mitigation(
+            survey_date=date(2026, 4, 22),
+            rice_injury_level="无",
+        )
+
+
+def test_http_weed_diagnosis_client_surfaces_missing_required_field(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = HttpWeedDiagnosisClient("http://diagnosis.local")
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return b'{"code":200,"data":{}}'
+
+    monkeypatch.setattr("app.services.calendar_tasks.request.urlopen", lambda *args, **kwargs: FakeResponse())
+
+    with pytest.raises(ValueError, match="did not return need_mitigation"):
         client.diagnose_injury_mitigation(
             survey_date=date(2026, 4, 22),
             rice_injury_level="无",

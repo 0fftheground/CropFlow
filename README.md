@@ -108,7 +108,7 @@ docs/README.md
 docs/overview/team-technical-briefing.md     团队技术说明、系统架构、核心对象和关键流转
 docs/planning/development-roadmap.md         当前阶段、开工前契约和推进节奏
 docs/planning/team-work-division.md          各方向分工、职责和交付物
-docs/planning/agent-development-guidelines.md AI agent 分工开发规范、任务模板和验收清单
+docs/planning/guides/agent-development-guidelines.md AI agent 分工开发规范、任务模板和验收清单
 ```
 
 数据模型和流程：
@@ -174,8 +174,8 @@ REST API + OpenAPI
 
 ```text
 AGENTS.md
-docs/planning/agent-development-guidelines.md
+docs/planning/guides/agent-development-guidelines.md
 ```
 
 `AGENTS.md` 记录项目核心边界、命名规则、文档优先级和编码约束。  
-`docs/planning/agent-development-guidelines.md` 记录 agent 任务模板、代码交付形态和验收清单。
+`docs/planning/guides/agent-development-guidelines.md` 记录 agent 任务模板、代码交付形态和验收清单。

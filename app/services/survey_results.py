@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from app.core.constants import (
@@ -10,8 +10,9 @@ from app.core.constants import (
     EXECUTION_MODE_MANUAL,
     EXECUTION_RECORD_TYPE_SURVEY_RESULT,
     EXECUTION_STATUS_COMPLETED,
+    TASK_SUBTYPE_SERVICE_EFFECT_SURVEY,
 )
-from app.models import EventRecord, Execution, ExecutionRecord, ReviewRequest, TaskIntent
+from app.models import EventRecord, Execution, ExecutionRecord, FarmingTask, ReviewRequest, TaskIntent
 from app.repositories import (
     EventRecordRepository,
     ExecutionRecordRepository,
@@ -39,6 +40,7 @@ class SurveyResultRecorded:
 class SurveyResultProcessingResult:
     execution_record: ExecutionRecord
     event_record: EventRecord
+    farming_tasks: list[FarmingTask]
     task_intents: list[TaskIntent]
     review_requests: list[ReviewRequest]
 
@@ -70,6 +72,7 @@ class SurveyResultService:
         if farming_task is None:
             raise LookupError(f"Farming task {farming_task_id} does not exist.")
 
+        self._validate_result_payload(farming_task.task_subtype, result_payload)
         execution = self._get_or_create_execution(farming_task)
         execution_record = ExecutionRecord(
             planting_plan_id=farming_task.planting_plan_id,
@@ -99,9 +102,18 @@ class SurveyResultService:
         return SurveyResultProcessingResult(
             execution_record=execution_record,
             event_record=event_record,
+            farming_tasks=orchestrator_result.farming_tasks,
             task_intents=orchestrator_result.task_intents,
             review_requests=orchestrator_result.review_requests,
         )
+
+    def _validate_result_payload(self, task_subtype: str, result_payload: dict[str, Any]) -> None:
+        if task_subtype != TASK_SUBTYPE_SERVICE_EFFECT_SURVEY:
+            return
+
+        _parse_required_payload_date(result_payload, "survey_date", "surveyDate")
+        _require_non_empty_string(result_payload, "actual_situation", "actualSituation")
+        _require_non_empty_string(result_payload, "reason")
 
     def _get_or_create_execution(self, farming_task) -> Execution:
         executions = self.execution_repository.list_by_task(farming_task.id)
@@ -152,3 +164,32 @@ class SurveyResultService:
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _parse_required_payload_date(payload: dict[str, Any], *keys: str) -> date:
+    raw_value = _get_payload_value(payload, *keys)
+    if isinstance(raw_value, datetime):
+        return raw_value.date()
+    if isinstance(raw_value, date):
+        return raw_value
+    if isinstance(raw_value, str):
+        if "T" in raw_value:
+            return datetime.fromisoformat(raw_value).date()
+        if "-" in raw_value:
+            return date.fromisoformat(raw_value)
+        return datetime.strptime(raw_value, "%Y%m%d").date()
+    raise ValueError(f"Expected date payload field in keys {keys!r}.")
+
+
+def _require_non_empty_string(payload: dict[str, Any], *keys: str) -> str:
+    raw_value = _get_payload_value(payload, *keys)
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        raise ValueError(f"Expected non-empty string payload field in keys {keys!r}.")
+    return raw_value.strip()
+
+
+def _get_payload_value(payload: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in payload:
+            return payload[key]
+    raise ValueError(f"Missing required payload field. expected one of {keys!r}.")

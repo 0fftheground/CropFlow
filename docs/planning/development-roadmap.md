@@ -27,7 +27,7 @@ docs/model/data-model-validation.md
 docs/workflow/task-workflow-matrix.md
 docs/workflow/background-job-matrix.md
 docs/api/
-docs/planning/agent-development-guidelines.md
+docs/planning/guides/agent-development-guidelines.md
 ```
 
 ---

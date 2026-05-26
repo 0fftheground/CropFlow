@@ -429,10 +429,10 @@ EventRecord.payload
 
 | 文档 | 适合阅读对象 | 内容 |
 |---|---|---|
-| `docs/overview/meeting.md` | 首次团队说明会参会人员 | 会议目标、议程、现场确认问题和会后行动项 |
+| `project-context/entrypoints.md` | 新 session、AI agent、需要按任务定向阅读的人 | 仓库级稳定入口、阅读顺序和按任务分类的文档索引 |
 | `docs/planning/team-work-division.md` | 产品 / 架构负责人、后端、前端、各业务方向负责人 | 各方向职责、近期任务、交付物 |
 | `docs/planning/development-roadmap.md` | 全体开发人员和项目协作人员 | 当前阶段、开工前契约、第一条垂直闭环、后续扩展节奏 |
-| `docs/planning/agent-development-guidelines.md` | 使用 AI agent 分工开发的人员 | Agent 任务模板、代码交付形态、禁止事项和验收清单 |
+| `docs/planning/guides/agent-development-guidelines.md` | 使用 AI agent 分工开发的人员 | Agent 任务模板、代码交付形态、禁止事项和验收清单 |
 
 ---
 
