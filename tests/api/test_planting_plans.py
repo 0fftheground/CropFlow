@@ -9,7 +9,17 @@ from fastapi.testclient import TestClient
 from app.api.deps import get_planting_plan_query_service, get_planting_plan_service
 from app.db.session import get_db
 from app.main import app
-from app.models import CalendarItem, EventRecord, FarmingTask, PlantingPlan, ReviewRequest, TaskIntent
+from app.models import (
+    CalendarItem,
+    CropStageState,
+    CropThermalTimeState,
+    EventRecord,
+    FarmingTask,
+    PlantingPlan,
+    ReviewRequest,
+    StagePredictionSnapshot,
+    TaskIntent,
+)
 from app.services import PlantingPlanDetails
 
 
@@ -159,6 +169,61 @@ class FakePlantingPlanQueryService:
             ),
         ]
 
+    def get_crop_stage_state(self, planting_plan_id: int):
+        if planting_plan_id == 404:
+            raise LookupError("missing")
+        return CropStageState(
+            id=7,
+            planting_plan_id=planting_plan_id,
+            current_stage_code="tillering",
+            current_stage_name="分蘖期",
+            stage_source="predicted",
+            effective_date=date(2026, 4, 20),
+            source_snapshot_id=8,
+            last_updated_at=datetime(2026, 5, 27, 9, 0, 0),
+            version=2,
+        )
+
+    def get_crop_thermal_time_state(self, planting_plan_id: int):
+        if planting_plan_id == 404:
+            raise LookupError("missing")
+        return CropThermalTimeState(
+            id=8,
+            planting_plan_id=planting_plan_id,
+            accumulated_thermal_time=Decimal("780.00"),
+            thermal_time_unit="degree_day",
+            base_temperature=Decimal("10.00"),
+            start_date=date(2026, 4, 10),
+            last_calculated_date=date(2026, 5, 27),
+            threshold_snapshot_id=8,
+            data_version="weather-20260527-v1",
+        )
+
+    def get_latest_stage_prediction_snapshot(self, planting_plan_id: int):
+        if planting_plan_id == 404:
+            raise LookupError("missing")
+        return StagePredictionSnapshot(
+            id=8,
+            planting_plan_id=planting_plan_id,
+            prediction_version=3,
+            prediction_source="plan_change",
+            algorithm_code="stage_prediction_algorithm",
+            algorithm_version="v1.0.0",
+            input_payload={"as_of_date": "2026-05-27"},
+            stage_timeline={
+                "stages": [
+                    {
+                        "stage_code": "tillering",
+                        "stage_name": "分蘖期",
+                        "start_date": "2026-04-20",
+                        "end_date": "2026-06-09",
+                        "key_date": "2026-04-20",
+                    },
+                ],
+            },
+            thermal_thresholds={"accumulated_thermal_time": 780},
+        )
+
 
 class DummySession:
     def commit(self) -> None:
@@ -225,6 +290,9 @@ def test_list_calendar_items_and_tasks_routes() -> None:
     intents_response = client.get("/api/planting-plans/1/task-intents")
     reviews_response = client.get("/api/planting-plans/1/review-requests")
     events_response = client.get("/api/planting-plans/1/event-records")
+    stage_response = client.get("/api/planting-plans/1/stage-state")
+    thermal_response = client.get("/api/planting-plans/1/thermal-time-state")
+    snapshot_response = client.get("/api/planting-plans/1/stage-predictions/latest")
 
     assert calendar_response.status_code == 200
     assert calendar_response.json()[0]["task_subtype"] == "plant_protection.stem_leaf_weed_pre_survey"
@@ -236,5 +304,11 @@ def test_list_calendar_items_and_tasks_routes() -> None:
     assert reviews_response.json()[0]["source_entity_type"] == "task_intent"
     assert events_response.status_code == 200
     assert events_response.json()[0]["event_type"] == "PlanCreated"
+    assert stage_response.status_code == 200
+    assert stage_response.json()["current_stage_code"] == "tillering"
+    assert thermal_response.status_code == 200
+    assert thermal_response.json()["accumulated_thermal_time"] == "780.00"
+    assert snapshot_response.status_code == 200
+    assert snapshot_response.json()["algorithm_code"] == "stage_prediction_algorithm"
 
     app.dependency_overrides.clear()

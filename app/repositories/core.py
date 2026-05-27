@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.models import (
     CalendarItem,
     CodeDict,
+    CropStageState,
+    CropThermalTimeState,
     EventRecord,
     Execution,
     ExecutionRecord,
@@ -19,6 +21,7 @@ from app.models import (
     PlantingPlanFieldRelation,
     RiceVariety,
     ReviewRequest,
+    StagePredictionSnapshot,
     TaskIntent,
 )
 
@@ -159,6 +162,40 @@ class EventRecordRepository(Repository):
             .order_by(EventRecord.occurred_at.desc(), EventRecord.id.desc())
         )
         return list(self.session.scalars(stmt))
+
+
+class StagePredictionSnapshotRepository(Repository):
+    def get(self, snapshot_id: int) -> StagePredictionSnapshot | None:
+        return self.session.get(StagePredictionSnapshot, snapshot_id)
+
+    def list_by_plan(self, planting_plan_id: int) -> list[StagePredictionSnapshot]:
+        stmt = (
+            select(StagePredictionSnapshot)
+            .where(StagePredictionSnapshot.planting_plan_id == planting_plan_id)
+            .order_by(StagePredictionSnapshot.prediction_version.desc(), StagePredictionSnapshot.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_latest_by_plan(self, planting_plan_id: int) -> StagePredictionSnapshot | None:
+        stmt = (
+            select(StagePredictionSnapshot)
+            .where(StagePredictionSnapshot.planting_plan_id == planting_plan_id)
+            .order_by(StagePredictionSnapshot.prediction_version.desc(), StagePredictionSnapshot.id.desc())
+            .limit(1)
+        )
+        return self.session.scalar(stmt)
+
+
+class CropStageStateRepository(Repository):
+    def get_by_plan(self, planting_plan_id: int) -> CropStageState | None:
+        stmt = select(CropStageState).where(CropStageState.planting_plan_id == planting_plan_id)
+        return self.session.scalar(stmt)
+
+
+class CropThermalTimeStateRepository(Repository):
+    def get_by_plan(self, planting_plan_id: int) -> CropThermalTimeState | None:
+        stmt = select(CropThermalTimeState).where(CropThermalTimeState.planting_plan_id == planting_plan_id)
+        return self.session.scalar(stmt)
 
 
 class CalendarItemRepository(Repository):

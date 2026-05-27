@@ -82,6 +82,7 @@
 | WF_TRANSPLANTING | planting | transplanting | none | 移栽 | none | 非直播时存在 |
 | WF_SOIL_SEAL_WEED | plant_protection | soil_sealing_weed_control | GENERAL_PLANT_PROTECTION_CONTROL | 土壤封闭除草 | soilTreatmentDiagnosisAlgorithm | soil_treatment_diagnosis 返回土壤封闭建议，先进入 TaskIntent / ReviewRequest，再决定是否生成正式任务和方案 |
 | WF_STEM_LEAF_WEED | plant_protection | stem_leaf_weed_control | GENERAL_PLANT_PROTECTION_SURVEY + GENERAL_PLANT_PROTECTION_CONTROL | 茎叶除草 | weedSurveyDateDiagnosisAlgorithm / weedTreatmentDiagnosisAlgorithm / afterTreatmentSurveyDateDiagnosisAlgorithm / injuryMitigationDiagnosisAlgorithm / additionalTreatmentDiagnosisAlgorithm | 药前调查日期由 weed_survey_date_diagnosis 返回；运行期诊断形成的防治或补防建议先进入 TaskIntent / ReviewRequest，再决定是否生成正式任务和方案 |
+| WF_DISEASE_PEST_REGULAR_SURVEY | plant_protection | regular_disease_pest_survey | GENERAL_PLANT_PROTECTION_SURVEY | 病虫害常规调查 | pestDiseaseSurveyWindowAlgorithm | `init-regular-survey` 初始化常规调查窗口，先维护 CalendarItem，到期后由 TaskDueCheckJob 生成正式调查任务 |
 | WF_DISEASE_PEST_SEALING_SURVEY | plant_protection | sealing_stage_disease_pest_survey | GENERAL_PLANT_PROTECTION_SURVEY | 封行病虫调查 | diseaseControlRecommendationAlgorithm / pestControlRecommendationAlgorithm / categorySpecificControlAlgorithm | 调查不一定触发防治 |
 | WF_DISEASE_PEST_SEALING_CONTROL | plant_protection | sealing_stage_disease_pest_control | GENERAL_PLANT_PROTECTION_CONTROL | 封行病虫防治 | none | 纯打药作业，消费调查后生成的 OperationPlan |
 | WF_DISEASE_PEST_SUDDEN_SURVEY | plant_protection | sudden_disease_pest_survey | GENERAL_PLANT_PROTECTION_SURVEY | 突发病虫调查 | diseaseControlRecommendationAlgorithm / pestControlRecommendationAlgorithm / categorySpecificControlAlgorithm | 调查不一定触发防治 |
@@ -116,7 +117,8 @@
 | jobKey | 调用算法 | 维护对象 | 说明 |
 |---|---|---|---|
 | SurveyDateRecommendationJob | weedSurveyDateDiagnosisAlgorithm | 茎叶除草药前调查 CalendarItem | 调用 `/api/weed_survey_date_diagnosis`，使用推荐茎叶除草前调查日期 |
-| SurveyDateRecommendationJob | diseasePestSurveyDateRecommendationAlgorithm | 病虫调查 CalendarItem | 按 stage / subtype 维护封行、突发、齐穗、破口等病虫调查日期 |
+| SurveyDateRecommendationJob | pestDiseaseSurveyWindowAlgorithm | 病虫害常规调查 CalendarItem | 调用 `/pestDisease/survey/init-regular-survey`，按返回的 `regular_plans` 维护 `regular_disease_pest_survey` CalendarItem |
+| SurveyDateRecommendationJob | diseasePestSurveyDateRecommendationAlgorithm | 病虫调查 CalendarItem | 后续按 stage / subtype 维护封行、突发、齐穗、破口等病虫调查日期 |
 | SurveyDateRecommendationJob | pestSurveyDateRecommendationAlgorithm | 虫害调查 CalendarItem | 如虫害调查与病虫调查需要合并，后续统一接口 |
 
 ```text

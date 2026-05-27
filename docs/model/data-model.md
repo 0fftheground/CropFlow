@@ -922,6 +922,7 @@ fertilization.ratoon_bud_fertilizer
 plant_protection.weed_control
 plant_protection.pest_control
 plant_protection.disease_control
+plant_protection.regular_disease_pest_survey
 plant_protection.sealing_stage_disease_pest_survey
 plant_protection.sealing_stage_disease_pest_control
 plant_protection.sudden_disease_pest_survey

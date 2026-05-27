@@ -30,6 +30,7 @@ TASK_SUBTYPE_RICE_SAFETY_SURVEY = "plant_protection.rice_safety_survey"
 TASK_SUBTYPE_CONTROL_EFFECT_SURVEY = "plant_protection.control_effect_survey"
 TASK_SUBTYPE_SERVICE_EFFECT_EVALUATION = "plant_protection.service_effect_evaluation"
 TASK_SUBTYPE_SERVICE_EFFECT_SURVEY = "plant_protection.service_effect_survey"
+TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY = "plant_protection.regular_disease_pest_survey"
 
 CALENDAR_STATUS_ACTIVE = "active"
 CALENDAR_STATUS_GENERATED = "generated"

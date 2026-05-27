@@ -37,6 +37,7 @@ from app.core.constants import (
     TASK_SUBTYPE_CONTROL_EFFECT_SURVEY,
     TASK_SUBTYPE_INJURY_MITIGATION,
     TASK_SUBTYPE_RICE_SAFETY_SURVEY,
+    TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
     TASK_SUBTYPE_SERVICE_EFFECT_EVALUATION,
     TASK_SUBTYPE_SERVICE_EFFECT_SURVEY,
     TASK_SUBTYPE_SOIL_SEALING_WEED_CONTROL,
@@ -45,7 +46,17 @@ from app.core.constants import (
     TASK_SUBTYPE_STEM_LEAF_WEED_RECONTROL_PRE_SURVEY,
 )
 from app.core.logging import summarize_for_log
-from app.models import CalendarItem, EventRecord, FarmingTask, OperationPlan, ReviewRequest, TaskIntent
+from app.models import (
+    CalendarItem,
+    CropStageState,
+    CropThermalTimeState,
+    EventRecord,
+    FarmingTask,
+    OperationPlan,
+    ReviewRequest,
+    StagePredictionSnapshot,
+    TaskIntent,
+)
 from app.repositories import (
     CalendarItemRepository,
     EventRecordRepository,
@@ -62,6 +73,7 @@ from app.services.calendar_tasks import (
     WeatherProvider,
     WeedDiagnosisClient,
 )
+from app.services.stage_management import StageManagementService
 
 logger = logging.getLogger(__name__)
 _WEATHER_WINDOW = timedelta(days=45)
@@ -74,6 +86,9 @@ class OrchestratorResult:
     task_intents: list[TaskIntent] = field(default_factory=list)
     review_requests: list[ReviewRequest] = field(default_factory=list)
     operation_plans: list[OperationPlan] = field(default_factory=list)
+    crop_stage_states: list[CropStageState] = field(default_factory=list)
+    crop_thermal_time_states: list[CropThermalTimeState] = field(default_factory=list)
+    stage_prediction_snapshots: list[StagePredictionSnapshot] = field(default_factory=list)
 
 
 class EventHandler(Protocol):
@@ -192,6 +207,23 @@ class PlanCalendarRefreshHandler:
             )
             logger.warning(
                 "Failed to refresh pre-treatment survey recommendation for planting plan %s.",
+                event_record.planting_plan_id,
+                exc_info=True,
+            )
+        try:
+            calendar_items.extend(
+                self.survey_date_recommendation_service.recommend_regular_disease_pest_surveys(
+                    event_record.planting_plan_id,
+                ),
+            )
+        except Exception as exc:
+            self._record_calendar_refresh_failure(
+                event_record.planting_plan_id,
+                TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+                exc,
+            )
+            logger.warning(
+                "Failed to refresh regular pest disease survey recommendations for planting plan %s.",
                 event_record.planting_plan_id,
                 exc_info=True,
             )
@@ -402,6 +434,38 @@ class PlanCalendarRefreshHandler:
         )
         self.event_record_repository.add(event_record)
         return event_record
+
+
+class StageRefreshHandler:
+    def __init__(self, stage_management_service: StageManagementService) -> None:
+        self.stage_management_service = stage_management_service
+
+    def handle(self, event_record: EventRecord) -> OrchestratorResult:
+        if event_record.planting_plan_id is None:
+            return OrchestratorResult()
+
+        prediction_source = "initial" if event_record.event_type == EVENT_TYPE_PLAN_CREATED else "plan_change"
+        refresh_result = self.stage_management_service.refresh_prediction(
+            event_record.planting_plan_id,
+            prediction_source=prediction_source,
+            source_event_id=event_record.id,
+        )
+        return OrchestratorResult(
+            crop_stage_states=[refresh_result.crop_stage_state],
+            crop_thermal_time_states=[refresh_result.crop_thermal_time_state],
+            stage_prediction_snapshots=[refresh_result.snapshot],
+        )
+
+
+class CompositeHandler:
+    def __init__(self, *handlers: EventHandler) -> None:
+        self.handlers = handlers
+
+    def handle(self, event_record: EventRecord) -> OrchestratorResult:
+        result = OrchestratorResult()
+        for handler in self.handlers:
+            result = _merge_orchestrator_results(result, handler.handle(event_record))
+        return result
 
 
 class TaskDueCheckTriggeredHandler:
@@ -1260,21 +1324,24 @@ def build_plan_orchestrator(
     task_intent_repository: TaskIntentRepository,
     review_request_repository: ReviewRequestRepository,
     operation_plan_repository: OperationPlanRepository,
+    stage_management_service: StageManagementService,
     survey_date_recommendation_service: SurveyDateRecommendationService,
     weather_provider: WeatherProvider,
     diagnosis_client: WeedDiagnosisClient,
     context_resolver: PlantProtectionPlanContextResolver,
 ) -> PlanOrchestrator:
+    stage_refresh_handler = StageRefreshHandler(stage_management_service=stage_management_service)
     plan_refresh_handler = PlanCalendarRefreshHandler(
         survey_date_recommendation_service=survey_date_recommendation_service,
         event_record_repository=event_record_repository,
         task_intent_repository=task_intent_repository,
         review_request_repository=review_request_repository,
     )
+    lifecycle_handler = CompositeHandler(stage_refresh_handler, plan_refresh_handler)
     return PlanOrchestrator(
         handlers={
-            EVENT_TYPE_PLAN_CREATED: plan_refresh_handler,
-            EVENT_TYPE_PLAN_KEY_INFO_CHANGED: plan_refresh_handler,
+            EVENT_TYPE_PLAN_CREATED: lifecycle_handler,
+            EVENT_TYPE_PLAN_KEY_INFO_CHANGED: lifecycle_handler,
             EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED: TaskDueCheckTriggeredHandler(
                 planting_plan_repository=planting_plan_repository,
                 calendar_item_repository=calendar_item_repository,
@@ -1385,6 +1452,19 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def _merge_orchestrator_results(left: OrchestratorResult, right: OrchestratorResult) -> OrchestratorResult:
+    return OrchestratorResult(
+        calendar_items=[*left.calendar_items, *right.calendar_items],
+        farming_tasks=[*left.farming_tasks, *right.farming_tasks],
+        task_intents=[*left.task_intents, *right.task_intents],
+        review_requests=[*left.review_requests, *right.review_requests],
+        operation_plans=[*left.operation_plans, *right.operation_plans],
+        crop_stage_states=[*left.crop_stage_states, *right.crop_stage_states],
+        crop_thermal_time_states=[*left.crop_thermal_time_states, *right.crop_thermal_time_states],
+        stage_prediction_snapshots=[*left.stage_prediction_snapshots, *right.stage_prediction_snapshots],
+    )
+
+
 def _summarize_orchestrator_result(result: OrchestratorResult) -> dict[str, int]:
     return {
         "calendar_items": len(result.calendar_items),
@@ -1392,4 +1472,7 @@ def _summarize_orchestrator_result(result: OrchestratorResult) -> dict[str, int]
         "task_intents": len(result.task_intents),
         "review_requests": len(result.review_requests),
         "operation_plans": len(result.operation_plans),
+        "crop_stage_states": len(result.crop_stage_states),
+        "crop_thermal_time_states": len(result.crop_thermal_time_states),
+        "stage_prediction_snapshots": len(result.stage_prediction_snapshots),
     }

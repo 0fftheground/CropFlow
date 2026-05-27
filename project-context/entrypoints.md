@@ -252,6 +252,8 @@ docs/api/
 docs/api/
   适合查看外部算法接口原始契约和项目内整理后的 Markdown 契约。
   如果当前任务与植保杂草主线有关，优先看 docs/api/weed_diagnosis_api.md。
+  如果当前任务与生育期编排或 Stage Orchestrator 有关，优先看 docs/api/growth_stage_prediction_api.md。
+  如果当前任务与 P3 病虫害调查扩展有关，优先看 docs/api/pestDisease_survey_window_api.md 和 docs/api/weather_api.pdf。
 ```
 
 ## 更新规则

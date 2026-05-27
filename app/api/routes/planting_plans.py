@@ -10,7 +10,16 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_planting_plan_query_service, get_planting_plan_service
 from app.db.session import get_db
-from app.models import CalendarItem, EventRecord, FarmingTask, ReviewRequest, TaskIntent
+from app.models import (
+    CalendarItem,
+    CropStageState,
+    CropThermalTimeState,
+    EventRecord,
+    FarmingTask,
+    ReviewRequest,
+    StagePredictionSnapshot,
+    TaskIntent,
+)
 from app.services import (
     PlantingPlanCreateInput,
     PlantingPlanDetails,
@@ -193,6 +202,50 @@ class EventRecordResponse(BaseModel):
     updated_at: datetime | None
 
 
+class CropStageStateResponse(BaseModel):
+    id: int
+    planting_plan_id: int
+    current_stage_code: str
+    current_stage_name: str
+    stage_source: str
+    effective_date: date
+    source_snapshot_id: int | None
+    last_updated_at: datetime | None
+    version: int
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
+class CropThermalTimeStateResponse(BaseModel):
+    id: int
+    planting_plan_id: int
+    accumulated_thermal_time: Decimal
+    thermal_time_unit: str
+    base_temperature: Decimal | None
+    start_date: date | None
+    last_calculated_date: date | None
+    threshold_snapshot_id: int | None
+    data_version: str | None
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
+class StagePredictionSnapshotResponse(BaseModel):
+    id: int
+    planting_plan_id: int
+    prediction_version: int
+    prediction_source: str
+    algorithm_code: str
+    algorithm_version: str | None
+    generated_at: datetime | None
+    input_payload: dict[str, Any]
+    stage_timeline: dict[str, Any]
+    thermal_thresholds: dict[str, Any]
+    source_event_id: int | None
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
 @router.post("", response_model=PlantingPlanResponse, status_code=status.HTTP_201_CREATED)
 def create_planting_plan(
     payload: PlantingPlanCreateRequest,
@@ -287,6 +340,42 @@ def list_planting_plan_event_records(
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return [_serialize_event_record(item) for item in result]
+
+
+@router.get("/{planting_plan_id}/stage-state", response_model=CropStageStateResponse | None)
+def get_planting_plan_stage_state(
+    planting_plan_id: int,
+    service: PlantingPlanQueryService = Depends(get_planting_plan_query_service),
+) -> CropStageStateResponse | None:
+    try:
+        result = service.get_crop_stage_state(planting_plan_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _serialize_crop_stage_state(result) if result is not None else None
+
+
+@router.get("/{planting_plan_id}/thermal-time-state", response_model=CropThermalTimeStateResponse | None)
+def get_planting_plan_thermal_time_state(
+    planting_plan_id: int,
+    service: PlantingPlanQueryService = Depends(get_planting_plan_query_service),
+) -> CropThermalTimeStateResponse | None:
+    try:
+        result = service.get_crop_thermal_time_state(planting_plan_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _serialize_crop_thermal_time_state(result) if result is not None else None
+
+
+@router.get("/{planting_plan_id}/stage-predictions/latest", response_model=StagePredictionSnapshotResponse | None)
+def get_latest_stage_prediction_snapshot(
+    planting_plan_id: int,
+    service: PlantingPlanQueryService = Depends(get_planting_plan_query_service),
+) -> StagePredictionSnapshotResponse | None:
+    try:
+        result = service.get_latest_stage_prediction_snapshot(planting_plan_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _serialize_stage_prediction_snapshot(result) if result is not None else None
 
 
 @router.get("/{planting_plan_id}", response_model=PlantingPlanResponse)
@@ -493,4 +582,58 @@ def _serialize_event_record(event_record: EventRecord) -> EventRecordResponse:
         error_message=event_record.error_message,
         created_at=event_record.created_at,
         updated_at=event_record.updated_at,
+    )
+
+
+def _serialize_crop_stage_state(crop_stage_state: CropStageState) -> CropStageStateResponse:
+    return CropStageStateResponse(
+        id=crop_stage_state.id,
+        planting_plan_id=crop_stage_state.planting_plan_id,
+        current_stage_code=crop_stage_state.current_stage_code,
+        current_stage_name=crop_stage_state.current_stage_name,
+        stage_source=crop_stage_state.stage_source,
+        effective_date=crop_stage_state.effective_date,
+        source_snapshot_id=crop_stage_state.source_snapshot_id,
+        last_updated_at=crop_stage_state.last_updated_at,
+        version=crop_stage_state.version,
+        created_at=crop_stage_state.created_at,
+        updated_at=crop_stage_state.updated_at,
+    )
+
+
+def _serialize_crop_thermal_time_state(
+    crop_thermal_time_state: CropThermalTimeState,
+) -> CropThermalTimeStateResponse:
+    return CropThermalTimeStateResponse(
+        id=crop_thermal_time_state.id,
+        planting_plan_id=crop_thermal_time_state.planting_plan_id,
+        accumulated_thermal_time=crop_thermal_time_state.accumulated_thermal_time,
+        thermal_time_unit=crop_thermal_time_state.thermal_time_unit,
+        base_temperature=crop_thermal_time_state.base_temperature,
+        start_date=crop_thermal_time_state.start_date,
+        last_calculated_date=crop_thermal_time_state.last_calculated_date,
+        threshold_snapshot_id=crop_thermal_time_state.threshold_snapshot_id,
+        data_version=crop_thermal_time_state.data_version,
+        created_at=crop_thermal_time_state.created_at,
+        updated_at=crop_thermal_time_state.updated_at,
+    )
+
+
+def _serialize_stage_prediction_snapshot(
+    stage_prediction_snapshot: StagePredictionSnapshot,
+) -> StagePredictionSnapshotResponse:
+    return StagePredictionSnapshotResponse(
+        id=stage_prediction_snapshot.id,
+        planting_plan_id=stage_prediction_snapshot.planting_plan_id,
+        prediction_version=stage_prediction_snapshot.prediction_version,
+        prediction_source=stage_prediction_snapshot.prediction_source,
+        algorithm_code=stage_prediction_snapshot.algorithm_code,
+        algorithm_version=stage_prediction_snapshot.algorithm_version,
+        generated_at=stage_prediction_snapshot.generated_at,
+        input_payload=stage_prediction_snapshot.input_payload,
+        stage_timeline=stage_prediction_snapshot.stage_timeline,
+        thermal_thresholds=stage_prediction_snapshot.thermal_thresholds,
+        source_event_id=stage_prediction_snapshot.source_event_id,
+        created_at=stage_prediction_snapshot.created_at,
+        updated_at=stage_prediction_snapshot.updated_at,
     )

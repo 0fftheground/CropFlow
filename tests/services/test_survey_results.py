@@ -258,6 +258,7 @@ def make_service(task_subtype: str) -> tuple[SurveyResultService, FakeTaskIntent
         task_intent_repository=task_intent_repo,
         review_request_repository=review_repo,
         operation_plan_repository=FakeOperationPlanRepository(),
+        stage_management_service=object(),
         survey_date_recommendation_service=survey_date_service,
         weather_provider=weather_provider,
         diagnosis_client=diagnosis_client,

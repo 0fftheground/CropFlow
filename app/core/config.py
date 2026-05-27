@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     sql_echo: bool = False
     database_url: str | None = None
     weed_diagnosis_base_url: str | None = None
+    pest_disease_survey_base_url: str | None = None
+    stage_prediction_base_url: str | None = None
     background_jobs_enabled: bool = False
     survey_recommendation_interval_seconds: int = 300
     task_due_check_interval_seconds: int = 300

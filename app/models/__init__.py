@@ -2,6 +2,8 @@ from app.models.base import Base
 from app.models.core import (
     CalendarItem,
     CodeDict,
+    CropStageState,
+    CropThermalTimeState,
     EventRecord,
     Execution,
     ExecutionRecord,
@@ -22,6 +24,8 @@ __all__ = [
     "Base",
     "CalendarItem",
     "CodeDict",
+    "CropStageState",
+    "CropThermalTimeState",
     "EventRecord",
     "Execution",
     "ExecutionRecord",

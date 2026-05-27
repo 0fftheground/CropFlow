@@ -129,6 +129,56 @@ class StagePredictionSnapshot(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
 
 
+class CropStageState(Base):
+    __tablename__ = "cf_crop_stage_state"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    planting_plan_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("cf_planting_plan.id", ondelete="CASCADE"),
+        unique=True,
+    )
+    current_stage_code: Mapped[str] = mapped_column(String(50))
+    current_stage_name: Mapped[str] = mapped_column(String(100))
+    stage_source: Mapped[str] = mapped_column(String(50))
+    effective_date: Mapped[date] = mapped_column(Date)
+    source_snapshot_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("cf_stage_prediction_snapshot.id", ondelete="SET NULL"),
+    )
+    last_updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+    version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    created_by_type: Mapped[str] = mapped_column(String(20), server_default=text("'system'"))
+    created_by_id: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+
+
+class CropThermalTimeState(Base):
+    __tablename__ = "cf_crop_thermal_time_state"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    planting_plan_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("cf_planting_plan.id", ondelete="CASCADE"),
+        unique=True,
+    )
+    accumulated_thermal_time: Mapped[Decimal] = mapped_column(Numeric(10, 2), server_default=text("0"))
+    thermal_time_unit: Mapped[str] = mapped_column(String(20), server_default=text("'degree_day'"))
+    base_temperature: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    start_date: Mapped[date | None] = mapped_column(Date)
+    last_calculated_date: Mapped[date | None] = mapped_column(Date)
+    threshold_snapshot_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("cf_stage_prediction_snapshot.id", ondelete="SET NULL"),
+    )
+    data_version: Mapped[str | None] = mapped_column(String(100))
+    created_by_type: Mapped[str] = mapped_column(String(20), server_default=text("'system'"))
+    created_by_id: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+
+
 class PlantingPlan(Base):
     __tablename__ = "cf_planting_plan"
 

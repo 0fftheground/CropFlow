@@ -21,6 +21,7 @@ from app.core.constants import (
     TASK_DUE_CHECK_JOB,
     TASK_SUBTYPE_CONTROL_EFFECT_SURVEY,
     TASK_SUBTYPE_RICE_SAFETY_SURVEY,
+    TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
     TASK_SUBTYPE_SERVICE_EFFECT_EVALUATION,
     TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
     TASK_SUBTYPE_STEM_LEAF_WEED_RECONTROL_PRE_SURVEY,
@@ -32,7 +33,9 @@ from app.repositories import (
     EventRecordRepository,
     PlantingPlanRepository,
     RiceVarietyRepository,
+    StagePredictionSnapshotRepository,
 )
+from app.services.stage_management import extract_pest_disease_growth_stage
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +113,16 @@ class WeedDiagnosisClient(Protocol):
     ) -> AdditionalTreatmentDiagnosisResult: ...
 
 
+class PestDiseaseSurveyWindowClient(Protocol):
+    def init_regular_surveys(
+        self,
+        *,
+        cultivation_type: str,
+        growth_stage: dict[str, str],
+        level1_of_year: dict[str, list[str]],
+    ) -> "PestDiseaseRegularSurveyInitResult": ...
+
+
 @dataclass(slots=True)
 class PreTreatmentSurveyRecommendation:
     recommendation_date: date
@@ -158,6 +171,25 @@ class SoilTreatmentDiagnosisResult:
     recommended_date: tuple[date, date]
     farming_operation: str
     control_plan: dict[str, Any]
+    raw_response: dict[str, Any]
+
+
+@dataclass(slots=True)
+class PestDiseaseRegularSurveyPlan:
+    survey_window: tuple[date, date]
+    targets: list[str]
+    exclude_reasons: dict[str, Any]
+    status: str
+    message: str
+    spray_stage: str | None
+    survey_method: str | None
+    adjusted: bool
+    raw_plan: dict[str, Any]
+
+
+@dataclass(slots=True)
+class PestDiseaseRegularSurveyInitResult:
+    regular_plans: list[PestDiseaseRegularSurveyPlan]
     raw_response: dict[str, Any]
 
 
@@ -413,6 +445,138 @@ class HttpWeedDiagnosisClient:
         if field not in data:
             raise ValueError(f"{api_name} did not return {field}.")
         return data[field]
+
+
+class HttpPestDiseaseSurveyWindowClient:
+    def __init__(self, base_url: str, timeout_seconds: float = 10.0) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+
+    def init_regular_surveys(
+        self,
+        *,
+        cultivation_type: str,
+        growth_stage: dict[str, str],
+        level1_of_year: dict[str, list[str]],
+    ) -> PestDiseaseRegularSurveyInitResult:
+        response = self._post_json(
+            "/pestDisease/survey/init-regular-survey",
+            {
+                "cultivation_type": cultivation_type,
+                "growth_stage": growth_stage,
+                "level1_of_year": level1_of_year,
+            },
+        )
+        data = self._get_response_data(response, "init-regular-survey")
+        raw_plans = data.get("regular_plans")
+        if not isinstance(raw_plans, list):
+            raise ValueError("init-regular-survey did not return regular_plans.")
+        return PestDiseaseRegularSurveyInitResult(
+            regular_plans=[_parse_pest_disease_regular_plan(item) for item in raw_plans],
+            raw_response=response,
+        )
+
+    def _post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        url = f"{self.base_url}{path}"
+        http_request = request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        timer = LogTimer()
+        logger.info(
+            "Calling pest disease survey API path=%s host=%s payload=%s",
+            path,
+            urlsplit(url).netloc,
+            summarize_for_log(payload),
+        )
+        try:
+            with request.urlopen(http_request, timeout=self.timeout_seconds) as response:
+                response_payload = json.loads(response.read().decode("utf-8"))
+                logger.info(
+                    "Pest disease survey API succeeded path=%s status=%s duration_ms=%.2f response=%s",
+                    path,
+                    getattr(response, "status", 200),
+                    timer.elapsed_ms,
+                    summarize_for_log(response_payload),
+                )
+                return response_payload
+        except error.HTTPError as exc:
+            raw_response = exc.read().decode("utf-8", errors="replace")
+            logger.warning(
+                "Pest disease survey API returned HTTP error path=%s status=%s duration_ms=%.2f payload=%s response=%s",
+                path,
+                exc.code,
+                timer.elapsed_ms,
+                summarize_for_log(payload),
+                summarize_for_log(raw_response),
+            )
+            message = f"Pest disease survey API {path} returned HTTP {exc.code}"
+            if raw_response:
+                message = f"{message}: {raw_response}"
+            raise ValueError(message) from exc
+        except error.URLError as exc:
+            logger.error(
+                "Pest disease survey API is unreachable path=%s duration_ms=%.2f payload=%s reason=%s",
+                path,
+                timer.elapsed_ms,
+                summarize_for_log(payload),
+                exc.reason,
+            )
+            raise RuntimeError(f"Pest disease survey API {path} is unreachable: {exc.reason}") from exc
+        except (TimeoutError, socket.timeout) as exc:
+            logger.error(
+                "Pest disease survey API timed out path=%s duration_ms=%.2f payload=%s",
+                path,
+                timer.elapsed_ms,
+                summarize_for_log(payload),
+            )
+            raise RuntimeError(f"Pest disease survey API {path} timed out.") from exc
+
+    def _get_response_data(self, response: dict[str, Any], api_name: str) -> dict[str, Any]:
+        data = response.get("data")
+        if not isinstance(data, dict):
+            raise ValueError(f"{api_name} did not return a valid data object.")
+        return data
+
+
+class MockPestDiseaseSurveyWindowClient:
+    def init_regular_surveys(
+        self,
+        *,
+        cultivation_type: str,
+        growth_stage: dict[str, str],
+        level1_of_year: dict[str, list[str]],
+    ) -> PestDiseaseRegularSurveyInitResult:
+        year = date.fromisoformat(growth_stage["tillering_date"]).year
+        plans: list[PestDiseaseRegularSurveyPlan] = []
+        raw_plans: list[dict[str, Any]] = []
+        for sequence, window in sorted(level1_of_year.items(), key=lambda item: int(item[0])):
+            start_date = _parse_month_day(year, window[0])
+            end_date = _parse_month_day(year, window[1])
+            raw_plan = {
+                "status": "need_survey",
+                "调查日期": [start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d")],
+                "spray_stage": "常规病虫预防",
+                "survey_method": "一级理论防治日期",
+                "调查对象": ["二化螟", "稻纵卷叶螟", "稻飞虱", "稻瘟病", "纹枯病"],
+                "排除原因": {},
+                "msg": f"Mock regular pest disease survey plan {sequence}",
+                "adjusted": False,
+            }
+            raw_plans.append(raw_plan)
+            plans.append(_parse_pest_disease_regular_plan(raw_plan))
+        return PestDiseaseRegularSurveyInitResult(
+            regular_plans=plans,
+            raw_response={
+                "mock": True,
+                "code": 200,
+                "msg": f"已生成{len(plans)}个常规调查任务",
+                "data": {"count": len(plans), "regular_plans": raw_plans},
+            },
+        )
 
 
 class MockWeedDiagnosisClient:
@@ -707,6 +871,8 @@ class SurveyDateRecommendationService:
         event_record_repository: EventRecordRepository,
         weather_provider: WeatherProvider,
         diagnosis_client: WeedDiagnosisClient,
+        pest_disease_client: PestDiseaseSurveyWindowClient | None = None,
+        stage_prediction_snapshot_repository: StagePredictionSnapshotRepository | None = None,
     ) -> None:
         self.planting_plan_repository = planting_plan_repository
         self.rice_variety_repository = rice_variety_repository
@@ -715,6 +881,8 @@ class SurveyDateRecommendationService:
         self.event_record_repository = event_record_repository
         self.weather_provider = weather_provider
         self.diagnosis_client = diagnosis_client
+        self.pest_disease_client = pest_disease_client or MockPestDiseaseSurveyWindowClient()
+        self.stage_prediction_snapshot_repository = stage_prediction_snapshot_repository
         self.context_resolver = PlantProtectionPlanContextResolver(
             code_dict_repository=code_dict_repository,
             rice_variety_repository=rice_variety_repository,
@@ -785,6 +953,79 @@ class SurveyDateRecommendationService:
             # The live algorithm expects direct-seeded plans to include the day before sowing.
             return context.cultivation_date - timedelta(days=1)
         return context.cultivation_date
+
+    def recommend_regular_disease_pest_surveys(
+        self,
+        planting_plan_id: int,
+    ) -> list[CalendarItem]:
+        planting_plan = self._get_plan(planting_plan_id)
+        request_payload = self._resolve_pest_disease_regular_survey_payload(planting_plan)
+        if request_payload is None:
+            return []
+
+        context = self.context_resolver.resolve(planting_plan)
+        recommendation = self.pest_disease_client.init_regular_surveys(
+            cultivation_type=context.cultivation_system,
+            growth_stage=request_payload["growth_stage"],
+            level1_of_year=request_payload["level1_of_year"],
+        )
+        calendar_items: list[CalendarItem] = []
+        active_idempotency_keys: set[str] = set()
+        for index, plan in enumerate(recommendation.regular_plans, start=1):
+            idempotency_scope = (
+                f"{TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY}:regular:{index}:"
+                f"{plan.survey_window[0].isoformat()}:{plan.survey_window[1].isoformat()}"
+            )
+            calendar_item = self._upsert_calendar_item(
+                planting_plan=planting_plan,
+                task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+                title="病虫害常规调查",
+                description=_build_regular_disease_pest_survey_description(plan),
+                suggested_start_date=plan.survey_window[0],
+                suggested_end_date=plan.survey_window[1],
+                generation_condition={
+                    "algorithmCode": "pestDisease.init_regular_survey",
+                    "jobKey": SURVEY_DATE_RECOMMENDATION_JOB,
+                    "surveyType": "regular_disease_pest",
+                    "targets": plan.targets,
+                    "excludeReasons": plan.exclude_reasons,
+                    "status": plan.status,
+                    "message": plan.message,
+                    "sprayStage": plan.spray_stage,
+                    "surveyMethod": plan.survey_method,
+                    "adjusted": plan.adjusted,
+                    "rawPlan": plan.raw_plan,
+                    "rawResponse": recommendation.raw_response,
+                },
+                idempotency_scope=idempotency_scope,
+                allow_multiple_active=True,
+            )
+            calendar_items.append(calendar_item)
+            active_idempotency_keys.add(calendar_item.idempotency_key)
+
+        self._invalidate_stale_regular_disease_pest_surveys(
+            planting_plan.id,
+            active_idempotency_keys=active_idempotency_keys,
+        )
+        self._record_event(
+            planting_plan_id=planting_plan.id,
+            event_type=EVENT_TYPE_CALENDAR_ITEM_UPDATED,
+            payload={
+                "jobKey": SURVEY_DATE_RECOMMENDATION_JOB,
+                "calendarItems": [
+                    {
+                        "taskSubtype": item.task_subtype,
+                        "suggestedStartDate": item.suggested_start_date.isoformat(),
+                        "suggestedEndDate": item.suggested_end_date.isoformat(),
+                        "calendarItemId": item.id,
+                    }
+                    for item in calendar_items
+                ],
+                "algorithmCode": "pestDisease.init_regular_survey",
+            },
+            idempotency_key=f"{SURVEY_DATE_RECOMMENDATION_JOB}:{planting_plan.id}:{TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY}:regular-init",
+        )
+        return calendar_items
 
     def recommend_post_treatment_surveys(
         self,
@@ -930,6 +1171,71 @@ class SurveyDateRecommendationService:
             source_execution_record_id=source_execution_record_id,
         )
 
+    def _resolve_pest_disease_regular_survey_payload(
+        self,
+        planting_plan: PlantingPlan,
+    ) -> dict[str, Any] | None:
+        metadata_payload = planting_plan.metadata_payload or {}
+        pest_disease_payload = (
+            metadata_payload.get("pestDisease")
+            or metadata_payload.get("pest_disease")
+            or metadata_payload.get("pest_disease_survey")
+            or {}
+        )
+        if not isinstance(pest_disease_payload, dict):
+            raise ValueError("Planting plan pest disease metadata must be an object.")
+
+        growth_stage = pest_disease_payload.get("growth_stage") or metadata_payload.get("growth_stage")
+        level1_of_year = pest_disease_payload.get("level1_of_year") or metadata_payload.get("level1_of_year")
+        if growth_stage is None and self.stage_prediction_snapshot_repository is not None:
+            latest_snapshot = self.stage_prediction_snapshot_repository.get_latest_by_plan(planting_plan.id)
+            if latest_snapshot is not None:
+                growth_stage = extract_pest_disease_growth_stage(latest_snapshot.stage_timeline)
+        if growth_stage is None and level1_of_year is None:
+            return None
+        if not isinstance(growth_stage, dict) or not isinstance(level1_of_year, dict):
+            raise ValueError("Pest disease regular survey metadata requires growth_stage and level1_of_year objects.")
+
+        required_stage_fields = {"tillering_date", "pokou_date", "heading_date", "maturity_date"}
+        missing_stage_fields = sorted(required_stage_fields - set(growth_stage))
+        if missing_stage_fields:
+            raise ValueError(f"Pest disease growth_stage is missing fields: {missing_stage_fields}.")
+
+        normalized_growth_stage = {
+            key: _normalize_iso_date_string(growth_stage[key], key)
+            for key in sorted(required_stage_fields)
+        }
+        normalized_level1_of_year: dict[str, list[str]] = {}
+        for sequence, window in level1_of_year.items():
+            if not isinstance(window, list) or len(window) != 2:
+                raise ValueError(f"Pest disease level1_of_year[{sequence!r}] must be a two-item MMDD list.")
+            normalized_level1_of_year[str(sequence)] = [
+                _normalize_month_day_string(window[0], f"level1_of_year[{sequence!r}][0]"),
+                _normalize_month_day_string(window[1], f"level1_of_year[{sequence!r}][1]"),
+            ]
+
+        return {
+            "growth_stage": normalized_growth_stage,
+            "level1_of_year": normalized_level1_of_year,
+        }
+
+    def _invalidate_stale_regular_disease_pest_surveys(
+        self,
+        planting_plan_id: int,
+        *,
+        active_idempotency_keys: set[str],
+    ) -> None:
+        active_items = self.calendar_item_repository.list_active_by_plan_and_subtype(
+            planting_plan_id,
+            TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        )
+        for item in active_items:
+            if item.idempotency_key in active_idempotency_keys:
+                continue
+            item.status = CALENDAR_STATUS_INVALIDATED
+            item.invalidated_reason = "regular_disease_pest_survey_window_changed"
+            item.last_generation_checked_at = _utcnow()
+
     def _get_plan(self, planting_plan_id: int) -> PlantingPlan:
         planting_plan = self.planting_plan_repository.get(planting_plan_id)
         if planting_plan is None:
@@ -950,8 +1256,10 @@ class SurveyDateRecommendationService:
         parent_task_id: int | None = None,
         source_execution_id: int | None = None,
         source_execution_record_id: int | None = None,
+        allow_multiple_active: bool = False,
     ) -> CalendarItem:
         suggested_end_date = suggested_end_date or suggested_start_date
+        idempotency_key = f"calendar-item:{planting_plan.id}:{idempotency_scope}"
         existing_items = self.calendar_item_repository.list_active_by_plan_and_subtype(
             planting_plan.id,
             task_subtype,
@@ -960,12 +1268,14 @@ class SurveyDateRecommendationService:
         )
         matched_item = None
         for item in existing_items:
-            if (
+            if allow_multiple_active and item.idempotency_key == idempotency_key:
+                matched_item = item
+            elif not allow_multiple_active and (
                 item.suggested_start_date == suggested_start_date
                 and item.suggested_end_date == suggested_end_date
             ):
                 matched_item = item
-            else:
+            elif not allow_multiple_active:
                 item.status = CALENDAR_STATUS_INVALIDATED
                 item.invalidated_reason = "recommendation_date_changed"
                 item.last_generation_checked_at = _utcnow()
@@ -981,7 +1291,7 @@ class SurveyDateRecommendationService:
                 suggested_end_date=suggested_end_date,
                 status=CALENDAR_STATUS_ACTIVE,
                 generation_condition=generation_condition,
-                idempotency_key=f"calendar-item:{planting_plan.id}:{idempotency_scope}",
+                idempotency_key=idempotency_key,
                 created_by_type="system",
                 created_by_id=SURVEY_DATE_RECOMMENDATION_JOB,
                 parent_task_id=parent_task_id,
@@ -1116,6 +1426,59 @@ def _parse_api_date_range(raw_value: list[str] | None) -> tuple[date, date] | No
     if not raw_value:
         return None
     return _parse_api_date(raw_value[0]), _parse_api_date(raw_value[1])
+
+
+def _parse_pest_disease_regular_plan(raw_plan: dict[str, Any]) -> PestDiseaseRegularSurveyPlan:
+    raw_window = raw_plan.get("调查日期")
+    if not isinstance(raw_window, list) or len(raw_window) != 2:
+        raise ValueError("regular plan did not return a valid 调查日期 window.")
+    raw_targets = raw_plan.get("调查对象") or []
+    if not isinstance(raw_targets, list):
+        raise ValueError("regular plan 调查对象 must be a list.")
+    raw_exclude_reasons = raw_plan.get("排除原因") or {}
+    if not isinstance(raw_exclude_reasons, dict):
+        raise ValueError("regular plan 排除原因 must be an object.")
+    return PestDiseaseRegularSurveyPlan(
+        survey_window=(_parse_api_date(str(raw_window[0])), _parse_api_date(str(raw_window[1]))),
+        targets=[str(item) for item in raw_targets],
+        exclude_reasons=raw_exclude_reasons,
+        status=str(raw_plan.get("status") or ""),
+        message=str(raw_plan.get("msg") or ""),
+        spray_stage=str(raw_plan["spray_stage"]) if raw_plan.get("spray_stage") is not None else None,
+        survey_method=str(raw_plan["survey_method"]) if raw_plan.get("survey_method") is not None else None,
+        adjusted=bool(raw_plan.get("adjusted")),
+        raw_plan=dict(raw_plan),
+    )
+
+
+def _build_regular_disease_pest_survey_description(plan: PestDiseaseRegularSurveyPlan) -> str:
+    targets = "、".join(plan.targets) if plan.targets else "未返回调查对象"
+    parts = [f"由 pestDisease init-regular-survey 推荐的病虫害常规调查窗口；调查对象：{targets}。"]
+    if plan.spray_stage:
+        parts.append(f"打药阶段：{plan.spray_stage}。")
+    if plan.survey_method:
+        parts.append(f"调查日期来源：{plan.survey_method}。")
+    return "".join(parts)
+
+
+def _normalize_iso_date_string(raw_value: Any, field_name: str) -> str:
+    if isinstance(raw_value, date):
+        return raw_value.isoformat()
+    if not isinstance(raw_value, str):
+        raise ValueError(f"{field_name} must be a date string.")
+    return date.fromisoformat(raw_value).isoformat()
+
+
+def _normalize_month_day_string(raw_value: Any, field_name: str) -> str:
+    value = str(raw_value)
+    if len(value) != 4 or not value.isdigit():
+        raise ValueError(f"{field_name} must use MMDD format.")
+    _parse_month_day(2000, value)
+    return value
+
+
+def _parse_month_day(year: int, raw_value: str) -> date:
+    return datetime.strptime(f"{year}{raw_value}", "%Y%m%d").date()
 
 
 def _mock_control_plan() -> dict[str, Any]:

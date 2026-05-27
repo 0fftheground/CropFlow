@@ -25,28 +25,32 @@ Roadmap 对应阶段：`T2` 工程实现；后端样板闭环已基本收口，�
 - 服务效果评估最小链路已完成：`service_effect_evaluation` 不满意时直接生成 `service_effect_survey` 正式任务，现场确认录入后结束链路，不单独引入 `Evaluation` 对象。
 - 已补真实杂草算法失败场景覆盖、可选真实接口集成测试骨架、P2 后端 runbook 和 trace 脚本。
 - 已整理前端专项 handoff 和 API contract，并对 docs / planning / project-context 做了一轮精简和重组。
-- 已补本地开发数据脚本、端到端 trace 脚本和土壤封闭专项 trace 脚本；本 session 已完成土壤封闭完整链路验证。
-- 最近一次全量测试通过为 `54 passed, 1 skipped`。
+- 已补本地开发数据脚本、端到端 trace 脚本和土壤封闭专项 trace 脚本；本 session 已完成真实数据库 + 真实杂草算法服务下的杂草主链路和土壤封闭专项 trace 验证，记录位于 `project-context/session-log/e2e-traces/`。
+- 最近一次全量测试通过为 `57 passed, 1 skipped`。
 - SQL 文件从 `src/sql/` 迁移到 `database/sql/`，已对齐所有文档引用路径。
 - 已新增 Codex / Claude Code 共享上下文入口：`docs/ai/README.md`，并新增 `CLAUDE.md` 薄入口。
+- P3 病虫害调查任务生成已开始接入：当前按 `docs/api/pestDisease_survey_window_api.md` 契约解析 `init-regular-survey`，新增 client / mock client，按计划 metadata 中的 `pestDisease.growth_stage` 与 `pestDisease.level1_of_year` 生成 `plant_protection.regular_disease_pest_survey` CalendarItem；到期后沿用 TaskDueCheckJob 生成正式调查 FarmingTask。
+- 已开始接入生育期管理能力：新增 `docs/api/growth_stage_prediction_api.md`，补齐 `CropStageState` / `CropThermalTimeState` ORM 与 repository，新增 `StageManagementService`、mock / http stage prediction client，并在 `PlanCreated / PlanKeyInfoChanged` 链路先刷新生育期快照后再刷新日历；病虫害常规调查在缺少 `growth_stage` metadata 时可回退读取最新 `StagePredictionSnapshot.stageTimeline`。
 
 ## Remaining
 
 - 前端页面尚未开发，真实前后端联调还未开始。
-- 仍需基于真实数据库 + 真实杂草算法服务跑一次完整演示链路，并沉淀最终联调结论。
+- 仍需由前端负责人基于 handoff 和 API contract 开始真实页面联调；当前不由后端侧直接开发前端页面。
 - 如继续开发植保病虫害相关农事任务，应作为 `P3` 多方向扩展启动，而不再并入当前 `P2`。
+- P3 病虫害调查每日更新尚未接入；需要继续把气象接口映射到逐日天气、72 小时逐小时天气和台风预警输入后，再调用 `/pestDisease/survey/daily-update-survey` 生成突发或合并调查 CalendarItem。
+- 生育期管理当前只完成初始化 / 计划关键字段变更两条触发链路；`WeatherUpdated`、`ActualStageRecorded`、`StageChanged` 的完整事件回路和后台 job 还未实现。
 - DeviceCommand、InventoryItem / InventoryTransaction 落库（按第一版 deferred 处理）。
 - stageCode 完整枚举和更广泛的 taskSubtype 收敛延后到后续扩展阶段。
 
 ## Blockers
 
 - 前端尚未进入实现，当前无法完成真实页面联调验收。
-- 真实杂草算法服务虽然已有联调地址 `http://47.99.129.235:3319`，但仍需要最终确认线上返回语义与样例数据的稳定性。
+- 真实杂草算法服务已通过本地集成测试和 trace 脚本验证；后续仍需在前后端真实联调中继续观察返回语义稳定性。
 
 ## Next Step
 
-优先启动前端样板页开发与联调；如果继续做纯后端业务扩展，则将病虫害相关农事任务作为 `P3` 的第一条植保扩展链路单独推进。
+后端侧如继续推进 P3，下一步优先把生育期链路补到运行期：先接 `WeatherUpdated` / `ActualStageRecorded` 的 stage refresh 与 `StageChanged` 事件，再继续接入病虫害每日更新调查窗口所需的 weather provider / typhoon alert 映射；前端联调仍由前端负责人基于 P2 handoff 推进。
 
 ## Last Updated
 
-`2026-05-26`
+`2026-05-27`

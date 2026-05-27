@@ -1,6 +1,8 @@
 from app.repositories.core import (
     CalendarItemRepository,
     CodeDictRepository,
+    CropStageStateRepository,
+    CropThermalTimeStateRepository,
     EventRecordRepository,
     ExecutionRecordRepository,
     ExecutionRepository,
@@ -12,12 +14,15 @@ from app.repositories.core import (
     RiceVarietyRepository,
     Repository,
     ReviewRequestRepository,
+    StagePredictionSnapshotRepository,
     TaskIntentRepository,
 )
 
 __all__ = [
     "CalendarItemRepository",
     "CodeDictRepository",
+    "CropStageStateRepository",
+    "CropThermalTimeStateRepository",
     "EventRecordRepository",
     "ExecutionRecordRepository",
     "ExecutionRepository",
@@ -29,5 +34,6 @@ __all__ = [
     "RiceVarietyRepository",
     "Repository",
     "ReviewRequestRepository",
+    "StagePredictionSnapshotRepository",
     "TaskIntentRepository",
 ]
