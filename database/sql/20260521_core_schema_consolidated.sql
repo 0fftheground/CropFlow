@@ -30,6 +30,11 @@ $$;
 CREATE TABLE IF NOT EXISTS cf_farm (
   id bigserial PRIMARY KEY,
   farm_name varchar(100) NOT NULL,
+  external_farm_id varchar(50) UNIQUE,
+  province varchar(100),
+  city varchar(100),
+  district_county varchar(100),
+  adcode varchar(20),
   boundary_wkt text,
   centroid_lat numeric(9, 6),
   centroid_lon numeric(9, 6),

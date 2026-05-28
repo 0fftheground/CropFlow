@@ -3,7 +3,7 @@
 ## Current Phase
 
 工作相位：`P2` - 核心工程骨架与最小实现  
-Roadmap 对应阶段：`T2` 工程实现；后端样板闭环已基本收口，前端联调待启动
+Roadmap 对应阶段：`T2` 工程实现；后端样板闭环已基本收口，正在补前端联调和气象 / 生育期运行期支撑
 
 ## Phase Goal
 
@@ -31,6 +31,10 @@ Roadmap 对应阶段：`T2` 工程实现；后端样板闭环已基本收口，�
 - 已新增 Codex / Claude Code 共享上下文入口：`docs/ai/README.md`，并新增 `CLAUDE.md` 薄入口。
 - P3 病虫害调查任务生成已开始接入：当前按 `docs/api/pestDisease_survey_window_api.md` 契约解析 `init-regular-survey`，新增 client / mock client，按计划 metadata 中的 `pestDisease.growth_stage` 与 `pestDisease.level1_of_year` 生成 `plant_protection.regular_disease_pest_survey` CalendarItem；到期后沿用 TaskDueCheckJob 生成正式调查 FarmingTask。
 - 已开始接入生育期管理能力：新增 `docs/api/growth_stage_prediction_api.md`，补齐 `CropStageState` / `CropThermalTimeState` ORM 与 repository，新增 `StageManagementService`、mock / http stage prediction client，并在 `PlanCreated / PlanKeyInfoChanged` 链路先刷新生育期快照后再刷新日历；病虫害常规调查在缺少 `growth_stage` metadata 时可回退读取最新 `StagePredictionSnapshot.stageTimeline`。
+- 已补 `Farm` 维护能力：新增 `/api/farms` 的创建 / 列表 / 详情 / 更新接口，以及 `FarmService` / `FarmQueryService`；`Farm` 结构化字段现包含 `province`、`city`、`district_county`、`adcode`、`external_farm_id`。
+- 已补 `cf_farm` 新字段迁移：`cf007_farm_region`、`cf008_farm_external_id`；本地库已升级并写入两个真实农场（岳麓基地、峨桥基地）的区域信息和 `external_farm_id`。
+- 已接入真实 `HttpWeatherProvider`：后端现在会按 `observed / forecast / climatology` 组装逐日天气；`getAvgTemAndPre` 用 `farmId`，`getForecast10DaysBeforeAnd15DaysAfter` 当前联调确认仍需 `farmID`。
+- 已完成岳麓基地真实天气接口联调：`getAvgTemAndPre` 在短日期范围下可返回逐日结果，但不包含“今天”数据；`as_of_date` 当天已改由逐日预报接口补齐。相关 weather/farm/stage 回归已通过。
 
 ## Remaining
 
@@ -39,6 +43,7 @@ Roadmap 对应阶段：`T2` 工程实现；后端样板闭环已基本收口，�
 - 如继续开发植保病虫害相关农事任务，应作为 `P3` 多方向扩展启动，而不再并入当前 `P2`。
 - P3 病虫害调查每日更新尚未接入；需要继续把气象接口映射到逐日天气、72 小时逐小时天气和台风预警输入后，再调用 `/pestDisease/survey/daily-update-survey` 生成突发或合并调查 CalendarItem。
 - 生育期管理当前只完成初始化 / 计划关键字段变更两条触发链路；`WeatherUpdated`、`ActualStageRecorded`、`StageChanged` 的完整事件回路和后台 job 还未实现。
+- 当前真实天气 provider 只完成了逐日天气拼接；`DailyWeatherCheckJob`、`WeatherUpdated` 事件发射和天气变化幂等检测还未落地。
 - DeviceCommand、InventoryItem / InventoryTransaction 落库（按第一版 deferred 处理）。
 - stageCode 完整枚举和更广泛的 taskSubtype 收敛延后到后续扩展阶段。
 
@@ -46,11 +51,12 @@ Roadmap 对应阶段：`T2` 工程实现；后端样板闭环已基本收口，�
 
 - 前端尚未进入实现，当前无法完成真实页面联调验收。
 - 真实杂草算法服务已通过本地集成测试和 trace 脚本验证；后续仍需在前后端真实联调中继续观察返回语义稳定性。
+- 外部气象接口当前存在契约不一致：平均接口使用 `farmId` 且不返回“今天”数据；逐日预报接口文档已更新为 `farmId`，但真实服务当前仍要求 `farmID`。
 
 ## Next Step
 
-后端侧如继续推进 P3，下一步优先把生育期链路补到运行期：先接 `WeatherUpdated` / `ActualStageRecorded` 的 stage refresh 与 `StageChanged` 事件，再继续接入病虫害每日更新调查窗口所需的 weather provider / typhoon alert 映射；前端联调仍由前端负责人基于 P2 handoff 推进。
+后端侧下个 session 优先把真实天气 provider 接进运行期链路：先补 `DailyWeatherCheckJob` / `WeatherUpdated` 事件与生育期 stage refresh，再继续接病虫害每日更新调查所需的 72 小时逐小时天气和台风预警映射；如果接口方再调整天气 contract，先同步修正文档和 provider。
 
 ## Last Updated
 
-`2026-05-27`
+`2026-05-28`

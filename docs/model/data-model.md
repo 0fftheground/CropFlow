@@ -311,6 +311,11 @@ passwordHash 只存密码哈希，不存明文密码。
 |---|---|---|
 | id | id | 农场 ID |
 | farmName | string | 农场名称 |
+| externalFarmId | string | 外部平台农场 ID，可为空；用于对接天气等外部接口 |
+| province | string | 所属省份，可为空但生育期算法联调时应补齐 |
+| city | string | 所属地级市，可为空但生育期算法联调时应补齐 |
+| districtCounty | string | 所属区 / 县 / 县级市，可为空但生育期算法联调时应补齐 |
+| adcode | string | 行政区编码，可为空但生育期算法联调时应补齐 |
 | boundaryWkt | text | 农场边界 WKT，可为空 |
 | centroidLat | decimal | 中心点纬度，可为空 |
 | centroidLon | decimal | 中心点经度，可为空 |
@@ -334,6 +339,8 @@ passwordHash 只存密码哈希，不存明文密码。
 
 ```text
 Farm.centroidLat / Farm.centroidLon 表示农场中心点。
+Farm.province / city / districtCounty / adcode 用于结构化保存区域信息，供生育期等算法输入使用。
+Farm.externalFarmId 用于保存外部平台农场标识，供气象等按农场取数的接口使用。
 Field 不再直接保存 farmId，农场与地块关系通过 FarmFieldRelation 维护。
 Field 第一版对齐 agri_field，保留地块名称、边界 WKT、中心点和面积。
 土壤类型、土壤肥力、前茬作物等信息当前不在 agri_field 中，第一版先不结构化。
@@ -1215,7 +1222,7 @@ ExternalExecutionSystem
 10. 软删除先统一使用业务 status，不引入 deletedAt。
 11. DeviceCommand 与 Execution 的关系目前暂不强行确定，先允许一个 Execution 关联 0..N 个 DeviceCommand。
 12. ReviewRequest.decision 先采用最简单枚举，复杂内容放 decisionPayload。
-13. Farm 第一版字段语义对齐 agri_farm；经纬度表示农场中心点。
+13. Farm 第一版字段语义对齐 agri_farm；经纬度表示农场中心点，并新增 externalFarmId、province / city / districtCounty / adcode 作为外部对接和结构化区域字段。
 14. Field 第一版字段语义对齐 agri_field；不再直接保存 farmId。
 15. 第一版新增 FarmFieldRelation 和 PlantingPlanFieldRelation，分别维护农场-地块、计划-地块关系。
 16. PlantingPlan 第一版取消直接 fieldId，引入 varietyId 关联 RiceVariety，并显式记录 cultiTypeCode、plantingMethodCode、transplantDate、transplantLeafAge 等计划和算法高频字段；cropSeason、riceCroppingType 不再重复保留。

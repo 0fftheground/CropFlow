@@ -16,6 +16,7 @@ from app.repositories import (
     EventRecordRepository,
     ExecutionRecordRepository,
     ExecutionRepository,
+    FarmRepository,
     FieldRepository,
     FarmingTaskRepository,
     OperationPlanRepository,
@@ -28,9 +29,12 @@ from app.repositories import (
 )
 from app.services import (
     CodeDictQueryService,
+    FarmQueryService,
+    FarmService,
     FarmingTaskQueryService,
     HttpPestDiseaseSurveyWindowClient,
     HttpStagePredictionClient,
+    HttpWeatherProvider,
     HttpWeedDiagnosisClient,
     MockPestDiseaseSurveyWindowClient,
     MockStagePredictionClient,
@@ -46,7 +50,23 @@ from app.services import (
     SurveyDateRecommendationService,
     SurveyResultService,
     TaskExecutionService,
+    WeatherProvider,
 )
+
+
+def build_weather_provider(
+    db: Session,
+    settings: Settings,
+) -> WeatherProvider:
+    if settings.weather_api_base_url and settings.weather_api_token:
+        return HttpWeatherProvider(
+            farm_repository=FarmRepository(db),
+            base_url=settings.weather_api_base_url,
+            auth_token=settings.weather_api_token,
+            timeout_seconds=settings.weather_api_timeout_seconds,
+            climatology_reference_years=settings.weather_climatology_reference_years,
+        )
+    return MockWeatherProvider()
 
 
 def build_survey_date_recommendation_service(
@@ -70,7 +90,7 @@ def build_survey_date_recommendation_service(
         code_dict_repository=CodeDictRepository(db),
         calendar_item_repository=CalendarItemRepository(db),
         event_record_repository=EventRecordRepository(db),
-        weather_provider=MockWeatherProvider(),
+        weather_provider=build_weather_provider(db, settings),
         diagnosis_client=diagnosis_client,
         pest_disease_client=pest_disease_client,
         stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(db),
@@ -80,7 +100,10 @@ def build_survey_date_recommendation_service(
 def build_stage_management_service(
     db: Session,
     settings: Settings,
+    *,
+    weather_provider: WeatherProvider | None = None,
 ) -> StageManagementService:
+    weather_provider = weather_provider or build_weather_provider(db, settings)
     stage_prediction_client = (
         HttpStagePredictionClient(settings.stage_prediction_base_url)
         if settings.stage_prediction_base_url
@@ -88,10 +111,12 @@ def build_stage_management_service(
     )
     return StageManagementService(
         planting_plan_repository=PlantingPlanRepository(db),
+        farm_repository=FarmRepository(db),
         stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(db),
         crop_stage_state_repository=CropStageStateRepository(db),
         crop_thermal_time_state_repository=CropThermalTimeStateRepository(db),
         stage_prediction_client=stage_prediction_client,
+        weather_provider=weather_provider,
     )
 
 
@@ -99,11 +124,11 @@ def build_cropflow_plan_orchestrator(
     db: Session,
     settings: Settings,
     *,
-    weather_provider: MockWeatherProvider | None = None,
+    weather_provider: WeatherProvider | None = None,
     diagnosis_client: HttpWeedDiagnosisClient | MockWeedDiagnosisClient | None = None,
     pest_disease_client: HttpPestDiseaseSurveyWindowClient | MockPestDiseaseSurveyWindowClient | None = None,
 ) -> PlanOrchestrator:
-    weather_provider = weather_provider or MockWeatherProvider()
+    weather_provider = weather_provider or build_weather_provider(db, settings)
     diagnosis_client = diagnosis_client or (
         HttpWeedDiagnosisClient(settings.weed_diagnosis_base_url)
         if settings.weed_diagnosis_base_url
@@ -125,7 +150,7 @@ def build_cropflow_plan_orchestrator(
         pest_disease_client=pest_disease_client,
         stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(db),
     )
-    stage_management_service = build_stage_management_service(db, settings)
+    stage_management_service = build_stage_management_service(db, settings, weather_provider=weather_provider)
     return build_plan_orchestrator(
         planting_plan_repository=PlantingPlanRepository(db),
         calendar_item_repository=CalendarItemRepository(db),
@@ -188,6 +213,14 @@ def get_code_dict_query_service(db: Session = Depends(get_db)) -> Generator[Code
     yield CodeDictQueryService(code_dict_repository=CodeDictRepository(db))
 
 
+def get_farm_service(db: Session = Depends(get_db)) -> Generator[FarmService, None, None]:
+    yield FarmService(farm_repository=FarmRepository(db))
+
+
+def get_farm_query_service(db: Session = Depends(get_db)) -> Generator[FarmQueryService, None, None]:
+    yield FarmQueryService(farm_repository=FarmRepository(db))
+
+
 def get_rice_variety_query_service(db: Session = Depends(get_db)) -> Generator[RiceVarietyQueryService, None, None]:
     yield RiceVarietyQueryService(rice_variety_repository=RiceVarietyRepository(db))
 
@@ -220,7 +253,7 @@ def get_survey_result_service(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> Generator[SurveyResultService, None, None]:
-    weather_provider = MockWeatherProvider()
+    weather_provider = build_weather_provider(db, settings)
     diagnosis_client = (
         HttpWeedDiagnosisClient(settings.weed_diagnosis_base_url)
         if settings.weed_diagnosis_base_url
@@ -244,7 +277,7 @@ def get_task_execution_service(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> Generator[TaskExecutionService, None, None]:
-    weather_provider = MockWeatherProvider()
+    weather_provider = build_weather_provider(db, settings)
     diagnosis_client = (
         HttpWeedDiagnosisClient(settings.weed_diagnosis_base_url)
         if settings.weed_diagnosis_base_url

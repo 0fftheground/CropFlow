@@ -1,0 +1,253 @@
+
+1. 农场前后10天小时级气象预报数据查询接口
+1.1接口描述
+查询农场当前日期前后10天小时级预报气象预报数据接口。
+1.2接口URL
+ https://iland-t.zoomlion.com/open-sharing-platform/zlapi/algBaseDataApi/v1/getForecast10DaysBeforeAndAfter	
+1.3请求头入参
+字段名称	类型	描述	是否必须
+Content-Type	String	application/json	Y
+Authorization	String	token	Y
+1.4 请求入参
+字段名称	类型	描述	是否必须
+farmId	String	农场id	Y
+1.5 接口出参
+字段名称	类型	描述	是否必须
+code	String	响应编码0 成功，其他均为失败	Y
+msg	String	响应描述	Y
+data	Json	查询结果	Y
+1.6 返回报文样例
+
+{
+    "code": 0,
+    "msg": "成功",
+    "data": [
+        {
+            "wins": "1.43",
+            "wins_scale": "1",
+            "pre": "0.0",
+            "targetDate": "2026-05-01",
+            "datatime": "2026-05-01 00:00:00",
+            "latitude": "28.136620077621536",
+            "target_hour": 0,
+            "farmID": "84911829811210",
+            "prs": "1003.16",
+            "v10": "1.34",
+            "u10": "-0.5",
+            "tcc": "100.0",
+            "rh": "78.84",
+            "tmp": "15.03",
+            "wp_code": "02",
+            "longitude": "112.81737313388663",
+            "gust": "1.48",
+            "wind": "159.5"
+        },
+		......
+        {
+            "wins": "1.16",
+            "wins_scale": "1",
+            "pre": "5.45",
+            "targetDate": "2026-05-21",
+            "datatime": "2026-05-21 08:00:00",
+            "latitude": "28.136620077621536",
+            "target_hour": 8,
+            "farmID": "84911829811210",
+            "prs": "999.45",
+            "v10": "0.69",
+            "u10": "-0.94",
+            "tcc": "100.0",
+            "rh": "94.06",
+            "tmp": "19.52",
+            "wp_code": "08",
+            "longitude": "112.81737313388663",
+            "gust": "11.0",
+            "wind": "126.41"
+        }
+    ],
+    "failed": false,
+    "success": true
+} 
+
+2 农场前10天，后15天天级气象预报数据查询接口
+2.1 接口描述
+查询农场当前日期前10天+后15天天级预报气象预报数据接口。
+2.2 接口URL
+ https://iland-t.zoomlion.com/open-sharing-platform/zlapi/weather/v1/getForecast10DaysBeforeAnd15DaysAfter
+2.3 	请求头入参
+字段名称	类型	描述	是否必须
+Content-Type	String	application/json	Y
+Authorization	String	token	Y
+2.4 请求入参
+字段名称	类型	描述	是否必须
+farmID	String	农场id	Y
+2.5 接口出参
+字段名称	类型	描述	是否必须
+code	String	响应编码0 成功，其他均为失败	Y
+msg	String	响应描述	Y
+data	Json	查询结果	Y
+2.6 返回报文样例
+
+{
+    "code": 0,
+    "msg": "成功",
+    "data": [
+        {
+            "wins": "2.72",
+            "prob": "0.0",
+            "nrd": "237.93",
+            "pre": "0.0",
+            "cwpAm": "02",
+            "ssrd": "309.0",
+            "tMax": "24.61",
+            "datatime": "2026-05-01",
+            "winsScale": "2",
+            "latitude": "31.162425",
+            "dpt": "11.52",
+            "ssh": "12.12",
+            "rhMin": "38.84",
+            "farmID": "47035753446400",
+            "tAvg": "19.17",
+            "tMin": "16.0",
+            "prs": "1007.19",
+            "cwpPm": "02",
+            "rh": "60.97",
+            "rhMax": "74.89",
+            "wmax": "4.19",
+            "longitude": "118.297699",
+            "wind": "125.67"
+        },
+		......
+        {
+            "wins": "2.87",
+            "prob": "0.0",
+            "nrd": "204.82",
+            "pre": "0.0",
+            "cwpAm": "02",
+            "ssrd": "266.0",
+            "tMax": "29.03",
+            "datatime": "2026-05-25",
+            "winsScale": "2",
+            "latitude": "31.162425",
+            "dpt": "15.53",
+            "ssh": "13.08",
+            "rhMin": "52.34",
+            "farmID": "47035753446400",
+            "tAvg": "23.61",
+            "tMin": "19.75",
+            "prs": "1007.66",
+            "cwpPm": "02",
+            "rh": "60.54",
+            "rhMax": "74.37",
+            "wmax": "3.51",
+            "longitude": "118.297699",
+            "wind": "153.08"
+        }
+    ],
+    "failed": false,
+    "success": true
+}
+3 某一自然年内任意区间范围内积温积雨列表数据查询接口
+3.1 接口描述
+根据经纬度，查询某自然年内任意区间范围内，指定起始温度的积温积雨数据接口。
+3.2 接口URL
+ https://iland-t.zoomlion.com/open-sharing-platform/zlapi/weather/v1/getIntervalTempAndRainfallList
+3.3 	请求头入参
+字段名称	类型	描述	是否必须
+Content-Type	String	application/json	Y
+Authorization	String	token	Y
+3.4 请求入参
+字段名称	类型	描述	是否必须
+longitude	String	经度	Y
+latitude	String	纬度	
+startDate	String	起始日期（YYYY-MM-dd）	
+endDate	String	结束日期（YYYY-MM-dd）	
+startTemperature	String	起点积温（比如10）	
+3.5 接口出参
+字段名称	类型	描述	是否必须
+code	String	响应编码0 成功，其他均为失败	Y
+msg	String	响应描述	Y
+data	Json	查询结果	Y
+3.6 返回报文样例
+
+{
+    "code": 0,
+    "msg": "成功",
+    "data": [
+        {
+            "day": "2026-01-01",
+            "accTemperature": 0,
+            "accRainfall": 7.74
+        },
+        {
+            "day": "2026-01-02",
+            "accTemperature": 0,
+            "accRainfall": 7.74
+        },
+        .......
+
+        {
+            "day": "2026-04-29",
+            "accTemperature": 276.08,
+            "accRainfall": 587.95
+        },
+        {
+            "day": "2026-04-30",
+            "accTemperature": 279.12,
+            "accRainfall": 587.95
+        }
+    ],
+    "failed": false,
+    "success": true
+}   
+
+
+
+4. 农场按日期的平均降水和平均日均温接口
+4.1 接口描述
+根据农场ID，和指定的日期范围，返回按月-日，group average的降水和日均温，如果日期跨度没有超过一年则返回真实数据。用于做气象预测。
+4.2 接口URL
+https://iland-t.zoomlion.com/open-sharing-platform/zlapi/weather/v1/getAvgTemAndPre
+4.3 	请求头入参
+字段名称	类型	描述	是否必须
+Content-Type	String	application/json	Y
+Authorization	String	token	Y
+4.4 请求入参
+字段名称	类型	描述	是否必须
+farmId	String	农场id	Y
+startDate	String	起始日期（YYYY-MM-dd）	
+endDate	String	结束日期（YYYY-MM-dd）	
+4.5 接口出参
+字段名称	类型	描述	是否必须
+code	String	响应编码0 成功，其他均为失败	Y
+msg	String	响应描述	Y
+data	Json	查询结果	Y
+4.6 返回报文样例
+
+{
+    "code": 0,
+    "msg": "成功",
+    "data": [
+        {
+            "dt": "01-01",
+            "temAvg": 0,
+            "preAvg": 7.74
+        },
+        {
+            "dt": "01-02",
+            "temAvg": 0,
+            "preAvg": 7.74
+        },
+        .......
+
+        {
+            "dt": "12-30",
+            "temAvg": 276.08,
+            "preAvg": 587.95
+        },
+        {
+            "dt": "12-31",
+            "temAvg": 279.12,
+            "preAvg": 587.95
+        }
+    ]
+}   

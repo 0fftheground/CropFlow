@@ -14,6 +14,7 @@ from app.models import (
     EventRecord,
     Execution,
     ExecutionRecord,
+    Farm,
     Field,
     FarmingTask,
     OperationPlan,
@@ -54,6 +55,15 @@ class PlantingPlanRepository(Repository):
         if statuses:
             stmt = stmt.where(PlantingPlan.status.in_(statuses))
         stmt = stmt.order_by(PlantingPlan.created_at.desc(), PlantingPlan.id.desc())
+        return list(self.session.scalars(stmt))
+
+
+class FarmRepository(Repository):
+    def get(self, farm_id: int) -> Farm | None:
+        return self.session.get(Farm, farm_id)
+
+    def list_all(self) -> list[Farm]:
+        stmt = select(Farm).order_by(Farm.created_at.desc(), Farm.id.desc())
         return list(self.session.scalars(stmt))
 
 

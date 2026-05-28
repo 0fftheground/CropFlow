@@ -23,7 +23,10 @@ from app.orchestrator import build_plan_orchestrator
 from app.repositories import (
     CalendarItemRepository,
     CodeDictRepository,
+    CropStageStateRepository,
+    CropThermalTimeStateRepository,
     EventRecordRepository,
+    FarmRepository,
     FieldRepository,
     FarmingTaskRepository,
     OperationPlanRepository,
@@ -31,14 +34,17 @@ from app.repositories import (
     PlantingPlanRepository,
     RiceVarietyRepository,
     ReviewRequestRepository,
+    StagePredictionSnapshotRepository,
     TaskIntentRepository,
 )
 from app.services import (
+    MockStagePredictionClient,
     MockWeatherProvider,
     MockWeedDiagnosisClient,
     PlantingPlanCreateInput,
     PlantingPlanService,
     PlantProtectionPlanContextResolver,
+    StageManagementService,
     SurveyDateRecommendationService,
     TaskGenerationService,
 )
@@ -159,6 +165,10 @@ def _upsert_demo_farm(session: Session) -> Farm:
         session.add(farm)
 
     farm.farm_name = "本地联调农场"
+    farm.province = "湖南省"
+    farm.city = "长沙市"
+    farm.district_county = "岳麓区"
+    farm.adcode = "430104"
     farm.centroid_lat = Decimal("28.194090")
     farm.centroid_lon = Decimal("112.982279")
     farm.created_by_type = "system"
@@ -265,6 +275,7 @@ def _ensure_demo_plan(session: Session, *, farm_id: int, field_ids: list[int]) -
         weather_provider=MockWeatherProvider(),
         diagnosis_client=MockWeedDiagnosisClient(),
     )
+    stage_management_service = _build_seed_stage_management_service(session)
     plan_orchestrator = build_plan_orchestrator(
         planting_plan_repository=planting_plan_repository,
         calendar_item_repository=CalendarItemRepository(session),
@@ -273,6 +284,7 @@ def _ensure_demo_plan(session: Session, *, farm_id: int, field_ids: list[int]) -
         task_intent_repository=TaskIntentRepository(session),
         review_request_repository=ReviewRequestRepository(session),
         operation_plan_repository=OperationPlanRepository(session),
+        stage_management_service=stage_management_service,
         survey_date_recommendation_service=survey_date_service,
         weather_provider=MockWeatherProvider(),
         diagnosis_client=MockWeedDiagnosisClient(),
@@ -304,7 +316,6 @@ def _ensure_demo_plan(session: Session, *, farm_id: int, field_ids: list[int]) -
             task_generation_window_days=14,
             metadata_payload={
                 "seed": True,
-                "province": "湖南省",
                 "notes": "Created by seed_local_dev_data.py using mock diagnosis for deterministic startup data.",
             },
         ),
@@ -342,6 +353,7 @@ def _ensure_due_tasks(session: Session, planting_plan_id: int) -> list[int]:
         weather_provider=MockWeatherProvider(),
         diagnosis_client=MockWeedDiagnosisClient(),
     )
+    stage_management_service = _build_seed_stage_management_service(session)
     plan_orchestrator = build_plan_orchestrator(
         planting_plan_repository=planting_plan_repository,
         calendar_item_repository=CalendarItemRepository(session),
@@ -350,6 +362,7 @@ def _ensure_due_tasks(session: Session, planting_plan_id: int) -> list[int]:
         task_intent_repository=TaskIntentRepository(session),
         review_request_repository=ReviewRequestRepository(session),
         operation_plan_repository=OperationPlanRepository(session),
+        stage_management_service=stage_management_service,
         survey_date_recommendation_service=survey_date_service,
         weather_provider=MockWeatherProvider(),
         diagnosis_client=MockWeedDiagnosisClient(),
@@ -368,6 +381,18 @@ def _ensure_due_tasks(session: Session, planting_plan_id: int) -> list[int]:
         check_date=date(2026, 4, 18),
     )
     return list(session.scalars(existing_task_stmt))
+
+
+def _build_seed_stage_management_service(session: Session) -> StageManagementService:
+    return StageManagementService(
+        planting_plan_repository=PlantingPlanRepository(session),
+        farm_repository=FarmRepository(session),
+        stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(session),
+        crop_stage_state_repository=CropStageStateRepository(session),
+        crop_thermal_time_state_repository=CropThermalTimeStateRepository(session),
+        stage_prediction_client=MockStagePredictionClient(),
+        weather_provider=MockWeatherProvider(),
+    )
 
 
 def _sync_id_sequence(session: Session, table_name: str) -> None:

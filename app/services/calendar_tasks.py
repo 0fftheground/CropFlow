@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 import json
 import logging
 import socket
@@ -26,11 +27,12 @@ from app.core.constants import (
     TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
     TASK_SUBTYPE_STEM_LEAF_WEED_RECONTROL_PRE_SURVEY,
 )
-from app.models import CalendarItem, EventRecord, FarmingTask, PlantingPlan, RiceVariety
+from app.models import CalendarItem, EventRecord, Farm, FarmingTask, PlantingPlan, RiceVariety
 from app.repositories import (
     CalendarItemRepository,
     CodeDictRepository,
     EventRecordRepository,
+    FarmRepository,
     PlantingPlanRepository,
     RiceVarietyRepository,
     StagePredictionSnapshotRepository,
@@ -46,6 +48,8 @@ class WeatherProvider(Protocol):
         planting_plan: PlantingPlan,
         start_date: date,
         end_date: date,
+        *,
+        as_of_date: date | None = None,
     ) -> list[dict[str, Any]]: ...
 
 
@@ -795,12 +799,285 @@ class MockWeedDiagnosisClient:
         )
 
 
+class HttpWeatherProvider:
+    FORECAST_DAILY_PATH = "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter"
+    AVERAGE_TEMP_PRECIPITATION_PATH = "/weather/v1/getAvgTemAndPre"
+
+    def __init__(
+        self,
+        farm_repository: FarmRepository,
+        base_url: str,
+        auth_token: str,
+        timeout_seconds: float = 10.0,
+        climatology_reference_years: int = 3,
+    ) -> None:
+        self.farm_repository = farm_repository
+        self.base_url = base_url.rstrip("/")
+        self.auth_token = auth_token
+        self.timeout_seconds = timeout_seconds
+        self.climatology_reference_years = climatology_reference_years
+
+    def get_daily_weather(
+        self,
+        planting_plan: PlantingPlan,
+        start_date: date,
+        end_date: date,
+        *,
+        as_of_date: date | None = None,
+    ) -> list[dict[str, Any]]:
+        if start_date > end_date:
+            return []
+
+        effective_as_of_date = as_of_date or date.today()
+        farm = self._get_farm(planting_plan.farm_id)
+        external_farm_id = self._resolve_external_farm_id(farm)
+        weather_data: list[dict[str, Any]] = []
+
+        observed_end_date = min(end_date, effective_as_of_date - timedelta(days=1))
+        if start_date <= observed_end_date:
+            weather_data.extend(
+                self._load_observed_daily_weather(
+                    external_farm_id,
+                    start_date=start_date,
+                    end_date=observed_end_date,
+                ),
+            )
+
+        forecast_start_date = max(start_date, effective_as_of_date)
+        forecast_end_date = min(end_date, effective_as_of_date + timedelta(days=15))
+        if forecast_start_date <= forecast_end_date:
+            weather_data.extend(
+                self._load_forecast_daily_weather(
+                    external_farm_id,
+                    start_date=forecast_start_date,
+                    end_date=forecast_end_date,
+                ),
+            )
+
+        climatology_start_date = max(start_date, effective_as_of_date + timedelta(days=16))
+        if climatology_start_date <= end_date:
+            weather_data.extend(
+                self._load_climatology_daily_weather(
+                    external_farm_id,
+                    start_date=climatology_start_date,
+                    end_date=end_date,
+                ),
+            )
+
+        weather_data.sort(key=lambda item: str(item["date"]))
+        return weather_data
+
+    def _get_farm(self, farm_id: int) -> Farm:
+        farm = self.farm_repository.get(farm_id)
+        if farm is None:
+            raise ValueError(f"Farm {farm_id} does not exist.")
+        return farm
+
+    def _resolve_external_farm_id(self, farm: Farm) -> str:
+        external_farm_id = farm.external_farm_id or str(farm.id)
+        normalized = external_farm_id.strip()
+        if not normalized:
+            raise ValueError("Weather provider requires Farm.external_farm_id or a non-empty Farm.id.")
+        return normalized
+
+    def _load_observed_daily_weather(
+        self,
+        external_farm_id: str,
+        *,
+        start_date: date,
+        end_date: date,
+    ) -> list[dict[str, Any]]:
+        weather_data: list[dict[str, Any]] = []
+        chunk_start = start_date
+        while chunk_start <= end_date:
+            chunk_end = min(end_date, chunk_start + timedelta(days=364))
+            response_data = self._post_json(
+                self.AVERAGE_TEMP_PRECIPITATION_PATH,
+                {
+                    "farmId": external_farm_id,
+                    "startDate": chunk_start.isoformat(),
+                    "endDate": chunk_end.isoformat(),
+                },
+            )
+            expected_dates = _build_closed_date_range(chunk_start, chunk_end)
+            if len(response_data) != len(expected_dates):
+                raise ValueError(
+                    "Weather average API did not return the expected number of observed daily rows "
+                    f"for {chunk_start} to {chunk_end}.",
+                )
+            data_version = f"weather-observed:{chunk_start.isoformat()}:{chunk_end.isoformat()}"
+            for expected_date, row in zip(expected_dates, response_data, strict=True):
+                weather_data.append(
+                    {
+                        "date": expected_date.isoformat(),
+                        "avg_temp": _normalize_optional_float(row.get("temAvg")),
+                        "precipitation": _normalize_optional_float(row.get("preAvg")),
+                        "source_type": "observed",
+                        "data_version": data_version,
+                    },
+                )
+            chunk_start = chunk_end + timedelta(days=1)
+        return weather_data
+
+    def _load_forecast_daily_weather(
+        self,
+        external_farm_id: str,
+        *,
+        start_date: date,
+        end_date: date,
+    ) -> list[dict[str, Any]]:
+        response_data = self._post_json(
+            self.FORECAST_DAILY_PATH,
+            {
+                "farmID": external_farm_id,
+            },
+        )
+        data_version = f"weather-forecast:{date.today().isoformat()}"
+        weather_data: list[dict[str, Any]] = []
+        for row in response_data:
+            row_date = date.fromisoformat(str(row.get("datatime")))
+            if row_date < start_date or row_date > end_date:
+                continue
+            weather_data.append(
+                {
+                    "date": row_date.isoformat(),
+                    "avg_temp": _normalize_optional_float(row.get("tAvg")),
+                    "min_temp": _normalize_optional_float(row.get("tMin")),
+                    "max_temp": _normalize_optional_float(row.get("tMax")),
+                    "precipitation": _normalize_optional_float(row.get("pre")),
+                    "source_type": "forecast",
+                    "data_version": data_version,
+                },
+            )
+        expected_dates = {item.isoformat() for item in _build_closed_date_range(start_date, end_date)}
+        returned_dates = {str(item["date"]) for item in weather_data}
+        missing_dates = sorted(expected_dates - returned_dates)
+        if missing_dates:
+            raise ValueError(f"Weather forecast API is missing daily rows for dates: {missing_dates}.")
+        return weather_data
+
+    def _load_climatology_daily_weather(
+        self,
+        external_farm_id: str,
+        *,
+        start_date: date,
+        end_date: date,
+    ) -> list[dict[str, Any]]:
+        request_start_date = _shift_years(start_date, -self.climatology_reference_years)
+        request_end_date = _shift_years(end_date, -1)
+        response_data = self._post_json(
+            self.AVERAGE_TEMP_PRECIPITATION_PATH,
+            {
+                "farmId": external_farm_id,
+                "startDate": request_start_date.isoformat(),
+                "endDate": request_end_date.isoformat(),
+            },
+        )
+        row_by_month_day: dict[str, dict[str, Any]] = {}
+        for row in response_data:
+            month_day = str(row.get("dt") or "").strip()
+            if not month_day:
+                raise ValueError("Weather climatology API returned a row without dt.")
+            row_by_month_day[month_day] = row
+
+        data_version = f"weather-climatology:{request_start_date.isoformat()}:{request_end_date.isoformat()}"
+        weather_data: list[dict[str, Any]] = []
+        for target_date in _build_closed_date_range(start_date, end_date):
+            month_day = target_date.strftime("%m-%d")
+            row = row_by_month_day.get(month_day)
+            if row is None:
+                raise ValueError(f"Weather climatology API is missing dt={month_day}.")
+            weather_data.append(
+                {
+                    "date": target_date.isoformat(),
+                    "avg_temp": _normalize_optional_float(row.get("temAvg")),
+                    "precipitation": _normalize_optional_float(row.get("preAvg")),
+                    "source_type": "climatology",
+                    "data_version": data_version,
+                },
+            )
+        return weather_data
+
+    def _post_json(self, path: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        url = f"{self.base_url}{path}"
+        http_request = request.Request(
+            url,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": self.auth_token,
+            },
+            method="POST",
+        )
+        timer = LogTimer()
+        logger.info(
+            "Calling weather API path=%s host=%s payload=%s",
+            path,
+            urlsplit(url).netloc,
+            summarize_for_log(payload),
+        )
+        try:
+            with request.urlopen(http_request, timeout=self.timeout_seconds) as response:
+                response_payload = json.loads(response.read().decode("utf-8"))
+                logger.info(
+                    "Weather API succeeded path=%s status=%s duration_ms=%.2f response=%s",
+                    path,
+                    getattr(response, "status", 200),
+                    timer.elapsed_ms,
+                    summarize_for_log(response_payload),
+                )
+        except error.HTTPError as exc:
+            raw_response = exc.read().decode("utf-8", errors="replace")
+            logger.warning(
+                "Weather API returned HTTP error path=%s status=%s duration_ms=%.2f payload=%s response=%s",
+                path,
+                exc.code,
+                timer.elapsed_ms,
+                summarize_for_log(payload),
+                summarize_for_log(raw_response),
+            )
+            message = f"Weather API {path} returned HTTP {exc.code}"
+            if raw_response:
+                message = f"{message}: {raw_response}"
+            raise ValueError(message) from exc
+        except error.URLError as exc:
+            logger.error(
+                "Weather API is unreachable path=%s duration_ms=%.2f payload=%s reason=%s",
+                path,
+                timer.elapsed_ms,
+                summarize_for_log(payload),
+                exc.reason,
+            )
+            raise RuntimeError(f"Weather API {path} is unreachable: {exc.reason}") from exc
+        except (TimeoutError, socket.timeout) as exc:
+            logger.error(
+                "Weather API timed out path=%s duration_ms=%.2f payload=%s",
+                path,
+                timer.elapsed_ms,
+                summarize_for_log(payload),
+            )
+            raise RuntimeError(f"Weather API {path} timed out.") from exc
+
+        if str(response_payload.get("code")) != "0":
+            raise ValueError(f"Weather API {path} returned business code {response_payload.get('code')}.")
+        data = response_payload.get("data")
+        if not isinstance(data, list):
+            raise ValueError(f"Weather API {path} did not return a valid data array.")
+        normalized_data = [dict(item) for item in data if isinstance(item, dict)]
+        if len(normalized_data) != len(data):
+            raise ValueError(f"Weather API {path} returned invalid row objects.")
+        return normalized_data
+
+
 class MockWeatherProvider:
     def get_daily_weather(
         self,
         planting_plan: PlantingPlan,
         start_date: date,
         end_date: date,
+        *,
+        as_of_date: date | None = None,
     ) -> list[dict[str, Any]]:
         weather_data: list[dict[str, Any]] = []
         current_date = start_date
@@ -1479,6 +1756,27 @@ def _normalize_month_day_string(raw_value: Any, field_name: str) -> str:
 
 def _parse_month_day(year: int, raw_value: str) -> date:
     return datetime.strptime(f"{year}{raw_value}", "%Y%m%d").date()
+
+
+def _build_closed_date_range(start_date: date, end_date: date) -> list[date]:
+    dates: list[date] = []
+    current_date = start_date
+    while current_date <= end_date:
+        dates.append(current_date)
+        current_date += timedelta(days=1)
+    return dates
+
+
+def _shift_years(target_date: date, years: int) -> date:
+    shifted_year = target_date.year + years
+    max_day = calendar.monthrange(shifted_year, target_date.month)[1]
+    return date(shifted_year, target_date.month, min(target_date.day, max_day))
+
+
+def _normalize_optional_float(raw_value: Any) -> float | None:
+    if raw_value is None:
+        return None
+    return float(raw_value)
 
 
 def _mock_control_plan() -> dict[str, Any]:

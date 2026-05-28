@@ -1,6 +1,13 @@
 from app.services.code_dict_queries import CodeDictOption, CodeDictQueryService
+from app.services.farms import (
+    FarmCreateInput,
+    FarmQueryService,
+    FarmService,
+    FarmUpdateInput,
+)
 from app.services.calendar_tasks import (
     AdditionalTreatmentDiagnosisResult,
+    HttpWeatherProvider,
     HttpPestDiseaseSurveyWindowClient,
     HttpWeedDiagnosisClient,
     InjuryMitigationDiagnosisResult,
@@ -51,6 +58,7 @@ from app.services.stage_management import (
     StagePredictionResult,
     StageRefreshResult,
     StageStateSnapshot,
+    StageWeatherProvider,
     StageTimelineNode,
 )
 from app.services.task_executions import (
@@ -65,6 +73,11 @@ __all__ = [
     "ALLOWED_REVIEW_DECISIONS",
     "CodeDictOption",
     "CodeDictQueryService",
+    "FarmCreateInput",
+    "FarmQueryService",
+    "FarmService",
+    "FarmUpdateInput",
+    "HttpWeatherProvider",
     "HttpPestDiseaseSurveyWindowClient",
     "HttpWeedDiagnosisClient",
     "InjuryMitigationDiagnosisResult",
@@ -103,6 +116,7 @@ __all__ = [
     "StageRefreshResult",
     "StageStateSnapshot",
     "StageTimelineNode",
+    "StageWeatherProvider",
     "HttpStagePredictionClient",
     "MockStagePredictionClient",
     "TaskExecutionCompleteInput",

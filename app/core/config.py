@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     weed_diagnosis_base_url: str | None = None
     pest_disease_survey_base_url: str | None = None
     stage_prediction_base_url: str | None = None
+    weather_api_base_url: str | None = None
+    weather_api_token: str | None = None
+    weather_api_timeout_seconds: float = 10.0
+    weather_climatology_reference_years: int = 3
     background_jobs_enabled: bool = False
     survey_recommendation_interval_seconds: int = 300
     task_due_check_interval_seconds: int = 300

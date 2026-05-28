@@ -16,6 +16,11 @@ class Farm(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     farm_name: Mapped[str] = mapped_column(String(100))
+    external_farm_id: Mapped[str | None] = mapped_column(String(50), unique=True)
+    province: Mapped[str | None] = mapped_column(String(100))
+    city: Mapped[str | None] = mapped_column(String(100))
+    district_county: Mapped[str | None] = mapped_column(String(100))
+    adcode: Mapped[str | None] = mapped_column(String(20))
     boundary_wkt: Mapped[str | None] = mapped_column(Text)
     centroid_lat: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))
     centroid_lon: Mapped[Decimal | None] = mapped_column(Numeric(9, 6))

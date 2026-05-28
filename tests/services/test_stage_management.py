@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
-from app.models import CropStageState, CropThermalTimeState, PlantingPlan, StagePredictionSnapshot
+from app.models import CropStageState, CropThermalTimeState, Farm, PlantingPlan, StagePredictionSnapshot
 from app.services.stage_management import (
     MockStagePredictionClient,
     StageManagementService,
@@ -18,6 +19,14 @@ class FakePlantingPlanRepository:
 
     def get(self, planting_plan_id: int) -> PlantingPlan | None:
         return self.plan if self.plan.id == planting_plan_id else None
+
+
+@dataclass
+class FakeFarmRepository:
+    farm: Farm
+
+    def get(self, farm_id: int) -> Farm | None:
+        return self.farm if self.farm.id == farm_id else None
 
 
 @dataclass
@@ -72,6 +81,32 @@ class FakeCropThermalTimeStateRepository:
         return self.items.get(planting_plan_id)
 
 
+@dataclass
+class FakeWeatherProvider:
+    calls: list[tuple[date, date]] = field(default_factory=list)
+
+    def get_daily_weather(
+        self,
+        planting_plan: PlantingPlan,
+        start_date: date,
+        end_date: date,
+        *,
+        as_of_date: date | None = None,
+    ) -> list[dict[str, Any]]:
+        self.calls.append((start_date, end_date))
+        weather_data: list[dict[str, Any]] = []
+        current_date = start_date
+        while current_date <= end_date:
+            weather_data.append(
+                {
+                    "DATE": current_date.strftime("%Y%m%d"),
+                    "TEMP": 26,
+                },
+            )
+            current_date = date.fromordinal(current_date.toordinal() + 1)
+        return weather_data
+
+
 def _make_plan() -> PlantingPlan:
     return PlantingPlan(
         id=1,
@@ -89,16 +124,30 @@ def _make_plan() -> PlantingPlan:
     )
 
 
+def _make_farm() -> Farm:
+    return Farm(
+        id=1,
+        farm_name="测试农场",
+        province="湖南省",
+        city="长沙市",
+        district_county="浏阳市",
+        adcode="430181",
+    )
+
+
 def test_refresh_prediction_creates_stage_snapshot_and_states() -> None:
     snapshot_repo = FakeStagePredictionSnapshotRepository()
     stage_repo = FakeCropStageStateRepository()
     thermal_repo = FakeCropThermalTimeStateRepository()
+    weather_provider = FakeWeatherProvider()
     service = StageManagementService(
         planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
         stage_prediction_snapshot_repository=snapshot_repo,
         crop_stage_state_repository=stage_repo,
         crop_thermal_time_state_repository=thermal_repo,
         stage_prediction_client=MockStagePredictionClient(),
+        weather_provider=weather_provider,
     )
 
     result = service.refresh_prediction(
@@ -115,6 +164,10 @@ def test_refresh_prediction_creates_stage_snapshot_and_states() -> None:
     assert result.crop_thermal_time_state.accumulated_thermal_time == Decimal("780")
     assert result.crop_thermal_time_state.threshold_snapshot_id == result.snapshot.id
     assert result.stage_changed is False
+    assert result.snapshot.input_payload["location"]["adcode"] == "430181"
+    assert result.snapshot.input_payload["weather_data"][0]["date"] == "2026-04-10"
+    assert result.snapshot.input_payload["weather_data"][0]["source_type"] == "observed"
+    assert weather_provider.calls == [(date(2026, 4, 10), date(2026, 10, 7))]
 
 
 def test_refresh_prediction_updates_existing_state_and_detects_stage_change() -> None:
@@ -148,12 +201,15 @@ def test_refresh_prediction_updates_existing_state_and_detects_stage_change() ->
             ),
         },
     )
+    weather_provider = FakeWeatherProvider()
     service = StageManagementService(
         planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
         stage_prediction_snapshot_repository=snapshot_repo,
         crop_stage_state_repository=stage_repo,
         crop_thermal_time_state_repository=thermal_repo,
         stage_prediction_client=MockStagePredictionClient(),
+        weather_provider=weather_provider,
     )
 
     result = service.refresh_prediction(
@@ -170,8 +226,10 @@ def test_refresh_prediction_updates_existing_state_and_detects_stage_change() ->
 
 def test_extract_pest_disease_growth_stage_from_timeline() -> None:
     stage_timeline = MockStagePredictionClient().predict_stage(
-        planting_plan=_make_plan(),
-        as_of_date=date(2026, 5, 27),
+        request_payload={
+            "sowing_date": "2026-04-10",
+            "as_of_date": "2026-05-27",
+        },
     ).stage_timeline
 
     growth_stage = extract_pest_disease_growth_stage(stage_timeline)

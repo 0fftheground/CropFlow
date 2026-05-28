@@ -11,15 +11,17 @@ from urllib import error, request
 from urllib.parse import urlsplit
 
 from app.core.logging import LogTimer, summarize_for_log
-from app.models import CropStageState, CropThermalTimeState, PlantingPlan, StagePredictionSnapshot
+from app.models import CropStageState, CropThermalTimeState, Farm, PlantingPlan, StagePredictionSnapshot
 from app.repositories import (
     CropStageStateRepository,
     CropThermalTimeStateRepository,
+    FarmRepository,
     PlantingPlanRepository,
     StagePredictionSnapshotRepository,
 )
 
 logger = logging.getLogger(__name__)
+DEFAULT_STAGE_WEATHER_LOOKAHEAD_DAYS = 180
 
 
 @dataclass(slots=True)
@@ -61,9 +63,19 @@ class StagePredictionClient(Protocol):
     def predict_stage(
         self,
         *,
-        planting_plan: PlantingPlan,
-        as_of_date: date,
+        request_payload: dict[str, Any],
     ) -> StagePredictionResult: ...
+
+
+class StageWeatherProvider(Protocol):
+    def get_daily_weather(
+        self,
+        planting_plan: PlantingPlan,
+        start_date: date,
+        end_date: date,
+        *,
+        as_of_date: date | None = None,
+    ) -> list[dict[str, Any]]: ...
 
 
 class HttpStagePredictionClient:
@@ -74,11 +86,9 @@ class HttpStagePredictionClient:
     def predict_stage(
         self,
         *,
-        planting_plan: PlantingPlan,
-        as_of_date: date,
+        request_payload: dict[str, Any],
     ) -> StagePredictionResult:
-        payload = _build_stage_prediction_request_payload(planting_plan, as_of_date=as_of_date)
-        response = self._post_json("/stage/predict", payload)
+        response = self._post_json("/stage/predict", request_payload)
         data = response.get("data")
         if not isinstance(data, dict):
             raise ValueError("stage prediction API did not return a valid data object.")
@@ -158,10 +168,11 @@ class MockStagePredictionClient:
     def predict_stage(
         self,
         *,
-        planting_plan: PlantingPlan,
-        as_of_date: date,
+        request_payload: dict[str, Any],
     ) -> StagePredictionResult:
-        tillering_date = planting_plan.sowing_date + timedelta(days=10)
+        sowing_date = _parse_required_iso_date(request_payload.get("sowing_date"), "sowing_date")
+        as_of_date = _parse_required_iso_date(request_payload.get("as_of_date"), "as_of_date")
+        tillering_date = sowing_date + timedelta(days=10)
         pokou_date = tillering_date + timedelta(days=50)
         heading_date = pokou_date + timedelta(days=8)
         maturity_date = heading_date + timedelta(days=32)
@@ -170,9 +181,9 @@ class MockStagePredictionClient:
                 {
                     "stage_code": "seedling",
                     "stage_name": "苗期",
-                    "start_date": planting_plan.sowing_date.isoformat(),
+                    "start_date": sowing_date.isoformat(),
                     "end_date": (tillering_date - timedelta(days=1)).isoformat(),
-                    "key_date": planting_plan.sowing_date.isoformat(),
+                    "key_date": sowing_date.isoformat(),
                 },
                 {
                     "stage_code": "tillering",
@@ -233,16 +244,22 @@ class StageManagementService:
     def __init__(
         self,
         planting_plan_repository: PlantingPlanRepository,
+        farm_repository: FarmRepository,
         stage_prediction_snapshot_repository: StagePredictionSnapshotRepository,
         crop_stage_state_repository: CropStageStateRepository,
         crop_thermal_time_state_repository: CropThermalTimeStateRepository,
         stage_prediction_client: StagePredictionClient,
+        weather_provider: StageWeatherProvider,
+        weather_lookahead_days: int = DEFAULT_STAGE_WEATHER_LOOKAHEAD_DAYS,
     ) -> None:
         self.planting_plan_repository = planting_plan_repository
+        self.farm_repository = farm_repository
         self.stage_prediction_snapshot_repository = stage_prediction_snapshot_repository
         self.crop_stage_state_repository = crop_stage_state_repository
         self.crop_thermal_time_state_repository = crop_thermal_time_state_repository
         self.stage_prediction_client = stage_prediction_client
+        self.weather_provider = weather_provider
+        self.weather_lookahead_days = weather_lookahead_days
 
     def refresh_prediction(
         self,
@@ -253,11 +270,16 @@ class StageManagementService:
         as_of_date: date | None = None,
     ) -> StageRefreshResult:
         planting_plan = self._get_plan(planting_plan_id)
+        farm = self._get_farm(planting_plan.farm_id)
         effective_as_of_date = as_of_date or date.today()
-        prediction = self.stage_prediction_client.predict_stage(
-            planting_plan=planting_plan,
+        request_payload = _build_stage_prediction_request_payload(
+            planting_plan,
+            farm=farm,
             as_of_date=effective_as_of_date,
+            weather_provider=self.weather_provider,
+            weather_lookahead_days=self.weather_lookahead_days,
         )
+        prediction = self.stage_prediction_client.predict_stage(request_payload=request_payload)
         latest_snapshot = self.stage_prediction_snapshot_repository.get_latest_by_plan(planting_plan_id)
         snapshot = StagePredictionSnapshot(
             planting_plan_id=planting_plan_id,
@@ -266,7 +288,7 @@ class StageManagementService:
             algorithm_code=prediction.algorithm_code,
             algorithm_version=prediction.algorithm_version,
             generated_at=_utcnow(),
-            input_payload=_build_stage_prediction_request_payload(planting_plan, as_of_date=effective_as_of_date),
+            input_payload=request_payload,
             stage_timeline=prediction.stage_timeline,
             thermal_thresholds=prediction.thermal_thresholds,
             source_event_id=source_event_id,
@@ -359,6 +381,12 @@ class StageManagementService:
             raise LookupError(f"Planting plan {planting_plan_id} does not exist.")
         return planting_plan
 
+    def _get_farm(self, farm_id: int) -> Farm:
+        farm = self.farm_repository.get(farm_id)
+        if farm is None:
+            raise LookupError(f"Farm {farm_id} does not exist.")
+        return farm
+
 
 def resolve_current_stage_node(stage_timeline: dict[str, Any], as_of_date: date) -> StageTimelineNode:
     nodes = parse_stage_timeline_nodes(stage_timeline)
@@ -437,12 +465,27 @@ def extract_pest_disease_growth_stage(stage_timeline: dict[str, Any]) -> dict[st
 def _build_stage_prediction_request_payload(
     planting_plan: PlantingPlan,
     *,
+    farm: Farm,
     as_of_date: date,
+    weather_provider: StageWeatherProvider,
+    weather_lookahead_days: int,
 ) -> dict[str, Any]:
     metadata_payload = dict(planting_plan.metadata_payload or {})
+    weather_end_date = _resolve_stage_weather_end_date(
+        planting_plan,
+        as_of_date=as_of_date,
+        weather_lookahead_days=weather_lookahead_days,
+    )
+    weather_data = _normalize_stage_weather_data(
+        weather_provider.get_daily_weather(
+            planting_plan,
+            planting_plan.sowing_date,
+            weather_end_date,
+            as_of_date=as_of_date,
+        ),
+        as_of_date=as_of_date,
+    )
     return {
-        "planting_plan_id": planting_plan.id,
-        "plan_code": planting_plan.plan_code,
         "crop_name": planting_plan.crop_name,
         "culti_type_code": planting_plan.culti_type_code,
         "planting_method_code": planting_plan.planting_method_code,
@@ -451,20 +494,121 @@ def _build_stage_prediction_request_payload(
         "sowing_date": planting_plan.sowing_date.isoformat(),
         "transplant_date": planting_plan.transplant_date.isoformat() if planting_plan.transplant_date else None,
         "transplant_leaf_age": str(planting_plan.transplant_leaf_age) if planting_plan.transplant_leaf_age is not None else None,
-        "expected_harvest_date": (
-            planting_plan.expected_harvest_date.isoformat() if planting_plan.expected_harvest_date else None
-        ),
-        "previous_harvest_date": (
-            planting_plan.previous_harvest_date.isoformat() if planting_plan.previous_harvest_date else None
-        ),
-        "ratoon_first_season_harvest_date": (
-            planting_plan.ratoon_first_season_harvest_date.isoformat()
-            if planting_plan.ratoon_first_season_harvest_date
-            else None
-        ),
         "as_of_date": as_of_date.isoformat(),
+        "location": _build_stage_prediction_location_payload(farm),
+        "weather_data": weather_data,
         "metadata": metadata_payload,
     }
+
+
+def _build_stage_prediction_location_payload(farm: Farm) -> dict[str, Any]:
+    adcode = farm.adcode
+    province = farm.province
+    city = farm.city
+    district_county = farm.district_county
+    missing_fields = [
+        field_name
+        for field_name, value in (
+            ("adcode", adcode),
+            ("province", province),
+            ("city", city),
+            ("district_county", district_county),
+        )
+        if not value
+    ]
+    if missing_fields:
+        raise ValueError(
+            "Stage prediction requires structured Farm location fields: "
+            f"{missing_fields}. Expected values on cf_farm.",
+        )
+
+    payload = {
+        "adcode": str(adcode),
+        "province": str(province),
+        "city": str(city),
+        "district_county": str(district_county),
+    }
+    centroid_lat = farm.centroid_lat
+    centroid_lon = farm.centroid_lon
+    if centroid_lat is not None:
+        payload["centroid_lat"] = _normalize_optional_float(centroid_lat)
+    if centroid_lon is not None:
+        payload["centroid_lon"] = _normalize_optional_float(centroid_lon)
+    return payload
+
+
+def _resolve_stage_weather_end_date(
+    planting_plan: PlantingPlan,
+    *,
+    as_of_date: date,
+    weather_lookahead_days: int,
+) -> date:
+    candidates = [
+        as_of_date,
+        planting_plan.sowing_date + timedelta(days=weather_lookahead_days),
+    ]
+    for field_name in ("harvest_date", "expected_harvest_date", "ratoon_first_season_harvest_date"):
+        field_value = getattr(planting_plan, field_name, None)
+        if isinstance(field_value, date):
+            candidates.append(field_value)
+    return max(candidates)
+
+
+def _normalize_stage_weather_data(
+    weather_data: list[dict[str, Any]],
+    *,
+    as_of_date: date,
+) -> list[dict[str, Any]]:
+    if not weather_data:
+        raise ValueError("Stage prediction requires non-empty weather_data prepared by the backend.")
+
+    normalized_rows: list[dict[str, Any]] = []
+    for item in weather_data:
+        if not isinstance(item, dict):
+            raise ValueError("Stage weather rows must be objects.")
+        row_date = _parse_stage_weather_date(item.get("date") or item.get("DATE"))
+        avg_temp = item.get("avg_temp")
+        if avg_temp is None:
+            avg_temp = item.get("avgTemperature")
+        if avg_temp is None:
+            avg_temp = item.get("TEMP")
+        if avg_temp is None:
+            avg_temp = item.get("temperature")
+        if avg_temp is None:
+            raise ValueError("Stage weather rows must provide avg_temp or TEMP.")
+
+        source_type = item.get("source_type")
+        normalized_row = {
+            "date": row_date.isoformat(),
+            "avg_temp": _normalize_optional_float(avg_temp),
+            "source_type": str(source_type) if source_type is not None else ("observed" if row_date <= as_of_date else "forecast"),
+        }
+        min_temp = item.get("min_temp")
+        if min_temp is None:
+            min_temp = item.get("minTemperature")
+        max_temp = item.get("max_temp")
+        if max_temp is None:
+            max_temp = item.get("maxTemperature")
+        if min_temp is not None:
+            normalized_row["min_temp"] = _normalize_optional_float(min_temp)
+        if max_temp is not None:
+            normalized_row["max_temp"] = _normalize_optional_float(max_temp)
+        if item.get("data_version") is not None:
+            normalized_row["data_version"] = str(item["data_version"])
+        normalized_rows.append(normalized_row)
+
+    normalized_rows.sort(key=lambda row: row["date"])
+    return normalized_rows
+
+
+def _parse_stage_weather_date(raw_value: Any) -> date:
+    if isinstance(raw_value, date):
+        return raw_value
+    if not isinstance(raw_value, str):
+        raise ValueError(f"Unsupported stage weather date value: {raw_value!r}.")
+    if len(raw_value) == 8 and raw_value.isdigit():
+        return datetime.strptime(raw_value, "%Y%m%d").date()
+    return date.fromisoformat(raw_value)
 
 
 def _parse_required_iso_date(raw_value: Any, field_name: str) -> date:
@@ -482,6 +626,10 @@ def _parse_optional_iso_date(raw_value: Any) -> date | None:
     if not isinstance(raw_value, str):
         raise ValueError(f"Unsupported date value: {raw_value!r}.")
     return date.fromisoformat(raw_value)
+
+
+def _normalize_optional_float(raw_value: Any) -> float:
+    return float(Decimal(str(raw_value)))
 
 
 def _utcnow() -> datetime:
