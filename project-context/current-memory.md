@@ -3,7 +3,7 @@
 ## Current Phase
 
 工作相位：`P2` - 核心工程骨架与最小实现  
-Roadmap 对应阶段：`T2` 工程实现；后端样板闭环已基本收口，正在补前端联调和气象 / 生育期运行期支撑
+Roadmap 对应阶段：`T2` 工程实现；后端样板闭环已基本收口，当前重点转为气象 / 生育期运行期支撑与 P3 病虫害输入链路补齐
 
 ## Phase Goal
 
@@ -35,28 +35,46 @@ Roadmap 对应阶段：`T2` 工程实现；后端样板闭环已基本收口，�
 - 已补 `cf_farm` 新字段迁移：`cf007_farm_region`、`cf008_farm_external_id`；本地库已升级并写入两个真实农场（岳麓基地、峨桥基地）的区域信息和 `external_farm_id`。
 - 已接入真实 `HttpWeatherProvider`：后端现在会按 `observed / forecast / climatology` 组装逐日天气；`getAvgTemAndPre` 用 `farmId`，`getForecast10DaysBeforeAnd15DaysAfter` 当前联调确认仍需 `farmID`。
 - 已完成岳麓基地真实天气接口联调：`getAvgTemAndPre` 在短日期范围下可返回逐日结果，但不包含“今天”数据；`as_of_date` 当天已改由逐日预报接口补齐。相关 weather/farm/stage 回归已通过。
+- 已补运行期天气驱动骨架：新增 `DailyWeatherCheckJob`、scheduler 接线和 `WeatherUpdated` 事件幂等生成；天气变化现在可进入 Plan Orchestrator。
+- 已补病虫害每日更新所需的气象输入拼装：逐日天气继续走农场逐日预报，72 小时逐小时天气改走 `getForecast10DaysBeforeAndAfter`，台风预警使用 `weather_api.pdf` 中的 `/Zoomlion/alert`；`daily-update-survey` payload / client / mock / 测试已补齐，但还未把返回结果真正落成新的 CalendarItem。
+- 已把生育期 handoff 文档改成“规则包驱动”的 vNext 草案：算法接口建议只返回 `threshold_rule`，后端负责积温累计、生育期推进和业务阶段日期推导；并新增 `docs/生育期code_list.xlsx` 作为原始阶段 code 参考。
+- 已开始把后端实现切到新生育期口径：`StageManagementService` 现支持 `PlanCreated / PlanKeyInfoChanged` 时调算法拿规则包，`WeatherUpdated` 时复用已有规则包在后端本地重算累计积温、当前阶段和派生 `stage_timeline`；相关定向测试已通过。
 
 ## Remaining
 
 - 前端页面尚未开发，真实前后端联调还未开始。
 - 仍需由前端负责人基于 handoff 和 API contract 开始真实页面联调；当前不由后端侧直接开发前端页面。
 - 如继续开发植保病虫害相关农事任务，应作为 `P3` 多方向扩展启动，而不再并入当前 `P2`。
-- P3 病虫害调查每日更新尚未接入；需要继续把气象接口映射到逐日天气、72 小时逐小时天气和台风预警输入后，再调用 `/pestDisease/survey/daily-update-survey` 生成突发或合并调查 CalendarItem。
-- 生育期管理当前只完成初始化 / 计划关键字段变更两条触发链路；`WeatherUpdated`、`ActualStageRecorded`、`StageChanged` 的完整事件回路和后台 job 还未实现。
-- 当前真实天气 provider 只完成了逐日天气拼接；`DailyWeatherCheckJob`、`WeatherUpdated` 事件发射和天气变化幂等检测还未落地。
+- P3 病虫害调查每日更新仍未闭环；当前只完成气象输入拼装和 `/pestDisease/survey/daily-update-survey` 调用能力，仍需把返回的 `new_emergency / merged_into_regular / no_new_event` 映射成具体的病虫调查 CalendarItem / taskSubtype。
+- 气象运行期管理仍不完整：
+  - 现在的 `DailyWeatherCheckJob` 还只是按天气行生成 `WeatherUpdated`，尚未落独立的计划级天气快照表；
+  - `observed / forecast / climatology` 的存储、回刷窗口、历史修正策略还未设计成正式数据结构；
+  - `climatology` 当前仍是 provider 侧按需拼装，尚未单独定义低频缓存或版本策略；
+  - 天气变化检测还未区分“仅未来 forecast 变化”和“历史 observed 回刷修正”两种重算路径。
+- 积温管理只做到第一版：
+  - 当前已能基于规则包和天气序列重算累计积温，但仍是从 `sowing_date` 重扫天气，不是真正按 `last_calculated_date` 的增量引擎；
+  - `CropThermalTimeState` 还未补充逐日积温明细、跨阈值命中记录和更细的审计信息；
+  - 规则版本切换后的重算策略、历史天气修正后的全量回放策略还未单独收口。
+- 生育期管理仍未彻底完成：
+  - `ActualStageRecorded` 还没有接入新的“规则包 + 本地积温”路径；
+  - `StageChanged` 还未作为独立业务事件落地；
+  - 当前内部仍临时沿用 `seedling / tillering / pokou / heading / maturity` 粗粒度 code；
+  - 算法端后续若按 `docs/生育期code_list.xlsx` 返回原始阶段 code，后端还需新增“raw stage code -> business milestone(`tillering/pokou/heading/maturity`)" 的映射层；
+  - 当前实现默认可派生完整 `stage_timeline`，但算法侧已确认后续可能只返回必要原始阶段点，因此 snapshot 结构和映射规则还要再收敛。
 - DeviceCommand、InventoryItem / InventoryTransaction 落库（按第一版 deferred 处理）。
-- stageCode 完整枚举和更广泛的 taskSubtype 收敛延后到后续扩展阶段。
+- stageCode 完整枚举、业务阶段映射配置和更广泛的 taskSubtype 收敛延后到后续扩展阶段。
 
 ## Blockers
 
 - 前端尚未进入实现，当前无法完成真实页面联调验收。
 - 真实杂草算法服务已通过本地集成测试和 trace 脚本验证；后续仍需在前后端真实联调中继续观察返回语义稳定性。
 - 外部气象接口当前存在契约不一致：平均接口使用 `farmId` 且不返回“今天”数据；逐日预报接口文档已更新为 `farmId`，但真实服务当前仍要求 `farmID`。
+- 生育期接口契约刚切到 vNext 草案：后端代码已开始按“规则包驱动”调整，但算法侧最终是否返回完整时间线、必要原始阶段点集合以及 `生育期code_list.xlsx` 对应 code 映射规则还未最终冻结。
 
 ## Next Step
 
-后端侧下个 session 优先把真实天气 provider 接进运行期链路：先补 `DailyWeatherCheckJob` / `WeatherUpdated` 事件与生育期 stage refresh，再继续接病虫害每日更新调查所需的 72 小时逐小时天气和台风预警映射；如果接口方再调整天气 contract，先同步修正文档和 provider。
+后端侧下个 session 优先做两件事：一是把生育期 raw stage code 方案收口，明确算法到底返回“完整时间线”还是“必要阶段点”，再设计 `raw code -> business milestone` 映射与 snapshot 结构；二是把气象 / 积温运行期做成正式方案，补天气快照存储、增量积温更新、历史回刷重算和 `daily-update-survey` 结果落 CalendarItem 的闭环。
 
 ## Last Updated
 
-`2026-05-28`
+`2026-05-29`

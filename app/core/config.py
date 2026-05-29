@@ -36,9 +36,12 @@ class Settings(BaseSettings):
     stage_prediction_base_url: str | None = None
     weather_api_base_url: str | None = None
     weather_api_token: str | None = None
+    weather_alert_api_base_url: str | None = None
+    weather_alert_api_token: str | None = None
     weather_api_timeout_seconds: float = 10.0
     weather_climatology_reference_years: int = 3
     background_jobs_enabled: bool = False
+    weather_check_interval_seconds: int = 300
     survey_recommendation_interval_seconds: int = 300
     task_due_check_interval_seconds: int = 300
 

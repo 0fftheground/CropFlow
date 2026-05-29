@@ -22,6 +22,7 @@ from app.core.constants import (
     EVENT_TYPE_SURVEY_RESULT_RECORDED,
     EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED,
     EVENT_TYPE_TASK_INTENT_CREATED,
+    EVENT_TYPE_WEATHER_UPDATED,
     EXECUTION_MODE_MANUAL,
     FARMING_TASK_STATUS_PENDING,
     OPERATION_PLAN_STATUS_ACTIVE,
@@ -444,12 +445,31 @@ class StageRefreshHandler:
         if event_record.planting_plan_id is None:
             return OrchestratorResult()
 
-        prediction_source = "initial" if event_record.event_type == EVENT_TYPE_PLAN_CREATED else "plan_change"
-        refresh_result = self.stage_management_service.refresh_prediction(
-            event_record.planting_plan_id,
-            prediction_source=prediction_source,
-            source_event_id=event_record.id,
-        )
+        if event_record.event_type == EVENT_TYPE_PLAN_CREATED:
+            prediction_source = "initial"
+            refresh_result = self.stage_management_service.refresh_prediction(
+                event_record.planting_plan_id,
+                prediction_source=prediction_source,
+                source_event_id=event_record.id,
+            )
+        elif event_record.event_type == EVENT_TYPE_PLAN_KEY_INFO_CHANGED:
+            prediction_source = "plan_change"
+            refresh_result = self.stage_management_service.refresh_prediction(
+                event_record.planting_plan_id,
+                prediction_source=prediction_source,
+                source_event_id=event_record.id,
+            )
+        elif event_record.event_type == EVENT_TYPE_WEATHER_UPDATED:
+            refresh_result = self.stage_management_service.refresh_for_weather_update(
+                event_record.planting_plan_id,
+                source_event_id=event_record.id,
+            )
+        else:
+            refresh_result = self.stage_management_service.refresh_prediction(
+                event_record.planting_plan_id,
+                prediction_source="runtime_refresh",
+                source_event_id=event_record.id,
+            )
         return OrchestratorResult(
             crop_stage_states=[refresh_result.crop_stage_state],
             crop_thermal_time_states=[refresh_result.crop_thermal_time_state],
@@ -1342,6 +1362,7 @@ def build_plan_orchestrator(
         handlers={
             EVENT_TYPE_PLAN_CREATED: lifecycle_handler,
             EVENT_TYPE_PLAN_KEY_INFO_CHANGED: lifecycle_handler,
+            EVENT_TYPE_WEATHER_UPDATED: lifecycle_handler,
             EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED: TaskDueCheckTriggeredHandler(
                 planting_plan_repository=planting_plan_repository,
                 calendar_item_repository=calendar_item_repository,

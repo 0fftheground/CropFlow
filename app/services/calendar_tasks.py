@@ -5,18 +5,20 @@ import json
 import logging
 import socket
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Protocol
 from urllib import error, request
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from app.core.logging import LogTimer, summarize_for_log
 from app.core.constants import (
     CALENDAR_STATUS_ACTIVE,
     CALENDAR_STATUS_INVALIDATED,
+    DAILY_WEATHER_CHECK_JOB,
     EVENT_TYPE_CALENDAR_ITEM_UPDATED,
     EVENT_PROCESSING_STATUS_RECEIVED,
     EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED,
+    EVENT_TYPE_WEATHER_UPDATED,
     SURVEY_DATE_RECOMMENDATION_JOB,
     TASK_CATEGORY_PLANT_PROTECTION,
     TASK_DUE_CHECK_JOB,
@@ -126,6 +128,16 @@ class PestDiseaseSurveyWindowClient(Protocol):
         level1_of_year: dict[str, list[str]],
     ) -> "PestDiseaseRegularSurveyInitResult": ...
 
+    def daily_update_surveys(
+        self,
+        *,
+        growth_stage: dict[str, str],
+        regular_plans: list[dict[str, Any]],
+        weather_data: list[dict[str, Any]],
+        typhoon_data: dict[str, Any],
+        actual_control_date: date | None = None,
+    ) -> "PestDiseaseDailyUpdateResult": ...
+
 
 @dataclass(slots=True)
 class PreTreatmentSurveyRecommendation:
@@ -194,6 +206,19 @@ class PestDiseaseRegularSurveyPlan:
 @dataclass(slots=True)
 class PestDiseaseRegularSurveyInitResult:
     regular_plans: list[PestDiseaseRegularSurveyPlan]
+    raw_response: dict[str, Any]
+
+
+@dataclass(slots=True)
+class PestDiseaseDailyUpdateResult:
+    status: str
+    message: str
+    survey_window: tuple[date, date] | None
+    spray_stage: str | None
+    targets: list[str]
+    exclude_reasons: dict[str, Any]
+    source: str | None
+    raw_result: dict[str, Any]
     raw_response: dict[str, Any]
 
 
@@ -480,6 +505,27 @@ class HttpPestDiseaseSurveyWindowClient:
             raw_response=response,
         )
 
+    def daily_update_surveys(
+        self,
+        *,
+        growth_stage: dict[str, str],
+        regular_plans: list[dict[str, Any]],
+        weather_data: list[dict[str, Any]],
+        typhoon_data: dict[str, Any],
+        actual_control_date: date | None = None,
+    ) -> PestDiseaseDailyUpdateResult:
+        payload: dict[str, Any] = {
+            "growth_stage": growth_stage,
+            "regular_plans": regular_plans,
+            "weather_data": weather_data,
+            "typhoon_data": typhoon_data,
+        }
+        if actual_control_date is not None:
+            payload["actual_control_date"] = actual_control_date.strftime("%Y%m%d")
+        response = self._post_json("/pestDisease/survey/daily-update-survey", payload)
+        data = self._get_response_data(response, "daily-update-survey")
+        return _parse_pest_disease_daily_update_result(data, response)
+
     def _post_json(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         url = f"{self.base_url}{path}"
@@ -581,6 +627,53 @@ class MockPestDiseaseSurveyWindowClient:
                 "data": {"count": len(plans), "regular_plans": raw_plans},
             },
         )
+
+    def daily_update_surveys(
+        self,
+        *,
+        growth_stage: dict[str, str],
+        regular_plans: list[dict[str, Any]],
+        weather_data: list[dict[str, Any]],
+        typhoon_data: dict[str, Any],
+        actual_control_date: date | None = None,
+    ) -> PestDiseaseDailyUpdateResult:
+        has_typhoon_alert = bool(typhoon_data.get("alerts"))
+        if has_typhoon_alert:
+            data = {
+                "status": "new_emergency",
+                "msg": "已识别到临时调查触发条件，建议开展临时调查",
+                "survey_window": ["20260703", "20260704"],
+                "spray_stage": "突发病虫防治",
+                "targets": ["稻飞虱", "纹枯病"],
+                "exclude_reasons": {},
+                "source": "emergency",
+                "raw_result": {
+                    "growth_stage": growth_stage,
+                    "regular_plans": regular_plans,
+                    "weather_data": weather_data,
+                    "typhoon_data": typhoon_data,
+                    "actual_control_date": actual_control_date.strftime("%Y%m%d") if actual_control_date else None,
+                },
+            }
+        else:
+            data = {
+                "status": "no_new_event",
+                "msg": "当天无新增调查事件",
+                "survey_window": [],
+                "spray_stage": None,
+                "targets": [],
+                "exclude_reasons": {},
+                "source": "none",
+                "raw_result": {
+                    "growth_stage": growth_stage,
+                    "regular_plans": regular_plans,
+                    "weather_data": weather_data,
+                    "typhoon_data": typhoon_data,
+                    "actual_control_date": actual_control_date.strftime("%Y%m%d") if actual_control_date else None,
+                },
+            }
+        response = {"mock": True, "code": 200, "msg": data["msg"], "data": data}
+        return _parse_pest_disease_daily_update_result(data, response)
 
 
 class MockWeedDiagnosisClient:
@@ -800,20 +893,31 @@ class MockWeedDiagnosisClient:
 
 
 class HttpWeatherProvider:
+    FORECAST_HOURLY_PATH = "/algBaseDataApi/v1/getForecast10DaysBeforeAndAfter"
     FORECAST_DAILY_PATH = "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter"
     AVERAGE_TEMP_PRECIPITATION_PATH = "/weather/v1/getAvgTemAndPre"
+    TYPHOON_ALERTS_PATH = "/Zoomlion/alert"
+    TYPHOON_EVENT_KEYWORDS = ("台风", "热带风暴", "强热带风暴", "超强台风", "热带低压", "台风外围", "外围环流")
+    TYPHOON_ALERT_PROVINCE_PREFIXES = {
+        "湖南省": ("43", "44", "45"),
+        "安徽省": ("34", "33", "35", "31", "32"),
+    }
 
     def __init__(
         self,
         farm_repository: FarmRepository,
         base_url: str,
         auth_token: str,
+        alert_base_url: str | None = None,
+        alert_auth_token: str | None = None,
         timeout_seconds: float = 10.0,
         climatology_reference_years: int = 3,
     ) -> None:
         self.farm_repository = farm_repository
         self.base_url = base_url.rstrip("/")
         self.auth_token = auth_token
+        self.alert_base_url = alert_base_url.rstrip("/") if alert_base_url else None
+        self.alert_auth_token = alert_auth_token
         self.timeout_seconds = timeout_seconds
         self.climatology_reference_years = climatology_reference_years
 
@@ -866,6 +970,125 @@ class HttpWeatherProvider:
 
         weather_data.sort(key=lambda item: str(item["date"]))
         return weather_data
+
+    def get_pest_disease_daily_weather(
+        self,
+        planting_plan: PlantingPlan,
+        start_date: date,
+        end_date: date,
+    ) -> list[dict[str, Any]]:
+        if start_date > end_date:
+            return []
+
+        farm = self._get_farm(planting_plan.farm_id)
+        external_farm_id = self._resolve_external_farm_id(farm)
+        response_data = self._post_json(
+            self.FORECAST_DAILY_PATH,
+            {
+                "farmID": external_farm_id,
+            },
+        )
+        weather_data: list[dict[str, Any]] = []
+        for row in response_data:
+            row_date = date.fromisoformat(str(row.get("datatime")))
+            if row_date < start_date or row_date > end_date:
+                continue
+            weather_data.append(
+                {
+                    "DATE": row_date.strftime("%Y%m%d"),
+                    "TMAX": _normalize_required_float(row.get("tMax"), "tMax", self.FORECAST_DAILY_PATH),
+                    "RAIN": _normalize_required_float(row.get("pre"), "pre", self.FORECAST_DAILY_PATH),
+                    "SUN": _normalize_required_float(row.get("ssh"), "ssh", self.FORECAST_DAILY_PATH),
+                },
+            )
+        expected_dates = {item.strftime("%Y%m%d") for item in _build_closed_date_range(start_date, end_date)}
+        returned_dates = {str(item["DATE"]) for item in weather_data}
+        missing_dates = sorted(expected_dates - returned_dates)
+        if missing_dates:
+            raise ValueError(f"Pest disease daily weather is missing rows for dates: {missing_dates}.")
+        weather_data.sort(key=lambda item: str(item["DATE"]))
+        return weather_data
+
+    def get_hourly_weather_72h(
+        self,
+        planting_plan: PlantingPlan,
+        *,
+        as_of_datetime: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        farm = self._get_farm(planting_plan.farm_id)
+        external_farm_id = self._resolve_external_farm_id(farm)
+        response_data = self._post_json(
+            self.FORECAST_HOURLY_PATH,
+            {
+                "farmId": external_farm_id,
+            },
+        )
+        effective_as_of = _floor_to_hour(as_of_datetime or _utcnow())
+        end_datetime = effective_as_of + timedelta(hours=72)
+        weather_data: list[dict[str, Any]] = []
+        for row in response_data:
+            raw_datetime = str(row.get("datatime") or "").strip()
+            if not raw_datetime:
+                continue
+            row_datetime = datetime.fromisoformat(raw_datetime)
+            if row_datetime < effective_as_of or row_datetime >= end_datetime:
+                continue
+            weather_data.append(
+                {
+                    "datetime": row_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                    "pre": _normalize_required_float(row.get("pre"), "pre", self.FORECAST_HOURLY_PATH),
+                    "wins": _normalize_required_float(row.get("wins"), "wins", self.FORECAST_HOURLY_PATH),
+                    "gust": _normalize_optional_float(row.get("gust")),
+                    "wp": str(row.get("wp") or "").strip() or None,
+                },
+            )
+        weather_data.sort(key=lambda item: str(item["datetime"]))
+        if len(weather_data) < 72:
+            raise ValueError(
+                "Hourly weather API did not return enough rows for the next 72 hours. "
+                f"expected at least 72, got {len(weather_data)}."
+            )
+        return weather_data[:72]
+
+    def get_typhoon_alerts(self, planting_plan: PlantingPlan) -> list[dict[str, Any]]:
+        if not self.alert_base_url:
+            return []
+
+        farm = self._get_farm(planting_plan.farm_id)
+        province = str(farm.province or "").strip()
+        if not province:
+            raise ValueError("Typhoon alert lookup requires Farm.province.")
+
+        relevant_prefixes = self.TYPHOON_ALERT_PROVINCE_PREFIXES.get(province)
+        if relevant_prefixes is None:
+            adcode = str(farm.adcode or "").strip()
+            if len(adcode) < 2:
+                return []
+            relevant_prefixes = (adcode[:2],)
+
+        rows = self._get_json(self.alert_base_url, self.TYPHOON_ALERTS_PATH, token=self.alert_auth_token)
+        alerts: list[dict[str, Any]] = []
+        for row in rows:
+            msg_type = str(row.get("msgType") or "").strip()
+            msg_type_code = str(row.get("msgTypeCode") or "").strip()
+            event_type = str(row.get("eventType") or "").strip()
+            if msg_type == "解除" or msg_type_code == "Cancel":
+                continue
+            if not any(keyword in event_type for keyword in self.TYPHOON_EVENT_KEYWORDS):
+                continue
+            affected_codes = _split_affected_area_codes(row.get("affectedArea"))
+            if not affected_codes:
+                fallback_code = str(row.get("geoCode") or row.get("areaCode") or "").strip()
+                if fallback_code:
+                    affected_codes = [fallback_code]
+            if not any(any(code.startswith(prefix) for prefix in relevant_prefixes) for code in affected_codes):
+                continue
+            effective = str(row.get("effective") or "").strip()
+            if not effective:
+                continue
+            alerts.append({"eventType": event_type, "effective": effective})
+        alerts.sort(key=lambda item: (str(item["effective"]), str(item["eventType"])))
+        return alerts
 
     def _get_farm(self, farm_id: int) -> Farm:
         farm = self.farm_repository.get(farm_id)
@@ -1069,6 +1292,72 @@ class HttpWeatherProvider:
             raise ValueError(f"Weather API {path} returned invalid row objects.")
         return normalized_data
 
+    def _get_json(
+        self,
+        base_url: str,
+        path: str,
+        *,
+        query_params: dict[str, str] | None = None,
+        token: str | None = None,
+    ) -> list[dict[str, Any]]:
+        query = f"?{urlencode(query_params)}" if query_params else ""
+        url = f"{base_url}{path}{query}"
+        headers = {"Authorization": token} if token else {}
+        http_request = request.Request(url, headers=headers, method="GET")
+        timer = LogTimer()
+        logger.info(
+            "Calling weather GET API path=%s host=%s query=%s",
+            path,
+            urlsplit(url).netloc,
+            summarize_for_log(query_params or {}),
+        )
+        try:
+            with request.urlopen(http_request, timeout=self.timeout_seconds) as response:
+                response_payload = json.loads(response.read().decode("utf-8"))
+                logger.info(
+                    "Weather GET API succeeded path=%s status=%s duration_ms=%.2f response=%s",
+                    path,
+                    getattr(response, "status", 200),
+                    timer.elapsed_ms,
+                    summarize_for_log(response_payload),
+                )
+        except error.HTTPError as exc:
+            raw_response = exc.read().decode("utf-8", errors="replace")
+            logger.warning(
+                "Weather GET API returned HTTP error path=%s status=%s duration_ms=%.2f response=%s",
+                path,
+                exc.code,
+                timer.elapsed_ms,
+                summarize_for_log(raw_response),
+            )
+            raise ValueError(f"Weather GET API {path} returned HTTP {exc.code}: {raw_response}") from exc
+        except error.URLError as exc:
+            logger.error(
+                "Weather GET API is unreachable path=%s duration_ms=%.2f reason=%s",
+                path,
+                timer.elapsed_ms,
+                exc.reason,
+            )
+            raise RuntimeError(f"Weather GET API {path} is unreachable: {exc.reason}") from exc
+        except (TimeoutError, socket.timeout) as exc:
+            logger.error(
+                "Weather GET API timed out path=%s duration_ms=%.2f",
+                path,
+                timer.elapsed_ms,
+            )
+            raise RuntimeError(f"Weather GET API {path} timed out.") from exc
+
+        status = response_payload.get("status")
+        if status is not None and int(status) != 200:
+            raise ValueError(f"Weather GET API {path} returned status {status}.")
+        data = response_payload.get("data")
+        if not isinstance(data, list):
+            raise ValueError(f"Weather GET API {path} did not return a valid data array.")
+        normalized_data = [dict(item) for item in data if isinstance(item, dict)]
+        if len(normalized_data) != len(data):
+            raise ValueError(f"Weather GET API {path} returned invalid row objects.")
+        return normalized_data
+
 
 class MockWeatherProvider:
     def get_daily_weather(
@@ -1091,6 +1380,50 @@ class MockWeatherProvider:
             current_date += timedelta(days=1)
 
         return weather_data
+
+    def get_pest_disease_daily_weather(
+        self,
+        planting_plan: PlantingPlan,
+        start_date: date,
+        end_date: date,
+    ) -> list[dict[str, Any]]:
+        weather_data: list[dict[str, Any]] = []
+        current_date = start_date
+        while current_date <= end_date:
+            weather_data.append(
+                {
+                    "DATE": current_date.strftime("%Y%m%d"),
+                    "TMAX": 30.0,
+                    "RAIN": 0.0,
+                    "SUN": 6.0,
+                },
+            )
+            current_date += timedelta(days=1)
+        return weather_data
+
+    def get_hourly_weather_72h(
+        self,
+        planting_plan: PlantingPlan,
+        *,
+        as_of_datetime: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        start_datetime = _floor_to_hour(as_of_datetime or _utcnow())
+        weather_data: list[dict[str, Any]] = []
+        for offset in range(72):
+            current_datetime = start_datetime + timedelta(hours=offset)
+            weather_data.append(
+                {
+                    "datetime": current_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                    "pre": 0.0,
+                    "wins": 2.0,
+                    "gust": 3.0,
+                    "wp": "多云",
+                },
+            )
+        return weather_data
+
+    def get_typhoon_alerts(self, planting_plan: PlantingPlan) -> list[dict[str, Any]]:
+        return []
 
 
 class PlantProtectionPlanContextResolver:
@@ -1370,6 +1703,66 @@ class SurveyDateRecommendationService:
         )
         return safety_item, effect_item
 
+    def build_pest_disease_daily_update_payload(
+        self,
+        planting_plan_id: int,
+        *,
+        as_of_date: date | None = None,
+        actual_control_date: date | None = None,
+    ) -> dict[str, Any] | None:
+        planting_plan = self._get_plan(planting_plan_id)
+        request_payload = self._resolve_pest_disease_regular_survey_payload(planting_plan)
+        if request_payload is None:
+            return None
+
+        effective_as_of_date = as_of_date or date.today()
+        regular_plans = self._resolve_pest_disease_daily_update_regular_plans(planting_plan, request_payload)
+        if not regular_plans:
+            return None
+
+        weather_provider = self._require_pest_disease_weather_provider()
+        payload: dict[str, Any] = {
+            "growth_stage": request_payload["growth_stage"],
+            "regular_plans": regular_plans,
+            "weather_data": weather_provider.get_pest_disease_daily_weather(
+                planting_plan,
+                effective_as_of_date - timedelta(days=8),
+                effective_as_of_date + timedelta(days=7),
+            ),
+            "typhoon_data": {
+                "alerts": weather_provider.get_typhoon_alerts(planting_plan),
+                "hourly_weather_72h": weather_provider.get_hourly_weather_72h(
+                    planting_plan,
+                    as_of_datetime=datetime.combine(effective_as_of_date, time.min),
+                ),
+            },
+        }
+        if actual_control_date is not None:
+            payload["actual_control_date"] = actual_control_date.strftime("%Y%m%d")
+        return payload
+
+    def run_pest_disease_daily_update(
+        self,
+        planting_plan_id: int,
+        *,
+        as_of_date: date | None = None,
+        actual_control_date: date | None = None,
+    ) -> PestDiseaseDailyUpdateResult | None:
+        payload = self.build_pest_disease_daily_update_payload(
+            planting_plan_id,
+            as_of_date=as_of_date,
+            actual_control_date=actual_control_date,
+        )
+        if payload is None:
+            return None
+        return self.pest_disease_client.daily_update_surveys(
+            growth_stage=dict(payload["growth_stage"]),
+            regular_plans=[dict(item) for item in payload["regular_plans"]],
+            weather_data=[dict(item) for item in payload["weather_data"]],
+            typhoon_data=dict(payload["typhoon_data"]),
+            actual_control_date=actual_control_date,
+        )
+
     def schedule_recontrol_pre_survey(
         self,
         planting_plan_id: int,
@@ -1495,6 +1888,63 @@ class SurveyDateRecommendationService:
             "growth_stage": normalized_growth_stage,
             "level1_of_year": normalized_level1_of_year,
         }
+
+    def _resolve_pest_disease_daily_update_regular_plans(
+        self,
+        planting_plan: PlantingPlan,
+        request_payload: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        active_items = self.calendar_item_repository.list_active_by_plan_and_subtype(
+            planting_plan.id,
+            TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        )
+        active_items = sorted(
+            active_items,
+            key=lambda item: (item.suggested_start_date, item.suggested_end_date, int(item.id or 0)),
+        )
+        raw_plans: list[dict[str, Any]] = []
+        for item in active_items:
+            generation_condition = dict(item.generation_condition or {})
+            raw_plan = generation_condition.get("rawPlan")
+            if isinstance(raw_plan, dict):
+                raw_plans.append(dict(raw_plan))
+                continue
+            raw_plans.append(
+                {
+                    "status": str(generation_condition.get("status") or "need_survey"),
+                    "调查日期": [
+                        item.suggested_start_date.strftime("%Y%m%d"),
+                        item.suggested_end_date.strftime("%Y%m%d"),
+                    ],
+                    "spray_stage": generation_condition.get("sprayStage"),
+                    "survey_method": generation_condition.get("surveyMethod"),
+                    "调查对象": list(generation_condition.get("targets") or []),
+                    "排除原因": dict(generation_condition.get("excludeReasons") or {}),
+                    "msg": str(generation_condition.get("message") or ""),
+                },
+            )
+        if raw_plans:
+            return raw_plans
+
+        context = self.context_resolver.resolve(planting_plan)
+        init_result = self.pest_disease_client.init_regular_surveys(
+            cultivation_type=context.cultivation_system,
+            growth_stage=request_payload["growth_stage"],
+            level1_of_year=request_payload["level1_of_year"],
+        )
+        return [dict(plan.raw_plan) for plan in init_result.regular_plans]
+
+    def _require_pest_disease_weather_provider(self) -> Any:
+        missing_methods = [
+            method_name
+            for method_name in ("get_pest_disease_daily_weather", "get_hourly_weather_72h", "get_typhoon_alerts")
+            if not hasattr(self.weather_provider, method_name)
+        ]
+        if missing_methods:
+            raise RuntimeError(
+                "Weather provider is missing pest disease weather methods: " + ", ".join(sorted(missing_methods))
+            )
+        return self.weather_provider
 
     def _invalidate_stale_regular_disease_pest_surveys(
         self,
@@ -1695,6 +2145,82 @@ class TaskGenerationService:
         return event_record
 
 
+class WeatherUpdateService:
+    def __init__(
+        self,
+        planting_plan_repository: PlantingPlanRepository,
+        event_record_repository: EventRecordRepository,
+        weather_provider: WeatherProvider,
+        plan_orchestrator: EventDispatcher | None = None,
+    ) -> None:
+        self.planting_plan_repository = planting_plan_repository
+        self.event_record_repository = event_record_repository
+        self.weather_provider = weather_provider
+        self.plan_orchestrator = plan_orchestrator
+
+    def generate_weather_updates(
+        self,
+        planting_plan_id: int,
+        *,
+        check_date: date,
+    ) -> list[EventRecord]:
+        planting_plan = self.planting_plan_repository.get(planting_plan_id)
+        if planting_plan is None:
+            raise ValueError(f"Planting plan {planting_plan_id} does not exist.")
+
+        if self.plan_orchestrator is None:
+            raise RuntimeError("WeatherUpdateService requires PlanOrchestrator to generate weather updates.")
+
+        weather_rows = self.weather_provider.get_daily_weather(
+            planting_plan,
+            check_date,
+            check_date,
+            as_of_date=check_date,
+        )
+        created_events: list[EventRecord] = []
+        for row in weather_rows:
+            weather_date = str(row.get("date") or "").strip()
+            data_version = str(row.get("data_version") or "").strip()
+            if not weather_date:
+                raise ValueError("Weather row must include date when generating WeatherUpdated.")
+            if not data_version:
+                raise ValueError("Weather row must include data_version when generating WeatherUpdated.")
+
+            existing_event = self.event_record_repository.get_by_idempotency_key(
+                f"{DAILY_WEATHER_CHECK_JOB}:{planting_plan_id}:{weather_date}:{data_version}",
+            )
+            if existing_event is not None:
+                created_events.append(existing_event)
+                continue
+
+            event_record = EventRecord(
+                planting_plan_id=planting_plan_id,
+                event_type=EVENT_TYPE_WEATHER_UPDATED,
+                event_category="job",
+                event_source="background_job",
+                source_system="cropflow",
+                source_record_id=weather_date,
+                payload={
+                    "jobKey": DAILY_WEATHER_CHECK_JOB,
+                    "checkDate": check_date.isoformat(),
+                    "weatherDate": weather_date,
+                    "dataVersion": data_version,
+                    "weather": dict(row),
+                },
+                occurred_at=_utcnow(),
+                processing_status=EVENT_PROCESSING_STATUS_RECEIVED,
+                idempotency_key=f"{DAILY_WEATHER_CHECK_JOB}:{planting_plan_id}:{weather_date}:{data_version}",
+                created_by_type="system",
+                created_by_id=DAILY_WEATHER_CHECK_JOB,
+            )
+            self.event_record_repository.add(event_record)
+            if hasattr(self.event_record_repository, "flush"):
+                self.event_record_repository.flush()
+            self.plan_orchestrator.handle(event_record)
+            created_events.append(event_record)
+        return created_events
+
+
 def _parse_api_date(raw_value: str) -> date:
     return datetime.strptime(raw_value, "%Y%m%d").date()
 
@@ -1725,6 +2251,31 @@ def _parse_pest_disease_regular_plan(raw_plan: dict[str, Any]) -> PestDiseaseReg
         survey_method=str(raw_plan["survey_method"]) if raw_plan.get("survey_method") is not None else None,
         adjusted=bool(raw_plan.get("adjusted")),
         raw_plan=dict(raw_plan),
+    )
+
+
+def _parse_pest_disease_daily_update_result(
+    raw_result: dict[str, Any],
+    raw_response: dict[str, Any],
+) -> PestDiseaseDailyUpdateResult:
+    raw_window = raw_result.get("survey_window")
+    survey_window = _parse_api_date_range(raw_window) if isinstance(raw_window, list) and raw_window else None
+    raw_targets = raw_result.get("targets") or []
+    if not isinstance(raw_targets, list):
+        raise ValueError("daily-update-survey targets must be a list.")
+    raw_exclude_reasons = raw_result.get("exclude_reasons") or {}
+    if not isinstance(raw_exclude_reasons, dict):
+        raise ValueError("daily-update-survey exclude_reasons must be an object.")
+    return PestDiseaseDailyUpdateResult(
+        status=str(raw_result.get("status") or ""),
+        message=str(raw_result.get("msg") or ""),
+        survey_window=survey_window,
+        spray_stage=str(raw_result["spray_stage"]) if raw_result.get("spray_stage") is not None else None,
+        targets=[str(item) for item in raw_targets],
+        exclude_reasons=raw_exclude_reasons,
+        source=str(raw_result["source"]) if raw_result.get("source") is not None else None,
+        raw_result=dict(raw_result.get("raw_result") or {}),
+        raw_response=raw_response,
     )
 
 
@@ -1777,6 +2328,25 @@ def _normalize_optional_float(raw_value: Any) -> float | None:
     if raw_value is None:
         return None
     return float(raw_value)
+
+
+def _normalize_required_float(raw_value: Any, field_name: str, api_name: str) -> float:
+    normalized = _normalize_optional_float(raw_value)
+    if normalized is None:
+        raise ValueError(f"{api_name} did not return required numeric field {field_name}.")
+    return normalized
+
+
+def _split_affected_area_codes(raw_value: Any) -> list[str]:
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, str):
+        return [item.strip() for item in raw_value.split(",") if item.strip()]
+    return []
+
+
+def _floor_to_hour(raw_value: datetime) -> datetime:
+    return raw_value.replace(minute=0, second=0, microsecond=0)
 
 
 def _mock_control_plan() -> dict[str, Any]:

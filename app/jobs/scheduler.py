@@ -8,12 +8,13 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.api.deps import build_cropflow_plan_orchestrator, build_survey_date_recommendation_service
+from app.api.deps import build_cropflow_plan_orchestrator, build_survey_date_recommendation_service, build_weather_provider
 from app.core.config import Settings
+from app.jobs.daily_weather_check import DailyWeatherCheckJob
 from app.jobs.survey_date_recommendation import SurveyDateRecommendationJob
 from app.jobs.task_due_check import TaskDueCheckJob
 from app.repositories import EventRecordRepository, PlantingPlanRepository
-from app.services import TaskGenerationService
+from app.services import TaskGenerationService, WeatherUpdateService
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,13 @@ class BackgroundJobScheduler:
 
         self._stop_event.clear()
         self._tasks = [
+            asyncio.create_task(
+                self._run_loop(
+                    "daily_weather_check",
+                    self.settings.weather_check_interval_seconds,
+                    self._run_daily_weather_check_cycle,
+                ),
+            ),
             asyncio.create_task(
                 self._run_loop(
                     "survey_recommendation",
@@ -82,6 +90,31 @@ class BackgroundJobScheduler:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=max(interval_seconds, 1))
             except asyncio.TimeoutError:
                 continue
+
+    def _run_daily_weather_check_cycle(self) -> None:
+        check_date = _utc_today()
+        for planting_plan_id in self._list_target_plan_ids(statuses=["active"]):
+            session = self.session_factory()
+            try:
+                weather_provider = build_weather_provider(session, self.settings)
+                orchestrator = build_cropflow_plan_orchestrator(
+                    session,
+                    self.settings,
+                    weather_provider=weather_provider,
+                )
+                service = WeatherUpdateService(
+                    planting_plan_repository=PlantingPlanRepository(session),
+                    event_record_repository=EventRecordRepository(session),
+                    weather_provider=weather_provider,
+                    plan_orchestrator=orchestrator,
+                )
+                DailyWeatherCheckJob(service).run(planting_plan_id, check_date=check_date)
+                session.commit()
+            except Exception:
+                session.rollback()
+                logger.exception("DailyWeatherCheckJob failed for planting_plan_id=%s.", planting_plan_id)
+            finally:
+                session.close()
 
     def _run_survey_recommendation_cycle(self) -> None:
         check_date = _utc_today()

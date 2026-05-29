@@ -5,7 +5,7 @@ import logging
 import socket
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Protocol
 from urllib import error, request
 from urllib.parse import urlsplit
@@ -22,6 +22,21 @@ from app.repositories import (
 
 logger = logging.getLogger(__name__)
 DEFAULT_STAGE_WEATHER_LOOKAHEAD_DAYS = 180
+DEFAULT_THERMAL_TIME_UNIT = "degree_day"
+DEFAULT_CALCULATION_METHOD = "avg_temp_minus_base_capped"
+DEFAULT_ROUNDING_RULE = "keep_1_decimal_daily_keep_1_decimal_accumulated"
+DEFAULT_EFFECTIVE_DATE_RULE = "threshold_reached_same_day"
+_DECIMAL_ZERO = Decimal("0")
+_STAGE_SEQUENCE: list[tuple[str, str]] = [
+    ("seedling", "苗期"),
+    ("tillering", "分蘖期"),
+    ("pokou", "破口期"),
+    ("heading", "齐穗期"),
+    ("maturity", "成熟期"),
+]
+_THRESHOLDED_STAGE_CODES = [code for code, _ in _STAGE_SEQUENCE if code != "seedling"]
+_STAGE_NAME_BY_CODE = dict(_STAGE_SEQUENCE)
+_STAGE_INDEX_BY_CODE = {code: index for index, (code, _) in enumerate(_STAGE_SEQUENCE)}
 
 
 @dataclass(slots=True)
@@ -38,8 +53,7 @@ class StageTimelineNode:
 class StagePredictionResult:
     algorithm_code: str
     algorithm_version: str | None
-    stage_timeline: dict[str, Any]
-    thermal_thresholds: dict[str, Any]
+    threshold_rule: dict[str, Any]
     raw_response: dict[str, Any]
 
 
@@ -57,6 +71,21 @@ class StageStateSnapshot:
     crop_stage_state: CropStageState | None
     crop_thermal_time_state: CropThermalTimeState | None
     latest_prediction_snapshot: StagePredictionSnapshot | None
+
+
+@dataclass(slots=True)
+class StageCalculationContext:
+    as_of_date: date
+    weather_data: list[dict[str, Any]]
+
+
+@dataclass(slots=True)
+class StageDerivedState:
+    stage_timeline: dict[str, Any]
+    current_node: StageTimelineNode
+    accumulated_thermal_time: Decimal
+    last_calculated_date: date
+    data_version: str | None
 
 
 class StagePredictionClient(Protocol):
@@ -92,15 +121,13 @@ class HttpStagePredictionClient:
         data = response.get("data")
         if not isinstance(data, dict):
             raise ValueError("stage prediction API did not return a valid data object.")
-        stage_timeline = dict(data.get("stage_timeline") or {})
-        if not stage_timeline:
-            raise ValueError("stage prediction API did not return stage_timeline.")
-        thermal_thresholds = dict(data.get("thermal_thresholds") or {})
+        threshold_rule = dict(data.get("threshold_rule") or data.get("thermal_thresholds") or {})
+        if not threshold_rule:
+            raise ValueError("stage prediction API did not return threshold_rule.")
         return StagePredictionResult(
             algorithm_code=str(data.get("algorithm_code") or "stage_prediction_algorithm"),
             algorithm_version=str(data["algorithm_version"]) if data.get("algorithm_version") is not None else None,
-            stage_timeline=stage_timeline,
-            thermal_thresholds=thermal_thresholds,
+            threshold_rule=threshold_rule,
             raw_response=response,
         )
 
@@ -170,71 +197,35 @@ class MockStagePredictionClient:
         *,
         request_payload: dict[str, Any],
     ) -> StagePredictionResult:
-        sowing_date = _parse_required_iso_date(request_payload.get("sowing_date"), "sowing_date")
-        as_of_date = _parse_required_iso_date(request_payload.get("as_of_date"), "as_of_date")
-        tillering_date = sowing_date + timedelta(days=10)
-        pokou_date = tillering_date + timedelta(days=50)
-        heading_date = pokou_date + timedelta(days=8)
-        maturity_date = heading_date + timedelta(days=32)
-        stage_timeline = {
-            "stages": [
-                {
-                    "stage_code": "seedling",
-                    "stage_name": "苗期",
-                    "start_date": sowing_date.isoformat(),
-                    "end_date": (tillering_date - timedelta(days=1)).isoformat(),
-                    "key_date": sowing_date.isoformat(),
-                },
-                {
-                    "stage_code": "tillering",
-                    "stage_name": "分蘖期",
-                    "start_date": tillering_date.isoformat(),
-                    "end_date": (pokou_date - timedelta(days=1)).isoformat(),
-                    "key_date": tillering_date.isoformat(),
-                },
-                {
-                    "stage_code": "pokou",
-                    "stage_name": "破口期",
-                    "start_date": pokou_date.isoformat(),
-                    "end_date": (heading_date - timedelta(days=1)).isoformat(),
-                    "key_date": pokou_date.isoformat(),
-                },
-                {
-                    "stage_code": "heading",
-                    "stage_name": "齐穗期",
-                    "start_date": heading_date.isoformat(),
-                    "end_date": (maturity_date - timedelta(days=1)).isoformat(),
-                    "key_date": heading_date.isoformat(),
-                },
-                {
-                    "stage_code": "maturity",
-                    "stage_name": "成熟期",
-                    "start_date": maturity_date.isoformat(),
-                    "end_date": maturity_date.isoformat(),
-                    "key_date": maturity_date.isoformat(),
-                },
-            ],
-        }
-        thermal_thresholds = {
+        _parse_required_iso_date(request_payload.get("sowing_date"), "sowing_date")
+        threshold_rule = {
+            "threshold_rule_id": "mock-rice-threshold-v1",
+            "threshold_rule_version": "2026.05",
+            "thermal_time_unit": DEFAULT_THERMAL_TIME_UNIT,
             "base_temperature": 10,
-            "accumulated_thermal_time": 780,
-            "thermal_time_unit": "degree_day",
-            "last_calculated_date": as_of_date.isoformat(),
-            "data_version": "mock-weather-v1",
+            "upper_temperature_cap": 30,
+            "lower_temperature_floor": 10,
+            "calculation_method": DEFAULT_CALCULATION_METHOD,
+            "rounding_rule": DEFAULT_ROUNDING_RULE,
+            "effective_date_rule": DEFAULT_EFFECTIVE_DATE_RULE,
+            "stage_thresholds": {
+                "tillering": 176,
+                "pokou": 976,
+                "heading": 1104,
+                "maturity": 1616,
+            },
         }
         return StagePredictionResult(
             algorithm_code="stage_prediction_algorithm",
-            algorithm_version="mock-v1",
-            stage_timeline=stage_timeline,
-            thermal_thresholds=thermal_thresholds,
+            algorithm_version="mock-v2",
+            threshold_rule=threshold_rule,
             raw_response={
                 "mock": True,
                 "code": 200,
                 "data": {
                     "algorithm_code": "stage_prediction_algorithm",
-                    "algorithm_version": "mock-v1",
-                    "stage_timeline": stage_timeline,
-                    "thermal_thresholds": thermal_thresholds,
+                    "algorithm_version": "mock-v2",
+                    "threshold_rule": threshold_rule,
                 },
             },
         )
@@ -272,25 +263,107 @@ class StageManagementService:
         planting_plan = self._get_plan(planting_plan_id)
         farm = self._get_farm(planting_plan.farm_id)
         effective_as_of_date = as_of_date or date.today()
-        request_payload = _build_stage_prediction_request_payload(
+        request_payload = _build_stage_rule_request_payload(planting_plan, farm=farm)
+        prediction = self.stage_prediction_client.predict_stage(request_payload=request_payload)
+        calculation_context = _build_stage_calculation_context(
             planting_plan,
-            farm=farm,
             as_of_date=effective_as_of_date,
             weather_provider=self.weather_provider,
             weather_lookahead_days=self.weather_lookahead_days,
         )
-        prediction = self.stage_prediction_client.predict_stage(request_payload=request_payload)
-        latest_snapshot = self.stage_prediction_snapshot_repository.get_latest_by_plan(planting_plan_id)
-        snapshot = StagePredictionSnapshot(
-            planting_plan_id=planting_plan_id,
-            prediction_version=(latest_snapshot.prediction_version if latest_snapshot is not None else 0) + 1,
-            prediction_source=prediction_source,
+        return self._refresh_from_threshold_rule(
+            planting_plan=planting_plan,
+            request_payload=request_payload,
+            threshold_rule=prediction.threshold_rule,
             algorithm_code=prediction.algorithm_code,
             algorithm_version=prediction.algorithm_version,
+            prediction_source=prediction_source,
+            calculation_context=calculation_context,
+            source_event_id=source_event_id,
+        )
+
+    def refresh_for_weather_update(
+        self,
+        planting_plan_id: int,
+        *,
+        source_event_id: int | None = None,
+        as_of_date: date | None = None,
+    ) -> StageRefreshResult:
+        planting_plan = self._get_plan(planting_plan_id)
+        farm = self._get_farm(planting_plan.farm_id)
+        latest_snapshot = self.stage_prediction_snapshot_repository.get_latest_by_plan(planting_plan_id)
+        if latest_snapshot is None:
+            raise LookupError(
+                f"Weather-driven stage refresh requires an existing StagePredictionSnapshot for planting plan {planting_plan_id}.",
+            )
+        threshold_rule = dict(latest_snapshot.thermal_thresholds or {})
+        if not threshold_rule:
+            raise ValueError(
+                f"Latest StagePredictionSnapshot for planting plan {planting_plan_id} does not contain threshold rules.",
+            )
+        effective_as_of_date = as_of_date or date.today()
+        request_payload = _build_stage_rule_request_payload(planting_plan, farm=farm)
+        calculation_context = _build_stage_calculation_context(
+            planting_plan,
+            as_of_date=effective_as_of_date,
+            weather_provider=self.weather_provider,
+            weather_lookahead_days=self.weather_lookahead_days,
+        )
+        return self._refresh_from_threshold_rule(
+            planting_plan=planting_plan,
+            request_payload=request_payload,
+            threshold_rule=threshold_rule,
+            algorithm_code=latest_snapshot.algorithm_code,
+            algorithm_version=latest_snapshot.algorithm_version,
+            prediction_source="weather_update",
+            calculation_context=calculation_context,
+            source_event_id=source_event_id,
+            rule_snapshot_id=latest_snapshot.id,
+        )
+
+    def get_stage_snapshot(self, planting_plan_id: int) -> StageStateSnapshot:
+        self._get_plan(planting_plan_id)
+        return StageStateSnapshot(
+            crop_stage_state=self.crop_stage_state_repository.get_by_plan(planting_plan_id),
+            crop_thermal_time_state=self.crop_thermal_time_state_repository.get_by_plan(planting_plan_id),
+            latest_prediction_snapshot=self.stage_prediction_snapshot_repository.get_latest_by_plan(planting_plan_id),
+        )
+
+    def _refresh_from_threshold_rule(
+        self,
+        *,
+        planting_plan: PlantingPlan,
+        request_payload: dict[str, Any],
+        threshold_rule: dict[str, Any],
+        algorithm_code: str,
+        algorithm_version: str | None,
+        prediction_source: str,
+        calculation_context: StageCalculationContext,
+        source_event_id: int | None,
+        rule_snapshot_id: int | None = None,
+    ) -> StageRefreshResult:
+        normalized_rule = _normalize_threshold_rule(threshold_rule)
+        latest_snapshot = self.stage_prediction_snapshot_repository.get_latest_by_plan(planting_plan.id)
+        derived_state = _derive_stage_state(
+            sowing_date=planting_plan.sowing_date,
+            as_of_date=calculation_context.as_of_date,
+            weather_data=calculation_context.weather_data,
+            threshold_rule=normalized_rule,
+        )
+        snapshot = StagePredictionSnapshot(
+            planting_plan_id=planting_plan.id,
+            prediction_version=(latest_snapshot.prediction_version if latest_snapshot is not None else 0) + 1,
+            prediction_source=prediction_source,
+            algorithm_code=algorithm_code,
+            algorithm_version=algorithm_version,
             generated_at=_utcnow(),
-            input_payload=request_payload,
-            stage_timeline=prediction.stage_timeline,
-            thermal_thresholds=prediction.thermal_thresholds,
+            input_payload=_build_stage_snapshot_input_payload(
+                request_payload,
+                calculation_context=calculation_context,
+                rule_snapshot_id=rule_snapshot_id,
+            ),
+            stage_timeline=derived_state.stage_timeline,
+            thermal_thresholds=normalized_rule,
             source_event_id=source_event_id,
             created_by_type="system",
             created_by_id="StageManagementService",
@@ -298,16 +371,15 @@ class StageManagementService:
         self.stage_prediction_snapshot_repository.add(snapshot)
         self.stage_prediction_snapshot_repository.flush()
 
-        current_node = resolve_current_stage_node(prediction.stage_timeline, effective_as_of_date)
-        existing_stage_state = self.crop_stage_state_repository.get_by_plan(planting_plan_id)
+        existing_stage_state = self.crop_stage_state_repository.get_by_plan(planting_plan.id)
         previous_stage_code = existing_stage_state.current_stage_code if existing_stage_state is not None else None
         if existing_stage_state is None:
             stage_state = CropStageState(
-                planting_plan_id=planting_plan_id,
-                current_stage_code=current_node.stage_code,
-                current_stage_name=current_node.stage_name,
+                planting_plan_id=planting_plan.id,
+                current_stage_code=derived_state.current_node.stage_code,
+                current_stage_name=derived_state.current_node.stage_name,
                 stage_source="predicted",
-                effective_date=current_node.start_date,
+                effective_date=derived_state.current_node.start_date,
                 source_snapshot_id=snapshot.id,
                 last_updated_at=_utcnow(),
                 version=1,
@@ -317,46 +389,41 @@ class StageManagementService:
             self.crop_stage_state_repository.add(stage_state)
         else:
             stage_state = existing_stage_state
-            stage_state.current_stage_code = current_node.stage_code
-            stage_state.current_stage_name = current_node.stage_name
+            stage_state.current_stage_code = derived_state.current_node.stage_code
+            stage_state.current_stage_name = derived_state.current_node.stage_name
             stage_state.stage_source = "predicted"
-            stage_state.effective_date = current_node.start_date
+            stage_state.effective_date = derived_state.current_node.start_date
             stage_state.source_snapshot_id = snapshot.id
             stage_state.last_updated_at = _utcnow()
             stage_state.version = int(stage_state.version or 0) + 1
             stage_state.updated_at = _utcnow()
 
-        thermal_payload = prediction.thermal_thresholds
-        existing_thermal_state = self.crop_thermal_time_state_repository.get_by_plan(planting_plan_id)
-        accumulated_thermal_time = Decimal(str(thermal_payload.get("accumulated_thermal_time") or 0))
-        base_temperature_raw = thermal_payload.get("base_temperature")
+        existing_thermal_state = self.crop_thermal_time_state_repository.get_by_plan(planting_plan.id)
+        base_temperature_raw = normalized_rule.get("base_temperature")
         base_temperature = Decimal(str(base_temperature_raw)) if base_temperature_raw is not None else None
-        last_calculated_date = _parse_optional_iso_date(thermal_payload.get("last_calculated_date")) or effective_as_of_date
         if existing_thermal_state is None:
             thermal_state = CropThermalTimeState(
-                planting_plan_id=planting_plan_id,
-                accumulated_thermal_time=accumulated_thermal_time,
-                thermal_time_unit=str(thermal_payload.get("thermal_time_unit") or "degree_day"),
+                planting_plan_id=planting_plan.id,
+                accumulated_thermal_time=derived_state.accumulated_thermal_time,
+                thermal_time_unit=str(normalized_rule.get("thermal_time_unit") or DEFAULT_THERMAL_TIME_UNIT),
                 base_temperature=base_temperature,
                 start_date=planting_plan.sowing_date,
-                last_calculated_date=last_calculated_date,
+                last_calculated_date=derived_state.last_calculated_date,
                 threshold_snapshot_id=snapshot.id,
-                data_version=str(thermal_payload["data_version"]) if thermal_payload.get("data_version") is not None else None,
+                data_version=derived_state.data_version,
                 created_by_type="system",
                 created_by_id="StageManagementService",
             )
             self.crop_thermal_time_state_repository.add(thermal_state)
         else:
             thermal_state = existing_thermal_state
-            thermal_state.accumulated_thermal_time = accumulated_thermal_time
-            thermal_state.thermal_time_unit = str(thermal_payload.get("thermal_time_unit") or "degree_day")
+            thermal_state.accumulated_thermal_time = derived_state.accumulated_thermal_time
+            thermal_state.thermal_time_unit = str(normalized_rule.get("thermal_time_unit") or DEFAULT_THERMAL_TIME_UNIT)
             thermal_state.base_temperature = base_temperature
             thermal_state.start_date = planting_plan.sowing_date
-            thermal_state.last_calculated_date = last_calculated_date
+            thermal_state.last_calculated_date = derived_state.last_calculated_date
             thermal_state.threshold_snapshot_id = snapshot.id
-            thermal_state.data_version = (
-                str(thermal_payload["data_version"]) if thermal_payload.get("data_version") is not None else None
-            )
+            thermal_state.data_version = derived_state.data_version
             thermal_state.updated_at = _utcnow()
 
         return StageRefreshResult(
@@ -364,15 +431,7 @@ class StageManagementService:
             crop_stage_state=stage_state,
             crop_thermal_time_state=thermal_state,
             previous_stage_code=previous_stage_code,
-            stage_changed=previous_stage_code is not None and previous_stage_code != current_node.stage_code,
-        )
-
-    def get_stage_snapshot(self, planting_plan_id: int) -> StageStateSnapshot:
-        self._get_plan(planting_plan_id)
-        return StageStateSnapshot(
-            crop_stage_state=self.crop_stage_state_repository.get_by_plan(planting_plan_id),
-            crop_thermal_time_state=self.crop_thermal_time_state_repository.get_by_plan(planting_plan_id),
-            latest_prediction_snapshot=self.stage_prediction_snapshot_repository.get_latest_by_plan(planting_plan_id),
+            stage_changed=previous_stage_code is not None and previous_stage_code != derived_state.current_node.stage_code,
         )
 
     def _get_plan(self, planting_plan_id: int) -> PlantingPlan:
@@ -440,7 +499,7 @@ def parse_stage_timeline_nodes(stage_timeline: dict[str, Any]) -> list[StageTime
                 metadata=metadata,
             ),
         )
-    nodes.sort(key=lambda item: (item.start_date, item.stage_code))
+    nodes.sort(key=lambda item: (item.start_date, _STAGE_INDEX_BY_CODE.get(item.stage_code, 999)))
     return nodes
 
 
@@ -456,21 +515,35 @@ def extract_pest_disease_growth_stage(stage_timeline: dict[str, Any]) -> dict[st
     missing = [stage_code for stage_code in required_mapping.values() if stage_code not in code_to_date]
     if missing:
         raise ValueError(f"stage_timeline does not contain required pest-disease stage codes: {missing}.")
-    return {
-        field_name: code_to_date[stage_code]
-        for field_name, stage_code in required_mapping.items()
-    }
+    return {field_name: code_to_date[stage_code] for field_name, stage_code in required_mapping.items()}
 
 
-def _build_stage_prediction_request_payload(
+def _build_stage_rule_request_payload(
     planting_plan: PlantingPlan,
     *,
     farm: Farm,
+) -> dict[str, Any]:
+    return {
+        "crop_name": planting_plan.crop_name,
+        "culti_type_code": planting_plan.culti_type_code,
+        "planting_method_code": planting_plan.planting_method_code,
+        "variety_id": planting_plan.variety_id,
+        "variety_name": planting_plan.variety_name,
+        "sowing_date": planting_plan.sowing_date.isoformat(),
+        "transplant_date": planting_plan.transplant_date.isoformat() if planting_plan.transplant_date else None,
+        "transplant_leaf_age": str(planting_plan.transplant_leaf_age) if planting_plan.transplant_leaf_age is not None else None,
+        "location": _build_stage_prediction_location_payload(farm),
+        "metadata": dict(planting_plan.metadata_payload or {}),
+    }
+
+
+def _build_stage_calculation_context(
+    planting_plan: PlantingPlan,
+    *,
     as_of_date: date,
     weather_provider: StageWeatherProvider,
     weather_lookahead_days: int,
-) -> dict[str, Any]:
-    metadata_payload = dict(planting_plan.metadata_payload or {})
+) -> StageCalculationContext:
     weather_end_date = _resolve_stage_weather_end_date(
         planting_plan,
         as_of_date=as_of_date,
@@ -485,20 +558,23 @@ def _build_stage_prediction_request_payload(
         ),
         as_of_date=as_of_date,
     )
-    return {
-        "crop_name": planting_plan.crop_name,
-        "culti_type_code": planting_plan.culti_type_code,
-        "planting_method_code": planting_plan.planting_method_code,
-        "variety_id": planting_plan.variety_id,
-        "variety_name": planting_plan.variety_name,
-        "sowing_date": planting_plan.sowing_date.isoformat(),
-        "transplant_date": planting_plan.transplant_date.isoformat() if planting_plan.transplant_date else None,
-        "transplant_leaf_age": str(planting_plan.transplant_leaf_age) if planting_plan.transplant_leaf_age is not None else None,
-        "as_of_date": as_of_date.isoformat(),
-        "location": _build_stage_prediction_location_payload(farm),
-        "weather_data": weather_data,
-        "metadata": metadata_payload,
+    return StageCalculationContext(as_of_date=as_of_date, weather_data=weather_data)
+
+
+def _build_stage_snapshot_input_payload(
+    request_payload: dict[str, Any],
+    *,
+    calculation_context: StageCalculationContext,
+    rule_snapshot_id: int | None = None,
+) -> dict[str, Any]:
+    payload = dict(request_payload)
+    payload["calculation_context"] = {
+        "as_of_date": calculation_context.as_of_date.isoformat(),
+        "weather_data": [dict(item) for item in calculation_context.weather_data],
     }
+    if rule_snapshot_id is not None:
+        payload["rule_snapshot_id"] = rule_snapshot_id
+    return payload
 
 
 def _build_stage_prediction_location_payload(farm: Farm) -> dict[str, Any]:
@@ -599,6 +675,207 @@ def _normalize_stage_weather_data(
 
     normalized_rows.sort(key=lambda row: row["date"])
     return normalized_rows
+
+
+def _derive_stage_state(
+    *,
+    sowing_date: date,
+    as_of_date: date,
+    weather_data: list[dict[str, Any]],
+    threshold_rule: dict[str, Any],
+) -> StageDerivedState:
+    stage_thresholds = _parse_stage_thresholds(threshold_rule.get("stage_thresholds"))
+    calculation_method = str(threshold_rule.get("calculation_method") or DEFAULT_CALCULATION_METHOD)
+    rounding_rule = str(threshold_rule.get("rounding_rule") or DEFAULT_ROUNDING_RULE)
+    effective_date_rule = str(threshold_rule.get("effective_date_rule") or DEFAULT_EFFECTIVE_DATE_RULE)
+    accumulated_all = _DECIMAL_ZERO
+    accumulated_as_of = _DECIMAL_ZERO
+    stage_start_dates: dict[str, date] = {}
+    last_calculated_date = sowing_date
+    data_version: str | None = None
+
+    for row in weather_data:
+        row_date = _parse_stage_weather_date(row["date"])
+        avg_temp = Decimal(str(row["avg_temp"]))
+        daily_thermal_time = _calculate_daily_thermal_time(
+            avg_temp=avg_temp,
+            threshold_rule=threshold_rule,
+            calculation_method=calculation_method,
+        )
+        accumulated_all = _apply_accumulation_rounding(
+            accumulated_all,
+            daily_thermal_time,
+            rounding_rule=rounding_rule,
+        )
+        if row_date <= as_of_date:
+            accumulated_as_of = _apply_accumulation_rounding(
+                accumulated_as_of,
+                daily_thermal_time,
+                rounding_rule=rounding_rule,
+            )
+            last_calculated_date = row_date
+            if row.get("data_version") is not None:
+                data_version = str(row["data_version"])
+        for stage_code in _THRESHOLDED_STAGE_CODES:
+            if stage_code in stage_start_dates:
+                continue
+            threshold = stage_thresholds.get(stage_code)
+            if threshold is None:
+                continue
+            if _has_reached_stage_threshold(
+                accumulated_thermal_time=accumulated_all,
+                threshold=threshold,
+                effective_date_rule=effective_date_rule,
+            ):
+                stage_start_dates[stage_code] = _resolve_stage_effective_date(
+                    row_date,
+                    effective_date_rule=effective_date_rule,
+                )
+
+    stage_timeline = _build_stage_timeline(
+        sowing_date=sowing_date,
+        stage_start_dates=stage_start_dates,
+    )
+    current_node = resolve_current_stage_node(stage_timeline, as_of_date)
+    return StageDerivedState(
+        stage_timeline=stage_timeline,
+        current_node=current_node,
+        accumulated_thermal_time=accumulated_as_of,
+        last_calculated_date=last_calculated_date,
+        data_version=data_version,
+    )
+
+
+def _parse_stage_thresholds(raw_thresholds: Any) -> dict[str, Decimal]:
+    if not isinstance(raw_thresholds, dict) or not raw_thresholds:
+        raise ValueError("threshold_rule.stage_thresholds must be a non-empty object.")
+    thresholds: dict[str, Decimal] = {}
+    for stage_code in _THRESHOLDED_STAGE_CODES:
+        raw_value = raw_thresholds.get(stage_code)
+        if raw_value is None:
+            continue
+        thresholds[stage_code] = Decimal(str(raw_value))
+    return thresholds
+
+
+def _normalize_threshold_rule(threshold_rule: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(threshold_rule or {})
+    if not normalized:
+        raise ValueError("Stage threshold rule must not be empty.")
+    if not isinstance(normalized.get("stage_thresholds"), dict) or not normalized["stage_thresholds"]:
+        raise ValueError("Stage threshold rule must provide stage_thresholds.")
+    normalized.setdefault("thermal_time_unit", DEFAULT_THERMAL_TIME_UNIT)
+    normalized.setdefault("calculation_method", DEFAULT_CALCULATION_METHOD)
+    normalized.setdefault("rounding_rule", DEFAULT_ROUNDING_RULE)
+    normalized.setdefault("effective_date_rule", DEFAULT_EFFECTIVE_DATE_RULE)
+    return normalized
+
+
+def _calculate_daily_thermal_time(
+    *,
+    avg_temp: Decimal,
+    threshold_rule: dict[str, Any],
+    calculation_method: str,
+) -> Decimal:
+    base_temperature = Decimal(str(threshold_rule.get("base_temperature") or 0))
+    lower_floor_raw = threshold_rule.get("lower_temperature_floor")
+    if lower_floor_raw is not None and avg_temp <= Decimal(str(lower_floor_raw)):
+        return _DECIMAL_ZERO
+
+    effective_avg_temp = avg_temp
+    upper_cap_raw = threshold_rule.get("upper_temperature_cap")
+    if calculation_method == "avg_temp_minus_base_capped" and upper_cap_raw is not None:
+        effective_avg_temp = min(avg_temp, Decimal(str(upper_cap_raw)))
+    if calculation_method not in {"avg_temp_minus_base_capped", "avg_temp_minus_base_uncapped"}:
+        raise ValueError(f"Unsupported stage thermal calculation_method: {calculation_method}.")
+    return max(effective_avg_temp - base_temperature, _DECIMAL_ZERO)
+
+
+def _apply_accumulation_rounding(
+    accumulated: Decimal,
+    daily_thermal_time: Decimal,
+    *,
+    rounding_rule: str,
+) -> Decimal:
+    if rounding_rule == "keep_1_decimal_daily_keep_1_decimal_accumulated":
+        daily = _quantize_decimal(daily_thermal_time, "0.1")
+        return _quantize_decimal(accumulated + daily, "0.1")
+    if rounding_rule == "keep_2_decimal_daily_keep_2_decimal_accumulated":
+        daily = _quantize_decimal(daily_thermal_time, "0.01")
+        return _quantize_decimal(accumulated + daily, "0.01")
+    if rounding_rule == "keep_raw_daily_keep_1_decimal_accumulated":
+        return _quantize_decimal(accumulated + daily_thermal_time, "0.1")
+    raise ValueError(f"Unsupported stage thermal rounding_rule: {rounding_rule}.")
+
+
+def _has_reached_stage_threshold(
+    *,
+    accumulated_thermal_time: Decimal,
+    threshold: Decimal,
+    effective_date_rule: str,
+) -> bool:
+    if effective_date_rule == "threshold_strictly_exceeded_same_day":
+        return accumulated_thermal_time > threshold
+    if effective_date_rule in {"threshold_reached_same_day", "threshold_reached_next_day"}:
+        return accumulated_thermal_time >= threshold
+    raise ValueError(f"Unsupported stage effective_date_rule: {effective_date_rule}.")
+
+
+def _resolve_stage_effective_date(
+    row_date: date,
+    *,
+    effective_date_rule: str,
+) -> date:
+    if effective_date_rule in {"threshold_reached_same_day", "threshold_strictly_exceeded_same_day"}:
+        return row_date
+    if effective_date_rule == "threshold_reached_next_day":
+        return row_date + timedelta(days=1)
+    raise ValueError(f"Unsupported stage effective_date_rule: {effective_date_rule}.")
+
+
+def _build_stage_timeline(
+    *,
+    sowing_date: date,
+    stage_start_dates: dict[str, date],
+) -> dict[str, Any]:
+    nodes: list[dict[str, Any]] = [
+        {
+            "stage_code": "seedling",
+            "stage_name": _STAGE_NAME_BY_CODE["seedling"],
+            "start_date": sowing_date.isoformat(),
+            "key_date": sowing_date.isoformat(),
+        },
+    ]
+    for stage_code in _THRESHOLDED_STAGE_CODES:
+        start_date = stage_start_dates.get(stage_code)
+        if start_date is None:
+            continue
+        nodes.append(
+            {
+                "stage_code": stage_code,
+                "stage_name": _STAGE_NAME_BY_CODE[stage_code],
+                "start_date": start_date.isoformat(),
+                "key_date": start_date.isoformat(),
+            },
+        )
+    nodes.sort(
+        key=lambda item: (
+            date.fromisoformat(str(item["start_date"])),
+            _STAGE_INDEX_BY_CODE.get(str(item["stage_code"]), 999),
+        ),
+    )
+    for index, node in enumerate(nodes):
+        if index + 1 < len(nodes):
+            next_start = date.fromisoformat(str(nodes[index + 1]["start_date"]))
+            end_date = max(date.fromisoformat(str(node["start_date"])), next_start - timedelta(days=1))
+        else:
+            end_date = date.fromisoformat(str(node["start_date"]))
+        node["end_date"] = end_date.isoformat()
+    return {"stages": nodes}
+
+
+def _quantize_decimal(raw_value: Decimal, quantizer: str) -> Decimal:
+    return raw_value.quantize(Decimal(quantizer), rounding=ROUND_HALF_UP)
 
 
 def _parse_stage_weather_date(raw_value: Any) -> date:

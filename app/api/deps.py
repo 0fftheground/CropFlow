@@ -63,6 +63,8 @@ def build_weather_provider(
             farm_repository=FarmRepository(db),
             base_url=settings.weather_api_base_url,
             auth_token=settings.weather_api_token,
+            alert_base_url=settings.weather_alert_api_base_url,
+            alert_auth_token=settings.weather_alert_api_token,
             timeout_seconds=settings.weather_api_timeout_seconds,
             climatology_reference_years=settings.weather_climatology_reference_years,
         )

@@ -83,7 +83,7 @@ class FakeCropThermalTimeStateRepository:
 
 @dataclass
 class FakeWeatherProvider:
-    calls: list[tuple[date, date]] = field(default_factory=list)
+    calls: list[tuple[date, date, date | None]] = field(default_factory=list)
 
     def get_daily_weather(
         self,
@@ -93,7 +93,7 @@ class FakeWeatherProvider:
         *,
         as_of_date: date | None = None,
     ) -> list[dict[str, Any]]:
-        self.calls.append((start_date, end_date))
+        self.calls.append((start_date, end_date, as_of_date))
         weather_data: list[dict[str, Any]] = []
         current_date = start_date
         while current_date <= end_date:
@@ -101,10 +101,21 @@ class FakeWeatherProvider:
                 {
                     "DATE": current_date.strftime("%Y%m%d"),
                     "TEMP": 26,
+                    "data_version": f"weather-{current_date.isoformat()}",
                 },
             )
             current_date = date.fromordinal(current_date.toordinal() + 1)
         return weather_data
+
+
+@dataclass
+class RecordingStagePredictionClient:
+    result: Any
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def predict_stage(self, *, request_payload: dict[str, Any]):
+        self.calls.append(dict(request_payload))
+        return self.result
 
 
 def _make_plan() -> PlantingPlan:
@@ -140,13 +151,14 @@ def test_refresh_prediction_creates_stage_snapshot_and_states() -> None:
     stage_repo = FakeCropStageStateRepository()
     thermal_repo = FakeCropThermalTimeStateRepository()
     weather_provider = FakeWeatherProvider()
+    prediction_client = RecordingStagePredictionClient(MockStagePredictionClient().predict_stage(request_payload={"sowing_date": "2026-04-10"}))
     service = StageManagementService(
         planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
         farm_repository=FakeFarmRepository(_make_farm()),
         stage_prediction_snapshot_repository=snapshot_repo,
         crop_stage_state_repository=stage_repo,
         crop_thermal_time_state_repository=thermal_repo,
-        stage_prediction_client=MockStagePredictionClient(),
+        stage_prediction_client=prediction_client,
         weather_provider=weather_provider,
     )
 
@@ -157,17 +169,38 @@ def test_refresh_prediction_creates_stage_snapshot_and_states() -> None:
         as_of_date=date(2026, 5, 27),
     )
 
+    assert prediction_client.calls == [
+        {
+            "crop_name": "水稻",
+            "culti_type_code": 5,
+            "planting_method_code": 1,
+            "variety_id": 3,
+            "variety_name": "黄广农占",
+            "sowing_date": "2026-04-10",
+            "transplant_date": None,
+            "transplant_leaf_age": None,
+            "location": {
+                "adcode": "430181",
+                "province": "湖南省",
+                "city": "长沙市",
+                "district_county": "浏阳市",
+            },
+            "metadata": {},
+        },
+    ]
     assert result.snapshot.prediction_version == 1
     assert result.snapshot.algorithm_code == "stage_prediction_algorithm"
     assert result.crop_stage_state.current_stage_code == "tillering"
     assert result.crop_stage_state.source_snapshot_id == result.snapshot.id
-    assert result.crop_thermal_time_state.accumulated_thermal_time == Decimal("780")
+    assert result.crop_thermal_time_state.accumulated_thermal_time == Decimal("768.0")
     assert result.crop_thermal_time_state.threshold_snapshot_id == result.snapshot.id
+    assert result.crop_thermal_time_state.data_version == "weather-2026-05-27"
     assert result.stage_changed is False
     assert result.snapshot.input_payload["location"]["adcode"] == "430181"
-    assert result.snapshot.input_payload["weather_data"][0]["date"] == "2026-04-10"
-    assert result.snapshot.input_payload["weather_data"][0]["source_type"] == "observed"
-    assert weather_provider.calls == [(date(2026, 4, 10), date(2026, 10, 7))]
+    assert "weather_data" not in result.snapshot.input_payload
+    assert result.snapshot.input_payload["calculation_context"]["as_of_date"] == "2026-05-27"
+    assert result.snapshot.stage_timeline["stages"][1]["start_date"] == "2026-04-20"
+    assert weather_provider.calls == [(date(2026, 4, 10), date(2026, 10, 7), date(2026, 5, 27))]
 
 
 def test_refresh_prediction_updates_existing_state_and_detects_stage_change() -> None:
@@ -224,15 +257,98 @@ def test_refresh_prediction_updates_existing_state_and_detects_stage_change() ->
     assert result.stage_changed is True
 
 
-def test_extract_pest_disease_growth_stage_from_timeline() -> None:
-    stage_timeline = MockStagePredictionClient().predict_stage(
-        request_payload={
-            "sowing_date": "2026-04-10",
-            "as_of_date": "2026-05-27",
+def test_refresh_for_weather_update_reuses_latest_threshold_rule() -> None:
+    initial_snapshot = StagePredictionSnapshot(
+        id=10,
+        planting_plan_id=1,
+        prediction_version=2,
+        prediction_source="plan_change",
+        algorithm_code="stage_prediction_algorithm",
+        algorithm_version="v2.0.0",
+        input_payload={},
+        stage_timeline={"stages": []},
+        thermal_thresholds=MockStagePredictionClient().predict_stage(request_payload={"sowing_date": "2026-04-10"}).threshold_rule,
+    )
+    snapshot_repo = FakeStagePredictionSnapshotRepository(items=[initial_snapshot], next_id=11)
+    stage_repo = FakeCropStageStateRepository(
+        {
+            1: CropStageState(
+                id=1,
+                planting_plan_id=1,
+                current_stage_code="tillering",
+                current_stage_name="分蘖期",
+                stage_source="predicted",
+                effective_date=date(2026, 4, 20),
+                source_snapshot_id=10,
+                version=1,
+            ),
         },
-    ).stage_timeline
+    )
+    thermal_repo = FakeCropThermalTimeStateRepository(
+        {
+            1: CropThermalTimeState(
+                id=1,
+                planting_plan_id=1,
+                accumulated_thermal_time=Decimal("768.0"),
+                thermal_time_unit="degree_day",
+                base_temperature=Decimal("10"),
+                start_date=date(2026, 4, 10),
+                last_calculated_date=date(2026, 5, 27),
+                threshold_snapshot_id=10,
+                data_version="weather-2026-05-27",
+            ),
+        },
+    )
+    weather_provider = FakeWeatherProvider()
 
-    growth_stage = extract_pest_disease_growth_stage(stage_timeline)
+    @dataclass
+    class FailingStagePredictionClient:
+        def predict_stage(self, *, request_payload: dict[str, Any]):
+            raise AssertionError("Weather update should not call stage prediction API.")
+
+    service = StageManagementService(
+        planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        stage_prediction_snapshot_repository=snapshot_repo,
+        crop_stage_state_repository=stage_repo,
+        crop_thermal_time_state_repository=thermal_repo,
+        stage_prediction_client=FailingStagePredictionClient(),
+        weather_provider=weather_provider,
+    )
+
+    result = service.refresh_for_weather_update(
+        1,
+        source_event_id=101,
+        as_of_date=date(2026, 6, 10),
+    )
+
+    assert result.snapshot.prediction_source == "weather_update"
+    assert result.snapshot.source_event_id == 101
+    assert result.snapshot.input_payload["rule_snapshot_id"] == 10
+    assert result.crop_stage_state.current_stage_code == "pokou"
+    assert result.crop_stage_state.version == 2
+    assert result.crop_thermal_time_state.accumulated_thermal_time == Decimal("992.0")
+    assert result.crop_thermal_time_state.threshold_snapshot_id == result.snapshot.id
+    assert result.stage_changed is True
+
+
+def test_extract_pest_disease_growth_stage_from_timeline() -> None:
+    service = StageManagementService(
+        planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        stage_prediction_snapshot_repository=FakeStagePredictionSnapshotRepository(),
+        crop_stage_state_repository=FakeCropStageStateRepository(),
+        crop_thermal_time_state_repository=FakeCropThermalTimeStateRepository(),
+        stage_prediction_client=MockStagePredictionClient(),
+        weather_provider=FakeWeatherProvider(),
+    )
+
+    result = service.refresh_prediction(
+        1,
+        prediction_source="initial",
+        as_of_date=date(2026, 5, 27),
+    )
+    growth_stage = extract_pest_disease_growth_stage(result.snapshot.stage_timeline)
 
     assert growth_stage == {
         "tillering_date": "2026-04-20",

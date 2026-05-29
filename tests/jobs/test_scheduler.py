@@ -88,6 +88,28 @@ class FakeTaskDueCheckJob:
         return self.service.generate_due_tasks(planting_plan_id, check_date=check_date)
 
 
+class FakeWeatherUpdateService:
+    def __init__(self, *args, **kwargs) -> None:
+        self.calls: list[tuple[int, object]] = []
+
+    def generate_weather_updates(self, planting_plan_id: int, *, check_date) -> list[object]:
+        self.calls.append((planting_plan_id, check_date))
+        return []
+
+
+class FakeDailyWeatherCheckJob:
+    instances: list["FakeDailyWeatherCheckJob"] = []
+
+    def __init__(self, service: FakeWeatherUpdateService) -> None:
+        self.service = service
+        self.calls: list[tuple[int, object]] = []
+        self.__class__.instances.append(self)
+
+    def run(self, planting_plan_id: int, *, check_date) -> list[object]:
+        self.calls.append((planting_plan_id, check_date))
+        return self.service.generate_weather_updates(planting_plan_id, check_date=check_date)
+
+
 def test_scheduler_runs_survey_recommendation_cycle_for_draft_and_active_plans(monkeypatch) -> None:
     factory = FakeSessionFactory([1, 2])
     survey_service = FakeSurveyService()
@@ -112,11 +134,43 @@ def test_scheduler_runs_survey_recommendation_cycle_for_draft_and_active_plans(m
     assert all(session.rollback_count == 0 for session in worker_sessions)
 
 
+def test_scheduler_runs_daily_weather_check_cycle_for_active_plans(monkeypatch) -> None:
+    factory = FakeSessionFactory([3, 4])
+    FakeDailyWeatherCheckJob.instances.clear()
+    settings = Settings(
+        background_jobs_enabled=True,
+        weather_check_interval_seconds=5,
+        survey_recommendation_interval_seconds=5,
+        task_due_check_interval_seconds=5,
+    )
+
+    monkeypatch.setattr("app.jobs.scheduler.PlantingPlanRepository", FakePlantingPlanRepository)
+    monkeypatch.setattr("app.jobs.scheduler.build_weather_provider", lambda session, settings: object())
+    monkeypatch.setattr(
+        "app.jobs.scheduler.build_cropflow_plan_orchestrator",
+        lambda session, settings, weather_provider=None: object(),
+    )
+    monkeypatch.setattr("app.jobs.scheduler.EventRecordRepository", lambda session: object())
+    monkeypatch.setattr("app.jobs.scheduler.WeatherUpdateService", FakeWeatherUpdateService)
+    monkeypatch.setattr("app.jobs.scheduler.DailyWeatherCheckJob", FakeDailyWeatherCheckJob)
+
+    scheduler = BackgroundJobScheduler(session_factory=factory, settings=settings)
+    scheduler._run_daily_weather_check_cycle()
+
+    assert FakeDailyWeatherCheckJob.instances
+    all_calls = [call for instance in FakeDailyWeatherCheckJob.instances for call in instance.calls]
+    assert [call[0] for call in all_calls] == [3, 4]
+    worker_sessions = factory.sessions[1:]
+    assert all(session.commit_count == 1 for session in worker_sessions)
+    assert all(session.rollback_count == 0 for session in worker_sessions)
+
+
 def test_scheduler_runs_task_due_check_cycle_for_active_plans(monkeypatch) -> None:
     factory = FakeSessionFactory([7, 8])
     FakeTaskDueCheckJob.instances.clear()
     settings = Settings(
         background_jobs_enabled=True,
+        weather_check_interval_seconds=5,
         survey_recommendation_interval_seconds=5,
         task_due_check_interval_seconds=5,
     )
