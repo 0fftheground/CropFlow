@@ -17,6 +17,7 @@ from app.repositories.core import (
     ReviewRequestRepository,
     StagePredictionSnapshotRepository,
     TaskIntentRepository,
+    WeatherSnapshotRepository,
 )
 
 __all__ = [
@@ -38,4 +39,5 @@ __all__ = [
     "ReviewRequestRepository",
     "StagePredictionSnapshotRepository",
     "TaskIntentRepository",
+    "WeatherSnapshotRepository",
 ]

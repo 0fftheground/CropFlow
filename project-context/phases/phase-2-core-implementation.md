@@ -28,4 +28,4 @@
 
 ## 状态
 
-`current`
+`closing`

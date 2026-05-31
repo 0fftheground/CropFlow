@@ -84,6 +84,7 @@ PlantingPlan
 CropStageState
 CropThermalTimeState
 StagePredictionSnapshot
+WeatherSnapshot
 ```
 
 ## 4.2 农事项与任务
@@ -149,6 +150,7 @@ Field 1 - N PlantingPlanFieldRelation
 PlantingPlan 1 - 1 CropStageState
 PlantingPlan 1 - 1 CropThermalTimeState
 PlantingPlan 1 - N StagePredictionSnapshot
+Farm 1 - N WeatherSnapshot
 
 PlantingPlan 1 - N CalendarItem
 CalendarItem 0..1 - 0..1 FarmingTask
@@ -521,6 +523,34 @@ CropStageState.currentStageCode 由 Stage Orchestrator 根据 stageTimeline 和�
 人工录入真实生育期时，优先修正 CropStageState；CropThermalTimeState 仍按 sowingDate 持续累计，不因人工反馈重新起算。
 stageTimeline 第一版保存算法返回的各生育期节点日期。
 算法版本如果外部服务暂不返回，可以为空；algorithmCode 仍用于标识调用的算法接口。
+```
+
+## 6.6.1 WeatherSnapshot
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | id | 天气快照 ID |
+| farmId | id | 所属 Farm |
+| weatherYear | integer | 天气年份，用于同农场年度复用 |
+| weatherDate | date | 天气日期 |
+| sourceType | enum | observed / forecast / climatology / unknown |
+| dataVersion | string | 外部接口或后端生成的数据版本 |
+| dataHash | string | 标准化 payload hash，用于识别同版本内容变化 |
+| payload | json | 单日天气原始归一化行 |
+| isActive | boolean | 同一 Farm / 年 / 日期 / sourceType 下当前有效快照 |
+| supersededAt | datetime | 被新快照替代的时间，可为空 |
+| supersededBySnapshotId | id | 替代该快照的新 WeatherSnapshot，可为空 |
+| sourceEventId | id | 触发该快照的 WeatherUpdated 事件，可为空 |
+
+说明：
+
+```text
+WeatherSnapshot 是农场年度天气快照，不是全局气象主数据。
+同一个 Farm 在同一年内获取到的同一天气行可被多个 PlantingPlan 复用。
+它用于记录 CropFlow 已消费过的单日天气输入，支撑 WeatherUpdated 幂等、同版本内容变化识别、后续回刷和积温重算排查。
+WeatherSnapshot 的唯一维度使用 farmId + weatherYear + weatherDate + sourceType + dataVersion + dataHash。
+同一 Farm / 年 / 日期 / sourceType 下只保留一个 isActive=true 的当前快照，旧快照不删除，只标记 supersededAt / supersededBySnapshotId。
+WeatherUpdated 事件仍按 PlantingPlan 生成，因为同一份天气可能影响多个计划的生育期和日历。
 ```
 
 ## 6.7 CalendarItem
@@ -1106,7 +1136,8 @@ CalendarItem.stageCode / FarmingTask.targetStageCode 均为可空字段，仅在
 
 | 场景 | 幂等键建议 |
 |---|---|
-| WeatherUpdated | plantingPlanId + weatherDate + dataVersion |
+| WeatherUpdated | plantingPlanId + weatherDate + dataVersion + dataHash |
+| WeatherSnapshot | farmId + weatherYear + weatherDate + sourceType + dataVersion + dataHash |
 | StagePredictionRefreshJob | plantingPlanId + inputHash + predictionSource |
 | AgronomyCalendarRefreshJob | plantingPlanId + calendarVersion + inputHash |
 | SurveyDateRecommendationJob | plantingPlanId + workflowKey + stageCode + surveyType + recommendationDate + inputHash |

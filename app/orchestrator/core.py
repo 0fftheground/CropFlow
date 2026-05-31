@@ -11,6 +11,7 @@ from app.core.constants import (
     EVENT_PROCESSING_STATUS_FAILED,
     EVENT_PROCESSING_STATUS_PROCESSED,
     EVENT_PROCESSING_STATUS_PROCESSING,
+    EVENT_TYPE_ACTUAL_STAGE_RECORDED,
     EVENT_TYPE_CALENDAR_ITEM_REFRESH_FAILED,
     EVENT_TYPE_EXECUTION_COMPLETED,
     EVENT_TYPE_FARMING_TASK_CREATED,
@@ -19,6 +20,7 @@ from app.core.constants import (
     EVENT_TYPE_OPERATION_PLAN_CREATED,
     EVENT_TYPE_REVIEW_REQUEST_CREATED,
     EVENT_TYPE_REVIEW_REQUEST_RESOLVED,
+    EVENT_TYPE_STAGE_CHANGED,
     EVENT_TYPE_SURVEY_RESULT_RECORDED,
     EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED,
     EVENT_TYPE_TASK_INTENT_CREATED,
@@ -438,8 +440,13 @@ class PlanCalendarRefreshHandler:
 
 
 class StageRefreshHandler:
-    def __init__(self, stage_management_service: StageManagementService) -> None:
+    def __init__(
+        self,
+        stage_management_service: StageManagementService,
+        event_record_repository: EventRecordRepository,
+    ) -> None:
         self.stage_management_service = stage_management_service
+        self.event_record_repository = event_record_repository
 
     def handle(self, event_record: EventRecord) -> OrchestratorResult:
         if event_record.planting_plan_id is None:
@@ -463,18 +470,88 @@ class StageRefreshHandler:
             refresh_result = self.stage_management_service.refresh_for_weather_update(
                 event_record.planting_plan_id,
                 source_event_id=event_record.id,
+                as_of_date=_parse_payload_date(event_record.payload, "weatherDate"),
+                source_event_payload=dict(event_record.payload or {}),
             )
+        elif event_record.event_type == EVENT_TYPE_ACTUAL_STAGE_RECORDED:
+            actual_result = self.stage_management_service.apply_actual_stage_recorded(
+                event_record.planting_plan_id,
+                stage_code=str(_get_payload_value(event_record.payload, "stageCode", "stage_code")),
+                stage_name=_get_payload_value(event_record.payload, "stageName", "stage_name", required=False),
+                effective_date=_parse_payload_date(event_record.payload, "effectiveDate"),
+                source_event_id=event_record.id,
+            )
+            self._record_stage_changed_event(
+                event_record=event_record,
+                previous_stage_code=actual_result.previous_stage_code,
+                current_stage_code=actual_result.crop_stage_state.current_stage_code,
+                effective_date=actual_result.crop_stage_state.effective_date,
+                stage_changed=actual_result.stage_changed,
+            )
+            return OrchestratorResult(crop_stage_states=[actual_result.crop_stage_state])
         else:
             refresh_result = self.stage_management_service.refresh_prediction(
                 event_record.planting_plan_id,
                 prediction_source="runtime_refresh",
                 source_event_id=event_record.id,
             )
+        self._record_stage_changed_event(
+            event_record=event_record,
+            previous_stage_code=refresh_result.previous_stage_code,
+            current_stage_code=refresh_result.crop_stage_state.current_stage_code,
+            effective_date=refresh_result.crop_stage_state.effective_date,
+            stage_changed=refresh_result.stage_changed,
+            source_snapshot_id=refresh_result.snapshot.id,
+        )
         return OrchestratorResult(
             crop_stage_states=[refresh_result.crop_stage_state],
             crop_thermal_time_states=[refresh_result.crop_thermal_time_state],
             stage_prediction_snapshots=[refresh_result.snapshot],
         )
+
+    def _record_stage_changed_event(
+        self,
+        *,
+        event_record: EventRecord,
+        previous_stage_code: str | None,
+        current_stage_code: str,
+        effective_date: date,
+        stage_changed: bool,
+        source_snapshot_id: int | None = None,
+    ) -> EventRecord | None:
+        if not stage_changed or event_record.planting_plan_id is None:
+            return None
+        idempotency_key = (
+            f"{EVENT_TYPE_STAGE_CHANGED}:{event_record.planting_plan_id}:"
+            f"{previous_stage_code}:{current_stage_code}:{effective_date.isoformat()}:source:{event_record.id}"
+        )
+        existing_event = self.event_record_repository.get_by_idempotency_key(idempotency_key)
+        if existing_event is not None:
+            return existing_event
+        stage_changed_event = EventRecord(
+            planting_plan_id=event_record.planting_plan_id,
+            event_type=EVENT_TYPE_STAGE_CHANGED,
+            event_category="stage",
+            event_source="orchestrator",
+            source_system="cropflow",
+            source_record_id=str(source_snapshot_id or event_record.id),
+            payload={
+                "previousStageCode": previous_stage_code,
+                "currentStageCode": current_stage_code,
+                "effectiveDate": effective_date.isoformat(),
+                "sourceEventId": event_record.id,
+                "sourceEventType": event_record.event_type,
+                "sourceSnapshotId": source_snapshot_id,
+            },
+            occurred_at=_utcnow(),
+            processing_status=EVENT_PROCESSING_STATUS_PROCESSED,
+            processed_at=_utcnow(),
+            idempotency_key=idempotency_key,
+            created_by_type="system",
+            created_by_id="StageRefreshHandler",
+        )
+        self.event_record_repository.add(stage_changed_event)
+        return stage_changed_event
 
 
 class CompositeHandler:
@@ -1350,7 +1427,10 @@ def build_plan_orchestrator(
     diagnosis_client: WeedDiagnosisClient,
     context_resolver: PlantProtectionPlanContextResolver,
 ) -> PlanOrchestrator:
-    stage_refresh_handler = StageRefreshHandler(stage_management_service=stage_management_service)
+    stage_refresh_handler = StageRefreshHandler(
+        stage_management_service=stage_management_service,
+        event_record_repository=event_record_repository,
+    )
     plan_refresh_handler = PlanCalendarRefreshHandler(
         survey_date_recommendation_service=survey_date_recommendation_service,
         event_record_repository=event_record_repository,
@@ -1363,6 +1443,8 @@ def build_plan_orchestrator(
             EVENT_TYPE_PLAN_CREATED: lifecycle_handler,
             EVENT_TYPE_PLAN_KEY_INFO_CHANGED: lifecycle_handler,
             EVENT_TYPE_WEATHER_UPDATED: lifecycle_handler,
+            EVENT_TYPE_ACTUAL_STAGE_RECORDED: lifecycle_handler,
+            EVENT_TYPE_STAGE_CHANGED: plan_refresh_handler,
             EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED: TaskDueCheckTriggeredHandler(
                 planting_plan_repository=planting_plan_repository,
                 calendar_item_repository=calendar_item_repository,

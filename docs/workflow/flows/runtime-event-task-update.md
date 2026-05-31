@@ -80,6 +80,23 @@ Plan Orchestrator 协调 Task Module 更新相关任务
 
 ## 4.2 ActualStageRecorded
 
+接口入口：
+
+```http
+POST /api/planting-plans/{plantingPlanId}/actual-stages
+```
+
+请求体按 `code: date` 传入真实生育期，例如：
+
+```json
+{
+  "stages": {
+    "21": "2026-05-12",
+    "58": "2026-06-18"
+  }
+}
+```
+
 ```text
 用户录入真实生育期
   ↓

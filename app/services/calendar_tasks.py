@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import hashlib
 import json
 import logging
 import socket
@@ -29,7 +30,7 @@ from app.core.constants import (
     TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
     TASK_SUBTYPE_STEM_LEAF_WEED_RECONTROL_PRE_SURVEY,
 )
-from app.models import CalendarItem, EventRecord, Farm, FarmingTask, PlantingPlan, RiceVariety
+from app.models import CalendarItem, EventRecord, Farm, FarmingTask, PlantingPlan, RiceVariety, WeatherSnapshot
 from app.repositories import (
     CalendarItemRepository,
     CodeDictRepository,
@@ -38,6 +39,7 @@ from app.repositories import (
     PlantingPlanRepository,
     RiceVarietyRepository,
     StagePredictionSnapshotRepository,
+    WeatherSnapshotRepository,
 )
 from app.services.stage_management import extract_pest_disease_growth_stage
 
@@ -228,6 +230,13 @@ class PlantProtectionPlanContext:
     cultivation_system: str
     cultivation_pattern: str
     cultivation_date: date
+
+
+@dataclass(slots=True)
+class WeatherSnapshotRecordResult:
+    snapshot: WeatherSnapshot
+    previous_snapshot: WeatherSnapshot | None
+    change_type: str
 
 
 class HttpWeedDiagnosisClient:
@@ -2152,11 +2161,13 @@ class WeatherUpdateService:
         event_record_repository: EventRecordRepository,
         weather_provider: WeatherProvider,
         plan_orchestrator: EventDispatcher | None = None,
+        weather_snapshot_repository: WeatherSnapshotRepository | None = None,
     ) -> None:
         self.planting_plan_repository = planting_plan_repository
         self.event_record_repository = event_record_repository
         self.weather_provider = weather_provider
         self.plan_orchestrator = plan_orchestrator
+        self.weather_snapshot_repository = weather_snapshot_repository
 
     def generate_weather_updates(
         self,
@@ -2181,13 +2192,27 @@ class WeatherUpdateService:
         for row in weather_rows:
             weather_date = str(row.get("date") or "").strip()
             data_version = str(row.get("data_version") or "").strip()
+            source_type = str(row.get("source_type") or "unknown").strip()
+            data_hash = _hash_payload(row)
             if not weather_date:
                 raise ValueError("Weather row must include date when generating WeatherUpdated.")
             if not data_version:
                 raise ValueError("Weather row must include data_version when generating WeatherUpdated.")
+            parsed_weather_date = _parse_stage_or_iso_date(weather_date)
+            snapshot_result = self._record_weather_snapshot(
+                farm_id=planting_plan.farm_id,
+                weather_date=parsed_weather_date,
+                source_type=source_type,
+                data_version=data_version,
+                data_hash=data_hash,
+                row=dict(row),
+            )
+            snapshot = snapshot_result.snapshot if snapshot_result is not None else None
+            previous_snapshot = snapshot_result.previous_snapshot if snapshot_result is not None else None
+            change_type = snapshot_result.change_type if snapshot_result is not None else "event_only"
 
             existing_event = self.event_record_repository.get_by_idempotency_key(
-                f"{DAILY_WEATHER_CHECK_JOB}:{planting_plan_id}:{weather_date}:{data_version}",
+                f"{DAILY_WEATHER_CHECK_JOB}:{planting_plan_id}:{weather_date}:{data_version}:{data_hash}",
             )
             if existing_event is not None:
                 created_events.append(existing_event)
@@ -2205,24 +2230,121 @@ class WeatherUpdateService:
                     "checkDate": check_date.isoformat(),
                     "weatherDate": weather_date,
                     "dataVersion": data_version,
+                    "dataHash": data_hash,
+                    "sourceType": source_type,
+                    "weatherSnapshotId": snapshot.id if snapshot is not None else None,
+                    "previousWeatherSnapshotId": previous_snapshot.id if previous_snapshot is not None else None,
+                    "weatherChangeType": change_type,
                     "weather": dict(row),
                 },
                 occurred_at=_utcnow(),
                 processing_status=EVENT_PROCESSING_STATUS_RECEIVED,
-                idempotency_key=f"{DAILY_WEATHER_CHECK_JOB}:{planting_plan_id}:{weather_date}:{data_version}",
+                idempotency_key=f"{DAILY_WEATHER_CHECK_JOB}:{planting_plan_id}:{weather_date}:{data_version}:{data_hash}",
                 created_by_type="system",
                 created_by_id=DAILY_WEATHER_CHECK_JOB,
             )
             self.event_record_repository.add(event_record)
             if hasattr(self.event_record_repository, "flush"):
                 self.event_record_repository.flush()
+            if snapshot is not None and snapshot.source_event_id is None:
+                snapshot.source_event_id = event_record.id
             self.plan_orchestrator.handle(event_record)
             created_events.append(event_record)
         return created_events
 
+    def _record_weather_snapshot(
+        self,
+        *,
+        farm_id: int,
+        weather_date: date,
+        source_type: str,
+        data_version: str,
+        data_hash: str,
+        row: dict[str, Any],
+    ) -> WeatherSnapshotRecordResult | None:
+        if self.weather_snapshot_repository is None:
+            return None
+        active_snapshot = self.weather_snapshot_repository.get_active_by_farm_date_source(
+            farm_id=farm_id,
+            weather_year=weather_date.year,
+            weather_date=weather_date,
+            source_type=source_type,
+        )
+        existing_snapshot = self.weather_snapshot_repository.get_by_identity(
+            farm_id=farm_id,
+            weather_year=weather_date.year,
+            weather_date=weather_date,
+            source_type=source_type,
+            data_version=data_version,
+            data_hash=data_hash,
+        )
+        if existing_snapshot is not None:
+            previous_snapshot = active_snapshot if active_snapshot is not None and active_snapshot.id != existing_snapshot.id else None
+            if previous_snapshot is not None:
+                existing_snapshot.is_active = True
+                existing_snapshot.superseded_at = None
+                existing_snapshot.superseded_by_snapshot_id = None
+                self.weather_snapshot_repository.flush()
+                self.weather_snapshot_repository.supersede_active_for_farm_date_source(
+                    farm_id=farm_id,
+                    weather_year=weather_date.year,
+                    weather_date=weather_date,
+                    source_type=source_type,
+                    superseded_by_snapshot_id=int(existing_snapshot.id),
+                )
+                return WeatherSnapshotRecordResult(
+                    snapshot=existing_snapshot,
+                    previous_snapshot=previous_snapshot,
+                    change_type="restored_snapshot",
+                )
+            return WeatherSnapshotRecordResult(
+                snapshot=existing_snapshot,
+                previous_snapshot=None,
+                change_type="reused_snapshot",
+            )
+        snapshot = WeatherSnapshot(
+            farm_id=farm_id,
+            weather_year=weather_date.year,
+            weather_date=weather_date,
+            source_type=source_type,
+            data_version=data_version,
+            data_hash=data_hash,
+            payload=row,
+            is_active=True,
+            created_by_type="system",
+            created_by_id=DAILY_WEATHER_CHECK_JOB,
+        )
+        self.weather_snapshot_repository.add(snapshot)
+        if hasattr(self.weather_snapshot_repository, "flush"):
+            self.weather_snapshot_repository.flush()
+        if active_snapshot is not None:
+            self.weather_snapshot_repository.supersede_active_for_farm_date_source(
+                farm_id=farm_id,
+                weather_year=weather_date.year,
+                weather_date=weather_date,
+                source_type=source_type,
+                superseded_by_snapshot_id=int(snapshot.id),
+            )
+        return WeatherSnapshotRecordResult(
+            snapshot=snapshot,
+            previous_snapshot=active_snapshot,
+            change_type="changed_snapshot" if active_snapshot is not None else "new_snapshot",
+        )
+
 
 def _parse_api_date(raw_value: str) -> date:
     return datetime.strptime(raw_value, "%Y%m%d").date()
+
+
+def _parse_stage_or_iso_date(raw_value: str) -> date:
+    if len(raw_value) == 8 and raw_value.isdigit():
+        return datetime.strptime(raw_value, "%Y%m%d").date()
+    return date.fromisoformat(raw_value)
+
+
+def _hash_payload(payload: dict[str, Any]) -> str:
+    normalized_payload = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str, separators=(",", ":"))
+    return hashlib.sha256(normalized_payload.encode("utf-8")).hexdigest()
 
 
 def _parse_api_date_range(raw_value: list[str] | None) -> tuple[date, date] | None:

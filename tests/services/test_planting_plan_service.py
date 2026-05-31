@@ -8,6 +8,7 @@ import pytest
 
 from app.models import EventRecord, Field, PlantingPlan, RiceVariety
 from app.services.planting_plans import (
+    ActualStageRecordedInput,
     PLANTING_PLAN_ALLOWED_STATUSES,
     PlantingPlanCreateInput,
     PlantingPlanService,
@@ -79,6 +80,9 @@ class FakeRiceVarietyRepository:
 @dataclass
 class FakeEventRecordRepository:
     items: list[EventRecord] = field(default_factory=list)
+
+    def get_by_idempotency_key(self, idempotency_key: str) -> EventRecord | None:
+        return next((item for item in self.items if item.idempotency_key == idempotency_key), None)
 
     def add(self, event_record: EventRecord) -> EventRecord:
         self.items.append(event_record)
@@ -258,3 +262,53 @@ def test_create_plan_records_plan_created_event_before_orchestration() -> None:
     assert event_repository.items[-1].event_type == "PlanCreated"
     assert event_repository.items[-1].processing_status == "received"
     assert plan_orchestrator.triggered_plan_ids == [result.planting_plan.id]
+
+
+def test_record_actual_stages_creates_events_in_effective_date_order() -> None:
+    event_repository = FakeEventRecordRepository()
+    plan_orchestrator = FakePlanOrchestrator()
+    service = PlantingPlanService(
+        planting_plan_repository=FakePlantingPlanRepository(
+            {
+                1: PlantingPlan(
+                    id=1,
+                    plan_code="PLAN-001",
+                    plan_name="早稻计划",
+                    farm_id=1,
+                    culti_type_code=5,
+                    planting_method_code=1,
+                    crop_name="水稻",
+                    variety_id=3,
+                    variety_name="黄广农占",
+                    sowing_date=date(2026, 4, 10),
+                    status="active",
+                    task_generation_window_days=14,
+                    metadata_payload={},
+                ),
+            },
+        ),
+        field_repository=FakeFieldRepository({}),
+        planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
+        rice_variety_repository=FakeRiceVarietyRepository({}),
+        event_record_repository=event_repository,
+        plan_orchestrator=plan_orchestrator,
+    )
+
+    result = service.record_actual_stages(
+        1,
+        ActualStageRecordedInput(
+            stage_dates={
+                "58": date(2026, 6, 18),
+                "21": date(2026, 5, 12),
+            },
+            source_record_id="manual-1",
+            operator_id="user-7",
+        ),
+    )
+
+    assert [event.payload["stageCode"] for event in result] == ["21", "58"]
+    assert [event.payload["effectiveDate"] for event in event_repository.items] == ["2026-05-12", "2026-06-18"]
+    assert event_repository.items[0].event_type == "ActualStageRecorded"
+    assert event_repository.items[0].event_category == "runtime"
+    assert event_repository.items[0].source_record_id == "manual-1"
+    assert plan_orchestrator.triggered_plan_ids == [1, 1]

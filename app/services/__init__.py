@@ -31,6 +31,7 @@ from app.services.calendar_tasks import (
     WeedTreatmentDiagnosisResult,
 )
 from app.services.planting_plans import (
+    ActualStageRecordedInput,
     PLANTING_PLAN_ALLOWED_STATUSES,
     PlantingPlanCreateInput,
     PlantingPlanDetails,
@@ -73,6 +74,7 @@ from app.services.task_queries import FarmingTaskDetail, FarmingTaskQueryService
 __all__ = [
     "AdditionalTreatmentDiagnosisResult",
     "ALLOWED_REVIEW_DECISIONS",
+    "ActualStageRecordedInput",
     "CodeDictOption",
     "CodeDictQueryService",
     "FarmCreateInput",

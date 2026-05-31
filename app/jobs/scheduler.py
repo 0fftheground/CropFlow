@@ -13,7 +13,7 @@ from app.core.config import Settings
 from app.jobs.daily_weather_check import DailyWeatherCheckJob
 from app.jobs.survey_date_recommendation import SurveyDateRecommendationJob
 from app.jobs.task_due_check import TaskDueCheckJob
-from app.repositories import EventRecordRepository, PlantingPlanRepository
+from app.repositories import EventRecordRepository, PlantingPlanRepository, WeatherSnapshotRepository
 from app.services import TaskGenerationService, WeatherUpdateService
 
 logger = logging.getLogger(__name__)
@@ -107,6 +107,7 @@ class BackgroundJobScheduler:
                     event_record_repository=EventRecordRepository(session),
                     weather_provider=weather_provider,
                     plan_orchestrator=orchestrator,
+                    weather_snapshot_repository=WeatherSnapshotRepository(session),
                 )
                 DailyWeatherCheckJob(service).run(planting_plan_id, check_date=check_date)
                 session.commit()

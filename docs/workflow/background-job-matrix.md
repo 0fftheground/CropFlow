@@ -14,7 +14,7 @@
 4. 到期生成正式 FarmingTask 仍由 TaskDueCheckJob 触发，并回到 Plan Orchestrator / Task Module。
 5. 调查日期推荐不属于调查农事本身，不生成 FarmingTask。
 6. 后台任务的执行记录第一版可以进入 EventRecord，不单独建 JobRun 表。
-7. P1 暂不做气象校准、补数或独立气象缓存表。
+7. P2 已新增农场年度 WeatherSnapshot，用于记录 CropFlow 已消费的天气输入；同一 Farm 同一年内可跨 PlantingPlan 复用。
 ```
 
 ---
@@ -37,7 +37,7 @@
 
 | jobKey | trigger | algorithmOrService | updatedObjects | emittedEvents | idempotencyKey | notes |
 |---|---|---|---|---|---|---|
-| DailyWeatherCheckJob | 每日 / 天气数据刷新 | weatherProvider | EventRecord | WeatherUpdated | weatherDate + regionCode + dataVersion | 气象原始数据由外部大数据接口提供；本系统不维护原始气象主数据，只负责按天拉取、比对变化并在 EventRecord 留痕；获取失败时最多重试 2 次 |
+| DailyWeatherCheckJob | 每日 / 天气数据刷新 | weatherProvider | WeatherSnapshot / EventRecord | WeatherUpdated | farmId + weatherYear + weatherDate + dataVersion + dataHash | 气象原始数据由外部大数据接口提供；本系统保存农场年度已消费天气快照；WeatherUpdated 仍按 PlantingPlan 触发；获取失败时最多重试 2 次 |
 | StagePredictionRefreshJob | WeatherUpdated / PlanKeyInfoChanged / ActualStageRecorded | stagePredictionAlgorithm | CropThermalTimeState / StagePredictionSnapshot / CropStageState | StageChanged / EventRecord | plantingPlanId + inputHash + predictionSource | StagePredictionSnapshot 只追加，不覆盖 |
 | AgronomyCalendarRefreshJob | 计划初始化 / StageChanged / PlanKeyInfoChanged / 农事日历版本变化 | agronomyCalendarAlgorithm | CalendarItem | CalendarItemUpdated | plantingPlanId + calendarVersion + inputHash | 生成或更新预备农事项，不生成 FarmingTask |
 | SurveyDateRecommendationJob | 每日 / 天气变化 / stage 变化 / 调查窗口变化 | soilTreatmentDiagnosisAlgorithm / weedSurveyDateDiagnosisAlgorithm / pestDiseaseSurveyWindowAlgorithm / diseasePestSurveyDateRecommendationAlgorithm / pestSurveyDateRecommendationAlgorithm | 土壤封闭 / 草害 / 病虫害调查类 CalendarItem | CalendarItemUpdated | plantingPlanId + workflowKey + stageCode + surveyType + recommendationDate + inputHash | `soil_treatment_diagnosis` 维护土壤封闭日期，`weed_survey_date_diagnosis` 维护茎叶除草药前调查日期；`pestDisease/survey/init-regular-survey` 维护病虫害常规调查 CalendarItem；调查日期推荐不属于调查农事流程 |
@@ -76,7 +76,9 @@ StagePredictionRefreshJob 可以因为天气、计划关键字段或实际生育
 它保存 StagePredictionSnapshot，并更新 CropStageState / CropThermalTimeState。
 如果当前生育期发生变化，产生 StageChanged。
 WeatherUpdated 由 DailyWeatherCheckJob 基于外部气象接口的变化检测产生，而不是要求本系统维护完整气象库。
-DailyWeatherCheckJob 当前按天刷新即可；如外部气象接口获取失败，最多重试 2 次。P1 只在 EventRecord 留痕，不额外维护气象明细表。
+DailyWeatherCheckJob 当前按天刷新即可；如外部气象接口获取失败，最多重试 2 次。P2 记录农场年度 WeatherSnapshot，用于版本追踪、同版本内容变化识别、跨计划复用和后续回刷排查。
+同一 Farm / 年 / 日期 / sourceType 下只保留一个 active WeatherSnapshot，旧快照保留审计链路并标记 superseded。
+WeatherUpdated.payload 记录 weatherSnapshotId、previousWeatherSnapshotId 和 weatherChangeType，用于区分 new_snapshot / reused_snapshot / changed_snapshot / restored_snapshot。
 ```
 
 ## 4.4 到期任务生成

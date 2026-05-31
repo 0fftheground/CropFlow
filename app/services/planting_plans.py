@@ -9,6 +9,7 @@ from typing import Any
 
 from app.core.constants import (
     EVENT_PROCESSING_STATUS_RECEIVED,
+    EVENT_TYPE_ACTUAL_STAGE_RECORDED,
     EVENT_TYPE_PLAN_CREATED,
     EVENT_TYPE_PLAN_KEY_INFO_CHANGED,
 )
@@ -77,6 +78,15 @@ class PlantingPlanUpdateInput:
     expected_harvest_date: date | None = None
     status: str | None = None
     task_generation_window_days: int | None = None
+    metadata_payload: dict[str, Any] | None = None
+
+
+@dataclass(slots=True)
+class ActualStageRecordedInput:
+    stage_dates: dict[str, date]
+    source_record_id: str | None = None
+    operator_id: str | None = None
+    note: str | None = None
     metadata_payload: dict[str, Any] | None = None
 
 
@@ -242,6 +252,69 @@ class PlantingPlanService:
             )
 
         return self.get_details(planting_plan.id)
+
+    def record_actual_stages(self, planting_plan_id: int, payload: ActualStageRecordedInput) -> list[EventRecord]:
+        if self.event_record_repository is None or self.plan_orchestrator is None:
+            raise RuntimeError(
+                "PlantingPlanService requires EventRecordRepository and PlanOrchestrator to record actual stages.",
+            )
+
+        planting_plan = self.planting_plan_repository.get(planting_plan_id)
+        if planting_plan is None:
+            raise LookupError(f"Planting plan {planting_plan_id} does not exist.")
+        if not payload.stage_dates:
+            raise ValueError("At least one actual stage record is required.")
+
+        ordered_stage_dates = sorted(
+            enumerate(payload.stage_dates.items()),
+            key=lambda item: (item[1][1], item[0]),
+        )
+        event_records: list[EventRecord] = []
+        for _, (raw_stage_code, effective_date) in ordered_stage_dates:
+            stage_code = str(raw_stage_code).strip()
+            if not stage_code:
+                raise ValueError("Actual stage code cannot be empty.")
+
+            source_record_id = (
+                payload.source_record_id or f"{planting_plan_id}:{stage_code}:{effective_date.isoformat()}"
+            )
+            idempotency_key = (
+                f"actual-stage-recorded:{planting_plan_id}:{stage_code}:"
+                f"{effective_date.isoformat()}:{source_record_id}"
+            )
+            existing_event = self.event_record_repository.get_by_idempotency_key(idempotency_key)
+            if existing_event is not None:
+                event_records.append(existing_event)
+                continue
+
+            event_record = EventRecord(
+                planting_plan_id=planting_plan_id,
+                event_type=EVENT_TYPE_ACTUAL_STAGE_RECORDED,
+                event_category="runtime",
+                event_source="api",
+                source_system="cropflow",
+                source_record_id=source_record_id,
+                payload={
+                    "stageCode": stage_code,
+                    "effectiveDate": effective_date.isoformat(),
+                    "sourceRecordId": source_record_id,
+                    "operatorId": payload.operator_id,
+                    "note": payload.note,
+                    "metadata": payload.metadata_payload or {},
+                },
+                occurred_at=_utcnow(),
+                processing_status=EVENT_PROCESSING_STATUS_RECEIVED,
+                idempotency_key=idempotency_key,
+                created_by_type="user",
+                created_by_id=payload.operator_id or "api",
+            )
+            self.event_record_repository.add(event_record)
+            if hasattr(self.event_record_repository, "flush"):
+                self.event_record_repository.flush()
+            self.plan_orchestrator.handle(event_record)
+            event_records.append(event_record)
+
+        return event_records
 
     def _record_and_dispatch_plan_event(
         self,

@@ -21,6 +21,7 @@ from app.models import (
     TaskIntent,
 )
 from app.services import (
+    ActualStageRecordedInput,
     PlantingPlanCreateInput,
     PlantingPlanDetails,
     PlantingPlanQueryService,
@@ -71,6 +72,14 @@ class PlantingPlanUpdateRequest(BaseModel):
     status: str | None = None
     task_generation_window_days: int | None = None
     metadata: dict[str, Any] | None = None
+
+
+class ActualStageRecordedRequest(BaseModel):
+    stages: dict[str, date] = PydanticField(..., min_length=1)
+    source_record_id: str | None = None
+    operator_id: str | None = None
+    note: str | None = None
+    metadata: dict[str, Any] = PydanticField(default_factory=dict)
 
 
 class PlantingPlanResponse(BaseModel):
@@ -376,6 +385,38 @@ def get_latest_stage_prediction_snapshot(
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return _serialize_stage_prediction_snapshot(result) if result is not None else None
+
+
+@router.post(
+    "/{planting_plan_id}/actual-stages",
+    response_model=list[EventRecordResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+def record_actual_stages(
+    planting_plan_id: int,
+    payload: ActualStageRecordedRequest,
+    service: PlantingPlanService = Depends(get_planting_plan_service),
+    db: Session = Depends(get_db),
+) -> list[EventRecordResponse]:
+    try:
+        result = service.record_actual_stages(
+            planting_plan_id,
+            ActualStageRecordedInput(
+                stage_dates=payload.stages,
+                source_record_id=payload.source_record_id,
+                operator_id=payload.operator_id,
+                note=payload.note,
+                metadata_payload=payload.metadata,
+            ),
+        )
+    except LookupError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    db.commit()
+    return [_serialize_event_record(item) for item in result]
 
 
 @router.get("/{planting_plan_id}", response_model=PlantingPlanResponse)

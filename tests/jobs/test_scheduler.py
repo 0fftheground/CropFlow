@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 from app.core.config import Settings
+from app.jobs.daily_weather_check import DailyWeatherCheckJob
 from app.jobs.runner import run_scheduler_forever
 from app.jobs.scheduler import BackgroundJobScheduler
 
@@ -97,6 +98,17 @@ class FakeWeatherUpdateService:
         return []
 
 
+class FlakyWeatherUpdateService:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def generate_weather_updates(self, planting_plan_id: int, *, check_date) -> list[object]:
+        self.calls += 1
+        if self.calls < 3:
+            raise RuntimeError("temporary weather failure")
+        return []
+
+
 class FakeDailyWeatherCheckJob:
     instances: list["FakeDailyWeatherCheckJob"] = []
 
@@ -163,6 +175,15 @@ def test_scheduler_runs_daily_weather_check_cycle_for_active_plans(monkeypatch) 
     worker_sessions = factory.sessions[1:]
     assert all(session.commit_count == 1 for session in worker_sessions)
     assert all(session.rollback_count == 0 for session in worker_sessions)
+
+
+def test_daily_weather_check_job_retries_transient_failures() -> None:
+    service = FlakyWeatherUpdateService()
+
+    result = DailyWeatherCheckJob(service).run(3, check_date=object())
+
+    assert result == []
+    assert service.calls == 3
 
 
 def test_scheduler_runs_task_due_check_cycle_for_active_plans(monkeypatch) -> None:

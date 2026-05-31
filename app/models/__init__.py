@@ -18,6 +18,7 @@ from app.models.core import (
     StagePredictionSnapshot,
     TaskIntent,
     User,
+    WeatherSnapshot,
 )
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     "StagePredictionSnapshot",
     "TaskIntent",
     "User",
+    "WeatherSnapshot",
 ]

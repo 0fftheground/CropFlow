@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Select, select
@@ -24,6 +24,7 @@ from app.models import (
     ReviewRequest,
     StagePredictionSnapshot,
     TaskIntent,
+    WeatherSnapshot,
 )
 
 
@@ -206,6 +207,87 @@ class CropThermalTimeStateRepository(Repository):
     def get_by_plan(self, planting_plan_id: int) -> CropThermalTimeState | None:
         stmt = select(CropThermalTimeState).where(CropThermalTimeState.planting_plan_id == planting_plan_id)
         return self.session.scalar(stmt)
+
+
+class WeatherSnapshotRepository(Repository):
+    def get_by_identity(
+        self,
+        *,
+        farm_id: int,
+        weather_year: int,
+        weather_date: date,
+        source_type: str,
+        data_version: str,
+        data_hash: str,
+    ) -> WeatherSnapshot | None:
+        stmt = (
+            select(WeatherSnapshot)
+            .where(WeatherSnapshot.farm_id == farm_id)
+            .where(WeatherSnapshot.weather_year == weather_year)
+            .where(WeatherSnapshot.weather_date == weather_date)
+            .where(WeatherSnapshot.source_type == source_type)
+            .where(WeatherSnapshot.data_version == data_version)
+            .where(WeatherSnapshot.data_hash == data_hash)
+        )
+        return self.session.scalar(stmt)
+
+    def list_by_farm_and_date(
+        self,
+        farm_id: int,
+        *,
+        weather_date: date,
+    ) -> list[WeatherSnapshot]:
+        stmt = (
+            select(WeatherSnapshot)
+            .where(WeatherSnapshot.farm_id == farm_id)
+            .where(WeatherSnapshot.weather_date == weather_date)
+            .order_by(WeatherSnapshot.created_at.desc(), WeatherSnapshot.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def get_active_by_farm_date_source(
+        self,
+        *,
+        farm_id: int,
+        weather_year: int,
+        weather_date: date,
+        source_type: str,
+    ) -> WeatherSnapshot | None:
+        stmt = (
+            select(WeatherSnapshot)
+            .where(WeatherSnapshot.farm_id == farm_id)
+            .where(WeatherSnapshot.weather_year == weather_year)
+            .where(WeatherSnapshot.weather_date == weather_date)
+            .where(WeatherSnapshot.source_type == source_type)
+            .where(WeatherSnapshot.is_active.is_(True))
+            .order_by(WeatherSnapshot.created_at.desc(), WeatherSnapshot.id.desc())
+            .limit(1)
+        )
+        return self.session.scalar(stmt)
+
+    def supersede_active_for_farm_date_source(
+        self,
+        *,
+        farm_id: int,
+        weather_year: int,
+        weather_date: date,
+        source_type: str,
+        superseded_by_snapshot_id: int,
+    ) -> None:
+        stmt = (
+            select(WeatherSnapshot)
+            .where(WeatherSnapshot.farm_id == farm_id)
+            .where(WeatherSnapshot.weather_year == weather_year)
+            .where(WeatherSnapshot.weather_date == weather_date)
+            .where(WeatherSnapshot.source_type == source_type)
+            .where(WeatherSnapshot.is_active.is_(True))
+            .where(WeatherSnapshot.id != superseded_by_snapshot_id)
+        )
+        now = datetime.now(UTC).replace(tzinfo=None)
+        for snapshot in self.session.scalars(stmt):
+            snapshot.is_active = False
+            snapshot.superseded_at = now
+            snapshot.superseded_by_snapshot_id = superseded_by_snapshot_id
 
 
 class CalendarItemRepository(Repository):

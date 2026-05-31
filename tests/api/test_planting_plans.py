@@ -51,6 +51,7 @@ def _make_details(plan_id: int, *, status: str = "draft") -> PlantingPlanDetails
 class FakePlantingPlanService:
     created_payload: object | None = None
     updated_payload: object | None = None
+    actual_stage_payload: object | None = None
     list_statuses: list[str] | None = None
 
     def create(self, payload):
@@ -69,6 +70,32 @@ class FakePlantingPlanService:
     def update(self, planting_plan_id: int, payload):
         self.updated_payload = payload
         return _make_details(planting_plan_id, status=payload.status or "draft")
+
+    def record_actual_stages(self, planting_plan_id: int, payload):
+        self.actual_stage_payload = payload
+        stage_code, effective_date = next(iter(payload.stage_dates.items()))
+        return [
+            EventRecord(
+                id=12,
+                planting_plan_id=planting_plan_id,
+                event_type="ActualStageRecorded",
+                event_category="runtime",
+                event_source="api",
+                source_system="cropflow",
+                source_record_id=payload.source_record_id,
+                payload={
+                    "stageCode": stage_code,
+                    "effectiveDate": effective_date.isoformat(),
+                    "sourceRecordId": payload.source_record_id,
+                    "operatorId": payload.operator_id,
+                    "note": payload.note,
+                    "metadata": payload.metadata_payload,
+                },
+                occurred_at=datetime(2026, 6, 18, 9, 0, 0),
+                processing_status="received",
+                idempotency_key="actual-stage-recorded:1:58:2026-06-18:manual-1",
+            ),
+        ]
 
 
 class FakePlantingPlanQueryService:
@@ -277,6 +304,30 @@ def test_get_and_patch_planting_plan_routes() -> None:
     assert get_response.json()["id"] == 1
     assert patch_response.status_code == 200
     assert patch_response.json()["status"] == "completed"
+
+    app.dependency_overrides.clear()
+
+
+def test_record_actual_stages_route_accepts_code_date_map() -> None:
+    fake_service = FakePlantingPlanService()
+    app.dependency_overrides[get_planting_plan_service] = lambda: fake_service
+    app.dependency_overrides[get_db] = lambda: DummySession()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/planting-plans/1/actual-stages",
+        json={
+            "stages": {"58": "2026-06-18"},
+            "source_record_id": "manual-1",
+            "operator_id": "user-7",
+            "note": "田间观测齐穗",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()[0]["event_type"] == "ActualStageRecorded"
+    assert response.json()[0]["payload"]["stageCode"] == "58"
+    assert fake_service.actual_stage_payload.stage_dates == {"58": date(2026, 6, 18)}
 
     app.dependency_overrides.clear()
 
