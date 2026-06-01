@@ -169,6 +169,11 @@ class PlanCalendarRefreshHandler:
     def handle(self, event_record: EventRecord) -> OrchestratorResult:
         if event_record.planting_plan_id is None:
             return OrchestratorResult()
+        if (
+            event_record.event_type == EVENT_TYPE_WEATHER_UPDATED
+            and _get_payload_value(event_record.payload, "sourceType", "source_type", required=False) == "forecast"
+        ):
+            return OrchestratorResult()
 
         calendar_items: list[CalendarItem] = []
         task_intents: list[TaskIntent] = []
@@ -500,7 +505,13 @@ class StageRefreshHandler:
             previous_stage_code=refresh_result.previous_stage_code,
             current_stage_code=refresh_result.crop_stage_state.current_stage_code,
             effective_date=refresh_result.crop_stage_state.effective_date,
-            stage_changed=refresh_result.stage_changed,
+            stage_changed=(
+                refresh_result.stage_changed
+                and (
+                    event_record.event_type != EVENT_TYPE_WEATHER_UPDATED
+                    or _get_payload_value(event_record.payload, "sourceType", "source_type", required=False) != "forecast"
+                )
+            ),
             source_snapshot_id=refresh_result.snapshot.id,
         )
         return OrchestratorResult(

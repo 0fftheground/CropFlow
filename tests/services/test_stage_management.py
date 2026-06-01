@@ -200,7 +200,7 @@ def test_refresh_prediction_creates_stage_snapshot_and_states() -> None:
     assert "weather_data" not in result.snapshot.input_payload
     assert result.snapshot.input_payload["calculation_context"]["as_of_date"] == "2026-05-27"
     assert result.snapshot.stage_timeline["stages"][1]["start_date"] == "2026-04-20"
-    assert result.snapshot.stage_timeline["stages"][1]["raw_stage_code"] == "21"
+    assert result.snapshot.stage_timeline["stages"][1]["raw_stage_code"] == "BBCH21"
     assert weather_provider.calls == [(date(2026, 4, 10), date(2026, 10, 7), date(2026, 5, 27))]
 
 
@@ -403,6 +403,152 @@ def test_refresh_for_weather_update_uses_incremental_observed_weather() -> None:
     assert result.snapshot.input_payload["rule_snapshot_id"] == 10
 
 
+def test_refresh_for_weather_update_forecast_only_updates_prediction_layer() -> None:
+    initial_rule = MockStagePredictionClient().predict_stage(request_payload={"sowing_date": "2026-04-10"}).threshold_rule
+    initial_snapshot = StagePredictionSnapshot(
+        id=10,
+        planting_plan_id=1,
+        prediction_version=2,
+        prediction_source="weather_update",
+        algorithm_code="stage_prediction_algorithm",
+        algorithm_version="mock-v2",
+        input_payload={},
+        stage_timeline={
+            "stages": [
+                {"stage_code": "seedling", "stage_name": "苗期", "start_date": "2026-04-10", "key_date": "2026-04-10"},
+                {"stage_code": "tillering", "stage_name": "分蘖期", "start_date": "2026-04-20", "key_date": "2026-04-20"},
+            ],
+        },
+        thermal_thresholds=initial_rule,
+    )
+    stage_repo = FakeCropStageStateRepository(
+        {
+            1: CropStageState(
+                id=1,
+                planting_plan_id=1,
+                current_stage_code="tillering",
+                current_stage_name="分蘖期",
+                stage_source="predicted",
+                effective_date=date(2026, 4, 20),
+                source_snapshot_id=10,
+                version=1,
+            ),
+        },
+    )
+    thermal_repo = FakeCropThermalTimeStateRepository(
+        {
+            1: CropThermalTimeState(
+                id=1,
+                planting_plan_id=1,
+                accumulated_thermal_time=Decimal("768.0"),
+                thermal_time_unit="degree_day",
+                base_temperature=Decimal("10"),
+                start_date=date(2026, 4, 10),
+                last_calculated_date=date(2026, 5, 27),
+                threshold_snapshot_id=10,
+                data_version="weather-2026-05-27",
+            ),
+        },
+    )
+    weather_provider = FakeWeatherProvider()
+    service = StageManagementService(
+        planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        stage_prediction_snapshot_repository=FakeStagePredictionSnapshotRepository(items=[initial_snapshot], next_id=11),
+        crop_stage_state_repository=stage_repo,
+        crop_thermal_time_state_repository=thermal_repo,
+        stage_prediction_client=MockStagePredictionClient(),
+        weather_provider=weather_provider,
+    )
+
+    result = service.refresh_for_weather_update(
+        1,
+        source_event_id=102,
+        as_of_date=date(2026, 5, 29),
+        source_event_payload={
+            "weatherDate": "2026-05-29",
+            "sourceType": "forecast",
+            "weatherChangeType": "changed_snapshot",
+        },
+    )
+
+    assert weather_provider.calls == [(date(2026, 5, 29), date(2026, 10, 7), date(2026, 5, 29))]
+    assert result.crop_stage_state.current_stage_code == "tillering"
+    assert result.crop_stage_state.version == 1
+    assert result.crop_thermal_time_state.accumulated_thermal_time == Decimal("768.0")
+    assert result.crop_thermal_time_state.last_calculated_date == date(2026, 5, 27)
+    assert result.crop_thermal_time_state.data_version == "weather-2026-05-27"
+    assert result.stage_changed is False
+    assert result.snapshot.input_payload["recalculation_summary"]["mode"] == "forecast_projection"
+    assert result.snapshot.input_payload["recalculation_summary"]["prediction_only"] is True
+    assert result.snapshot.input_payload["thermal_audit_summary"]["current_stage_basis"] == "observed_only"
+
+
+def test_refresh_for_weather_update_historical_observed_correction_replays_from_corrected_day() -> None:
+    initial_rule = MockStagePredictionClient().predict_stage(request_payload={"sowing_date": "2026-04-10"}).threshold_rule
+    initial_snapshot = StagePredictionSnapshot(
+        id=10,
+        planting_plan_id=1,
+        prediction_version=2,
+        prediction_source="weather_update",
+        algorithm_code="stage_prediction_algorithm",
+        algorithm_version="mock-v2",
+        input_payload={},
+        stage_timeline={
+            "stages": [
+                {"stage_code": "seedling", "stage_name": "苗期", "start_date": "2026-04-10", "key_date": "2026-04-10"},
+                {"stage_code": "tillering", "stage_name": "分蘖期", "start_date": "2026-04-20", "key_date": "2026-04-20"},
+            ],
+        },
+        thermal_thresholds=initial_rule,
+    )
+    thermal_repo = FakeCropThermalTimeStateRepository(
+        {
+            1: CropThermalTimeState(
+                id=1,
+                planting_plan_id=1,
+                accumulated_thermal_time=Decimal("768.0"),
+                thermal_time_unit="degree_day",
+                base_temperature=Decimal("10"),
+                start_date=date(2026, 4, 10),
+                last_calculated_date=date(2026, 5, 27),
+                threshold_snapshot_id=10,
+                data_version="weather-2026-05-27",
+            ),
+        },
+    )
+    weather_provider = FakeWeatherProvider()
+    service = StageManagementService(
+        planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        stage_prediction_snapshot_repository=FakeStagePredictionSnapshotRepository(items=[initial_snapshot], next_id=11),
+        crop_stage_state_repository=FakeCropStageStateRepository(),
+        crop_thermal_time_state_repository=thermal_repo,
+        stage_prediction_client=MockStagePredictionClient(),
+        weather_provider=weather_provider,
+    )
+
+    result = service.refresh_for_weather_update(
+        1,
+        source_event_id=103,
+        as_of_date=date(2026, 5, 29),
+        source_event_payload={
+            "weatherDate": "2026-05-20",
+            "sourceType": "observed",
+            "weatherChangeType": "changed_snapshot",
+        },
+    )
+
+    assert weather_provider.calls == [
+        (date(2026, 5, 20), date(2026, 10, 7), date(2026, 5, 29)),
+        (date(2026, 4, 10), date(2026, 5, 19), date(2026, 5, 19)),
+    ]
+    assert result.crop_thermal_time_state.accumulated_thermal_time == Decimal("800.0")
+    assert result.snapshot.input_payload["calculation_context"]["start_date"] == "2026-05-20"
+    assert result.snapshot.input_payload["recalculation_summary"]["mode"] == "historical_observed_correction"
+    assert result.snapshot.input_payload["recalculation_summary"]["recalculation_start_date"] == "2026-05-20"
+
+
 def test_extract_pest_disease_growth_stage_from_timeline() -> None:
     service = StageManagementService(
         planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
@@ -434,29 +580,49 @@ def test_extract_pest_disease_growth_stage_accepts_raw_stage_codes() -> None:
         {
             "stages": [
                 {
-                    "stage_code": "21",
+                    "stage_code": "BBCH21",
                     "stage_name": "分蘖期",
                     "start_date": "2026-04-20",
                     "key_date": "2026-04-20",
                 },
                 {
-                    "stage_code": "51",
+                    "stage_code": "BBCH50",
                     "stage_name": "破口期",
                     "start_date": "2026-06-09",
                     "key_date": "2026-06-09",
                 },
                 {
-                    "stage_code": "58",
+                    "stage_code": "BBCH58",
                     "stage_name": "齐穗期",
                     "start_date": "2026-06-17",
                     "key_date": "2026-06-17",
                 },
                 {
-                    "stage_code": "89",
+                    "stage_code": "BBCH89",
                     "stage_name": "成熟期",
                     "start_date": "2026-07-19",
                     "key_date": "2026-07-19",
                 },
+            ],
+        },
+    )
+
+    assert growth_stage == {
+        "tillering_date": "2026-04-20",
+        "pokou_date": "2026-06-09",
+        "heading_date": "2026-06-17",
+        "maturity_date": "2026-07-19",
+    }
+
+
+def test_extract_pest_disease_growth_stage_still_accepts_legacy_numeric_stage_codes() -> None:
+    growth_stage = extract_pest_disease_growth_stage(
+        {
+            "stages": [
+                {"stage_code": "21", "stage_name": "分蘖期", "start_date": "2026-04-20"},
+                {"stage_code": "50", "stage_name": "破口期", "start_date": "2026-06-09"},
+                {"stage_code": "58", "stage_name": "齐穗期", "start_date": "2026-06-17"},
+                {"stage_code": "89", "stage_name": "成熟期", "start_date": "2026-07-19"},
             ],
         },
     )

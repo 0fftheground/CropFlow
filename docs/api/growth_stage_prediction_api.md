@@ -6,7 +6,7 @@
 
 1. 当前后端实现已开始按 `vNext` 口径收敛：算法请求不再传 `weather_data`，后端本地负责天气驱动的积温累计与阶段推进。
 2. 当前建议主契约仍以“算法返回可执行的积温规则包，后端派生业务阶段日期”为主。
-3. 如算法侧需要补充阶段点返回，当前只要求返回业务必需的部分原始阶段点，不承诺返回完整 `stage_timeline`；现阶段确认的业务节点 raw code 为 `21=分蘖期(tillering)`、`51=破口期(pokou)`、`58=齐穗期(heading)`、`89=成熟期(maturity)`。
+3. 如算法侧需要补充阶段点返回，当前只要求返回业务必需的部分原始阶段点，不承诺返回完整 `stage_timeline`；现阶段确认的业务节点 raw code 为 `BBCH21=分蘖始期(tillering)`、`BBCH50=破口期(pokou)`、`BBCH58=齐穗期(heading)`、`BBCH89=成熟期(maturity)`。
 4. 在代码与算法服务完成同步改造前，本文档仍作为 handoff 目标口径；如真实返回字段与本文档不同，应优先显式补充差异说明。
 
 ## 1. 基本信息
@@ -145,10 +145,10 @@
   "rounding_rule": "keep_1_decimal_daily_keep_1_decimal_accumulated",
   "effective_date_rule": "threshold_reached_same_day",
   "stage_thresholds": {
-    "tillering": 180,
-    "pokou": 760,
-    "heading": 820,
-    "maturity": 1180
+    "BBCH21": 180,
+    "BBCH50": 760,
+    "BBCH58": 820,
+    "BBCH89": 1180
   }
 }
 ```
@@ -166,17 +166,17 @@
 | `calculation_method` | string | 是 | 日积温计算方法 | 例如 `avg_temp_minus_base_capped` |
 | `rounding_rule` | string | 是 | 日积温与累计积温取整规则 | 必须稳定，不可让后端自行猜测 |
 | `effective_date_rule` | string | 是 | 首次跨阈值后的生效日规则 | 例如达到阈值当天进入新阶段 |
-| `stage_thresholds` | object | 是 | 各阶段累计积温阈值 | 阶段 code 作为 key |
+| `stage_thresholds` | object | 是 | 各阶段累计积温阈值 | 算法原始阶段 code 作为 key，例如 `BBCH21` |
 
 说明：
 
 1. `threshold_rule` 必须足够让后端基于天气序列独立复现积温累计过程。
 2. 如果算法还有其他影响阶段推进的特殊规则，必须显式返回字段，不允许仅放在口头约定里。
 3. `stage_thresholds` 当前至少必须包含：
-   - `tillering`
-   - `pokou`
-   - `heading`
-   - `maturity`
+   - `BBCH21`
+   - `BBCH50`
+   - `BBCH58`
+   - `BBCH89`
 4. `algorithm_code` 当前固定返回 `stage_prediction_algorithm`。
 5. `algorithm_version` 当前建议使用语义化版本格式：`v主版本.次版本.修订号`，例如 `v2.0.0`。
 6. `threshold_rule_version` 当前建议使用规则发布日期格式：`YYYY.MM`，例如 `2026.05`。
@@ -185,20 +185,45 @@
 
 ### 6.1.1 业务阶段映射
 
-当前已确认的业务阶段与 `docs/生育期code_list.xlsx` 原始阶段 code 映射如下：
+当前已确认的业务阶段与算法原始阶段 code 映射如下：
 
 | businessStage | rawStageCode | notes |
 |---|---|---|
-| `tillering` | `21` | 分蘖期 |
-| `pokou` | `51` | 破口期 |
-| `heading` | `58` | 齐穗期 |
-| `maturity` | `89` | 成熟期 |
+| `tillering` | `BBCH21` | 分蘖始期 |
+| `pokou` | `BBCH50` | 破口期 |
+| `heading` | `BBCH58` | 齐穗期 |
+| `maturity` | `BBCH89` | 成熟期 |
 
 说明：
 
 1. 这 4 个节点是当前病虫害调查和阶段派生必需的最小集合。
 2. 如算法侧后续开始返回阶段点，允许只返回上述必要子集，不要求一次性覆盖完整生育期 code 列表。
 3. 后端侧应继续以业务阶段名 `tillering / pokou / heading / maturity` 作为内部稳定口径，并在快照中保留对应 raw stage code 以便追踪。
+
+当前算法侧已确认可提供的原始阶段点如下：
+
+| rawStageCode | stageName | notes |
+|---|---|---|
+| `BBCH13` | 三叶一心 | 非关键阈值节点 |
+| `BBCH21` | 分蘖始期 | 当前 `tillering` 对应节点 |
+| `BBCH28` | 有效分蘖终止期 | 可选原始阶段点 |
+| `BBCH41` | 幼穗分化1期 | 可选原始阶段点 |
+| `BBCH42` | 幼穗分化2期 | 可选原始阶段点 |
+| `BBCH44` | 幼穗分化4期 | 可选原始阶段点 |
+| `BBCH45` | 孕穗期 | 可选原始阶段点 |
+| `BBCH50` | 破口期 | 当前 `pokou` 对应节点 |
+| `BBCH51` | 始穗期 | 可选原始阶段点 |
+| `BBCH55` | 抽穗期 | 可选原始阶段点 |
+| `BBCH58` | 齐穗期 | 当前 `heading` 对应节点 |
+| `BBCH89` | 成熟期 | 当前 `maturity` 对应节点 |
+| `Z_BBCH51` | 再生季始穗期 | 仅再生稻出现 |
+| `Z_BBCH58` | 再生季齐穗期 | 仅再生稻出现 |
+| `Z_BBCH89` | 再生季成熟期 | 仅再生稻出现 |
+
+说明：
+
+1. 非再生稻不返回 `Z_BBCH*` 节点。
+2. 当前后端只把 `BBCH21 / BBCH50 / BBCH58 / BBCH89` 作为病虫害调查和阶段派生必需节点；其他阶段点先作为可选 raw point 保留。
 
 ### 6.1.2 真实生育期录入接口
 
@@ -213,8 +238,8 @@ POST /api/planting-plans/{plantingPlanId}/actual-stages
 ```json
 {
   "stages": {
-    "21": "2026-05-12",
-    "58": "2026-06-18"
+    "BBCH21": "2026-05-12",
+    "BBCH58": "2026-06-18"
   },
   "source_record_id": "manual-20260618-001",
   "operator_id": "user-7",
@@ -224,7 +249,7 @@ POST /api/planting-plans/{plantingPlanId}/actual-stages
 
 说明：
 
-1. `stages` 的 key 使用阶段 code，当前支持 `21 / 51 / 58 / 89`，后端也兼容内部业务阶段名。
+1. `stages` 的 key 使用阶段 code，当前建议使用 `BBCH21 / BBCH50 / BBCH58 / BBCH89`；后端兼容内部业务阶段名，也兼容旧的纯数字 code。
 2. `stages` 的 value 使用 ISO 日期 `YYYY-MM-DD`。
 3. 批量传入多条记录时，后端按日期从早到晚生成事件，避免后录入的较早阶段覆盖较晚阶段。
 4. 幂等维度为 `plantingPlanId + stageCode + effectiveDate + sourceRecordId`。
@@ -314,10 +339,10 @@ POST /api/planting-plans/{plantingPlanId}/actual-stages
       "rounding_rule": "keep_1_decimal_daily_keep_1_decimal_accumulated",
       "effective_date_rule": "threshold_reached_same_day",
       "stage_thresholds": {
-        "tillering": 180,
-        "pokou": 760,
-        "heading": 820,
-        "maturity": 1180
+        "BBCH21": 180,
+        "BBCH50": 760,
+        "BBCH58": 820,
+        "BBCH89": 1180
       }
     }
   }
@@ -331,10 +356,11 @@ POST /api/planting-plans/{plantingPlanId}/actual-stages
 1. 后端根据逐日天气和 `threshold_rule` 计算日积温与累计积温。
 2. 累计积温首次跨过某阶段阈值的日期，即该阶段的 `start_date`。
 3. 后端根据 `effective_date_rule` 判断“跨阈值当天”还是“次日”进入新阶段。
-4. `CropThermalTimeState` 保存累计积温、单位、基础温度、最后计算日期和天气版本。
-5. `CropStageState` 保存当前阶段及生效日期。
+4. `CropThermalTimeState` 保存累计积温、单位、基础温度、最后计算日期和天气版本；`forecast` 变化只更新预测层，不直接推进当前阶段。
+5. `CropStageState` 的当前阶段只由已发生的 `observed` 天气决定；`as_of_date` 当天若没有 observed，不使用当天 forecast 推进当前阶段。
 6. `StagePredictionSnapshot.stage_timeline` 当前由后端派生，并至少保留业务阶段名；如后续算法侧同步返回原始阶段点，快照中应同时保留 raw stage code。
-7. 病虫害调查窗口仍直接消费后端推导出的：
+7. `StagePredictionSnapshot.inputPayload` 第一版补充 `recalculation_summary` 与 `thermal_audit_summary`，用于记录 forecast 投影、历史 observed 回刷和关键日逐日积温审计摘要。
+8. 病虫害调查窗口仍直接消费后端推导出的：
    - `tillering_date`
    - `pokou_date`
    - `heading_date`
@@ -354,7 +380,7 @@ POST /api/planting-plans/{plantingPlanId}/actual-stages
 1. 当前版由后端统一取天气，算法接口不自行拉外部气象数据。
 2. 当前版算法不要求返回完整 `stage_timeline`；如返回阶段点，也只要求返回当前业务必需的部分节点。
 3. 当前版规则包必须足够让后端独立完成积温累计和生育期推进。
-4. 当前确认的关键原始阶段 code 为 `21 / 51 / 58 / 89`，分别对应 `tillering / pokou / heading / maturity`。
+4. 当前确认的关键原始阶段 code 为 `BBCH21 / BBCH50 / BBCH58 / BBCH89`，分别对应 `tillering / pokou / heading / maturity`。
 5. 如后续需要新增特殊修正规则或更多阶段点，优先通过追加字段扩展，不直接改变现有字段语义。
 6. 病虫害调查依赖 `tillering`、`pokou`、`heading`、`maturity` 四个阶段节点；若规则无法推导这些节点，后端会判为不可消费。
 

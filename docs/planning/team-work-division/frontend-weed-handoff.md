@@ -342,6 +342,7 @@ plan_create
 2. `culti_type_code` 前端展示文案应使用“稻作类型”
 3. `planting_method_code` 前端展示文案应使用“种植方式”
 4. `variety_id` 前端展示文案应使用“品种”
+5. `farm_id` 前端应先通过 `GET /api/farms` 查询候选农场，不建议硬编码
 
 可选字段：
 

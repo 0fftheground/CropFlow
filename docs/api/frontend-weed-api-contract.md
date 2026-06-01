@@ -42,6 +42,10 @@ Content-Type: application/json
 | 健康检查 | `GET` | `/health` |
 | 字典查询 | `GET` | `/code-dicts` |
 | 品种模糊查询 | `GET` | `/rice-varieties` |
+| 农场创建 | `POST` | `/farms` |
+| 农场列表 | `GET` | `/farms` |
+| 农场详情 | `GET` | `/farms/{farmId}` |
+| 农场更新 | `PATCH` | `/farms/{farmId}` |
 | 创建计划 | `POST` | `/planting-plans` |
 | 计划列表 | `GET` | `/planting-plans` |
 | 计划详情 | `GET` | `/planting-plans/{plantingPlanId}` |
@@ -51,6 +55,10 @@ Content-Type: application/json
 | 计划下 TaskIntent 列表 | `GET` | `/planting-plans/{plantingPlanId}/task-intents` |
 | 计划下 ReviewRequest 列表 | `GET` | `/planting-plans/{plantingPlanId}/review-requests` |
 | 计划下 EventRecord 列表 | `GET` | `/planting-plans/{plantingPlanId}/event-records` |
+| 计划当前生育期状态 | `GET` | `/planting-plans/{plantingPlanId}/stage-state` |
+| 计划积温状态 | `GET` | `/planting-plans/{plantingPlanId}/thermal-time-state` |
+| 计划最新生育期预测快照 | `GET` | `/planting-plans/{plantingPlanId}/stage-predictions/latest` |
+| 人工录入真实生育期 | `POST` | `/planting-plans/{plantingPlanId}/actual-stages` |
 | 任务详情 | `GET` | `/tasks/{taskId}` |
 | 调查结果录入 | `POST` | `/tasks/{taskId}/survey-results` |
 | 执行结果录入 | `POST` | `/tasks/{taskId}/execution-completions` |
@@ -89,7 +97,24 @@ Content-Type: application/json
 | `created_at` | `datetime \| null` | 创建时间 |
 | `updated_at` | `datetime \| null` | 更新时间 |
 
-### 2.2 `CalendarItemResponse`
+### 2.2 `FarmResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 农场主键 |
+| `farm_name` | `string` | 农场名称 |
+| `external_farm_id` | `string \| null` | 外部农场 id；天气接口等外部系统联调使用 |
+| `province` | `string \| null` | 省 |
+| `city` | `string \| null` | 市 |
+| `district_county` | `string \| null` | 区 / 县 |
+| `adcode` | `string \| null` | 行政区编码 |
+| `boundary_wkt` | `string \| null` | 地块边界 WKT；当前可为空 |
+| `centroid_lat` | `decimal \| null` | 中心点纬度 |
+| `centroid_lon` | `decimal \| null` | 中心点经度 |
+| `created_at` | `datetime \| null` | 创建时间 |
+| `updated_at` | `datetime \| null` | 更新时间 |
+
+### 2.3 `CalendarItemResponse`
 
 | field | type | notes |
 |---|---|---|
@@ -111,7 +136,7 @@ Content-Type: application/json
 | `created_at` | `datetime \| null` | 创建时间 |
 | `updated_at` | `datetime \| null` | 更新时间 |
 
-### 2.3 `FarmingTaskResponse`
+### 2.4 `FarmingTaskResponse`
 
 | field | type | notes |
 |---|---|---|
@@ -137,7 +162,7 @@ Content-Type: application/json
 | `created_at` | `datetime \| null` | 创建时间 |
 | `updated_at` | `datetime \| null` | 更新时间 |
 
-### 2.4 `TaskIntentResponse`
+### 2.5 `TaskIntentResponse`
 
 | field | type | notes |
 |---|---|---|
@@ -161,7 +186,7 @@ Content-Type: application/json
 | `created_at` | `datetime \| null` | 创建时间 |
 | `updated_at` | `datetime \| null` | 更新时间 |
 
-### 2.5 `ReviewRequestResponse`
+### 2.6 `ReviewRequestResponse`
 
 | field | type | notes |
 |---|---|---|
@@ -182,7 +207,7 @@ Content-Type: application/json
 | `created_at` | `datetime \| null` | 创建时间 |
 | `updated_at` | `datetime \| null` | 更新时间 |
 
-### 2.6 `EventRecordResponse`
+### 2.7 `EventRecordResponse`
 
 | field | type | notes |
 |---|---|---|
@@ -199,6 +224,56 @@ Content-Type: application/json
 | `processed_at` | `datetime \| null` | 处理时间 |
 | `processing_status` | `string` | `received / processing / processed / failed` |
 | `error_message` | `string \| null` | 错误信息 |
+| `created_at` | `datetime \| null` | 创建时间 |
+| `updated_at` | `datetime \| null` | 更新时间 |
+
+### 2.8 `CropStageStateResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 主键 |
+| `planting_plan_id` | `int` | 计划 id |
+| `current_stage_code` | `string` | 当前业务阶段编码 |
+| `current_stage_name` | `string` | 当前业务阶段名称 |
+| `stage_source` | `string` | `predicted / manual` |
+| `effective_date` | `date` | 当前阶段生效日期 |
+| `source_snapshot_id` | `int \| null` | 来源生育期快照 id |
+| `last_updated_at` | `datetime \| null` | 业务更新时间 |
+| `version` | `int` | 版本号 |
+| `created_at` | `datetime \| null` | 创建时间 |
+| `updated_at` | `datetime \| null` | 更新时间 |
+
+### 2.9 `CropThermalTimeStateResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 主键 |
+| `planting_plan_id` | `int` | 计划 id |
+| `accumulated_thermal_time` | `decimal` | 当前累计积温 |
+| `thermal_time_unit` | `string` | 当前固定为 `degree_day` |
+| `base_temperature` | `decimal \| null` | 基础温度 |
+| `start_date` | `date \| null` | 积温累计起点 |
+| `last_calculated_date` | `date \| null` | 最近一次基于 observed 累积到的日期 |
+| `threshold_snapshot_id` | `int \| null` | 阈值快照 id |
+| `data_version` | `string \| null` | 天气版本摘要 |
+| `created_at` | `datetime \| null` | 创建时间 |
+| `updated_at` | `datetime \| null` | 更新时间 |
+
+### 2.10 `StagePredictionSnapshotResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 主键 |
+| `planting_plan_id` | `int` | 计划 id |
+| `prediction_version` | `int` | 快照版本 |
+| `prediction_source` | `string` | `initial / plan_change / weather_update / runtime_refresh` |
+| `algorithm_code` | `string` | 算法编码 |
+| `algorithm_version` | `string \| null` | 算法版本 |
+| `generated_at` | `datetime \| null` | 生成时间 |
+| `input_payload` | `object` | 请求、重算摘要和审计信息 |
+| `stage_timeline` | `object` | 后端派生的生育期时间线 |
+| `thermal_thresholds` | `object` | 积温阈值快照 |
+| `source_event_id` | `int \| null` | 来源事件 id |
 | `created_at` | `datetime \| null` | 创建时间 |
 | `updated_at` | `datetime \| null` | 更新时间 |
 
@@ -253,6 +328,62 @@ Content-Type: application/json
 4. `variety_id`：UI 文案使用“品种”
 
 ### 3.0 创建计划前的选项查询
+
+#### 3.0.0 农场接口
+
+前端创建计划前，应先查询农场列表，获取 `farm_id`。
+
+##### 农场列表
+
+`GET /api/farms`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `FarmResponse[]`
+
+##### 农场详情
+
+`GET /api/farms/{farmId}`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `FarmResponse`
+
+##### 创建农场
+
+`POST /api/farms`
+
+请求体：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `farm_name` | `string` | yes | 农场名称 |
+| `external_farm_id` | `string \| null` | no | 外部农场 id |
+| `province` | `string` | yes | 省 |
+| `city` | `string` | yes | 市 |
+| `district_county` | `string` | yes | 区 / 县 |
+| `adcode` | `string` | yes | 行政区编码 |
+| `boundary_wkt` | `string \| null` | no | 边界 WKT |
+| `centroid_lat` | `decimal \| null` | no | 中心点纬度 |
+| `centroid_lon` | `decimal \| null` | no | 中心点经度 |
+
+成功响应：
+
+1. `201 Created`
+2. 响应体为 `FarmResponse`
+
+##### 更新农场
+
+`PATCH /api/farms/{farmId}`
+
+请求体字段与创建农场一致，但全部可选。
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `FarmResponse`
 
 #### 3.0.1 字典查询
 
@@ -394,6 +525,70 @@ Query 参数：
 成功响应：
 
 1. `200 OK`
+2. 响应体为 `EventRecordResponse[]`
+
+### 3.10 计划当前生育期状态
+
+`GET /api/planting-plans/{plantingPlanId}/stage-state`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `CropStageStateResponse` 或 `null`
+
+### 3.11 计划积温状态
+
+`GET /api/planting-plans/{plantingPlanId}/thermal-time-state`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `CropThermalTimeStateResponse` 或 `null`
+
+### 3.12 计划最新生育期预测快照
+
+`GET /api/planting-plans/{plantingPlanId}/stage-predictions/latest`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `StagePredictionSnapshotResponse` 或 `null`
+
+当前前端使用建议：
+
+1. 展示阶段时间线优先读 `stage_timeline`
+2. 需要排查 forecast/observed 回刷时，再读 `input_payload.recalculation_summary`
+3. 当前阶段显示优先读 `/stage-state`，不要直接自己从 `stage_timeline` 反推
+
+### 3.13 人工录入真实生育期
+
+`POST /api/planting-plans/{plantingPlanId}/actual-stages`
+
+请求体：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `stages` | `object` | yes | `stageCode -> date`；至少 1 条 |
+| `source_record_id` | `string \| null` | no | 幂等来源记录 |
+| `operator_id` | `string \| null` | no | 操作人 |
+| `note` | `string \| null` | no | 备注 |
+| `metadata` | `object` | no | 默认 `{}` |
+
+`stages` 当前建议使用的 key：
+
+1. `BBCH21`
+2. `BBCH50`
+3. `BBCH58`
+4. `BBCH89`
+
+后端同时兼容：
+
+1. 内部业务阶段名，如 `heading`
+2. 旧数字 code，如 `21 / 50 / 58 / 89`
+
+成功响应：
+
+1. `201 Created`
 2. 响应体为 `EventRecordResponse[]`
 
 ---
@@ -688,6 +883,7 @@ Query 参数：
 | `culti_type_code` | 稻作类型 | code_dict.code | 用 `/api/code-dicts?category=culti_type` 查询 |
 | `planting_method_code` | 种植方式 | code_dict.code | 用 `/api/code-dicts?category=sowingmtd` 查询 |
 | `variety_id` | 品种 | rice_variety.id | 用 `/api/rice-varieties?query=` 查询 |
+| `farm_id` | 农场 | farm.id | 用 `/api/farms` 查询 |
 
 ### 7.2 当前只适合机器分流，不适合直接展示给用户
 

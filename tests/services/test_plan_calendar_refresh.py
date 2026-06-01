@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
-from app.core.constants import EVENT_TYPE_PLAN_CREATED
+from app.core.constants import EVENT_TYPE_PLAN_CREATED, EVENT_TYPE_WEATHER_UPDATED
 from app.models import CalendarItem, CodeDict, EventRecord, PlantingPlan, ReviewRequest, RiceVariety, TaskIntent
 from app.orchestrator.core import PlanCalendarRefreshHandler
 from app.services.calendar_tasks import (
@@ -205,3 +205,45 @@ def test_plan_refresh_creates_soil_treatment_review_and_pre_survey_calendar_item
     assert len(result.review_requests) == 1
     assert result.review_requests[0].review_type == "soil_treatment_recommendation"
     assert result.review_requests[0].source_entity_id == result.task_intents[0].id
+
+
+def test_forecast_weather_update_does_not_refresh_calendar() -> None:
+    calendar_repo = FakeCalendarItemRepository()
+    event_repo = FakeEventRecordRepository()
+    task_intent_repo = FakeTaskIntentRepository()
+    review_repo = FakeReviewRequestRepository()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        rice_variety_repository=FakeRiceVarietyRepository(_make_variety()),
+        code_dict_repository=FakeCodeDictRepository(_make_code_dicts()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=MockWeatherProvider(),
+        diagnosis_client=MockWeedDiagnosisClient(),
+    )
+    handler = PlanCalendarRefreshHandler(
+        survey_date_recommendation_service=service,
+        event_record_repository=event_repo,
+        task_intent_repository=task_intent_repo,
+        review_request_repository=review_repo,
+    )
+
+    result = handler.handle(
+        EventRecord(
+            planting_plan_id=1,
+            event_type=EVENT_TYPE_WEATHER_UPDATED,
+            event_category="job",
+            event_source="background_job",
+            source_system="cropflow",
+            payload={"weatherDate": "2026-05-29", "sourceType": "forecast"},
+            occurred_at=datetime.now(UTC).replace(tzinfo=None),
+            processing_status="received",
+            idempotency_key="weather-updated:forecast:1",
+            created_by_type="system",
+            created_by_id="DailyWeatherCheckJob",
+        ),
+    )
+
+    assert result.calendar_items == []
+    assert result.task_intents == []
+    assert result.review_requests == []

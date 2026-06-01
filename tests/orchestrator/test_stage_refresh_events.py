@@ -120,6 +120,28 @@ def test_weather_update_records_stage_changed_event() -> None:
     assert event_repository.records[0].payload["sourceSnapshotId"] == 10
 
 
+def test_forecast_weather_update_does_not_record_stage_changed_event() -> None:
+    event_repository = FakeEventRecordRepository()
+    stage_service = FakeStageManagementService()
+    handler = StageRefreshHandler(stage_service, event_repository)  # type: ignore[arg-type]
+    event_record = EventRecord(
+        id=7,
+        planting_plan_id=1,
+        event_type=EVENT_TYPE_WEATHER_UPDATED,
+        event_category="job",
+        event_source="background_job",
+        payload={"weatherDate": "2026-05-29", "sourceType": "forecast"},
+        occurred_at=datetime(2026, 5, 29),
+        idempotency_key="forecast-weather-event",
+    )
+
+    result = handler.handle(event_record)
+
+    assert result.crop_stage_states[0].current_stage_code == "tillering"
+    assert stage_service.weather_update_payloads == [{"weatherDate": "2026-05-29", "sourceType": "forecast"}]
+    assert event_repository.records == []
+
+
 def test_actual_stage_recorded_updates_stage_and_records_stage_changed_event() -> None:
     event_repository = FakeEventRecordRepository()
     stage_service = FakeStageManagementService()
@@ -142,4 +164,3 @@ def test_actual_stage_recorded_updates_stage_and_records_stage_changed_event() -
     assert event_repository.records[0].event_type == EVENT_TYPE_STAGE_CHANGED
     assert event_repository.records[0].payload["previousStageCode"] == "tillering"
     assert event_repository.records[0].payload["currentStageCode"] == "heading"
-
