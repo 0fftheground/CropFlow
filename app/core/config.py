@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     weather_check_interval_seconds: int = 300
     survey_recommendation_interval_seconds: int = 300
     task_due_check_interval_seconds: int = 300
+    log_dir: str = "logs"
+    log_level: str = "INFO"
 
     model_config = SettingsConfigDict(
         env_file=".env",

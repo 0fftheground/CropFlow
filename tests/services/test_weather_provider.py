@@ -60,7 +60,7 @@ def test_http_weather_provider_merges_observed_forecast_and_climatology_segments
         if path.endswith("getForecast10DaysBeforeAnd15DaysAfter"):
             rows: list[dict[str, object]] = []
             current_date = date(2026, 5, 28)
-            while current_date <= date(2026, 6, 12):
+            while current_date <= date(2026, 6, 11):
                 rows.append(
                     {
                         "datatime": current_date.isoformat(),
@@ -72,8 +72,9 @@ def test_http_weather_provider_merges_observed_forecast_and_climatology_segments
                 )
                 current_date += timedelta(days=1)
             return rows
-        if path.endswith("getAvgTemAndPre") and payload["startDate"] == "2023-06-13":
+        if path.endswith("getAvgTemAndPre") and payload["startDate"] == "2023-06-12":
             return [
+                {"dt": "06-12", "temAvg": 28.1, "preAvg": 0.0},
                 {"dt": "06-13", "temAvg": 28.5, "preAvg": 0.2},
                 {"dt": "06-14", "temAvg": 28.8, "preAvg": 0.1},
             ]
@@ -90,8 +91,9 @@ def test_http_weather_provider_merges_observed_forecast_and_climatology_segments
 
     assert weather_data[0]["date"] == "2026-05-27"
     assert weather_data[0]["source_type"] == "observed"
-    assert {item["source_type"] for item in weather_data[1:17]} == {"forecast"}
+    assert {item["source_type"] for item in weather_data[1:16]} == {"forecast"}
     assert [item["source_type"] for item in weather_data[-2:]] == ["climatology", "climatology"]
+    assert weather_data[-3]["date"] == "2026-06-12"
     assert weather_data[-2]["date"] == "2026-06-13"
     assert weather_data[-1]["date"] == "2026-06-14"
     assert calls == [
@@ -113,11 +115,44 @@ def test_http_weather_provider_merges_observed_forecast_and_climatology_segments
             "/weather/v1/getAvgTemAndPre",
             {
                 "farmId": "84911829811210",
-                "startDate": "2023-06-13",
+                "startDate": "2023-06-12",
                 "endDate": "2025-06-14",
             },
         ),
     ]
+
+
+def test_http_weather_provider_imputes_missing_observed_temavg_from_neighboring_days() -> None:
+    provider = HttpWeatherProvider(
+        farm_repository=FakeFarmRepository(_make_farm()),
+        base_url="http://weather.local",
+        auth_token="token",
+    )
+
+    def fake_post_json(path: str, payload: dict[str, str]) -> list[dict[str, object]]:
+        assert path == "/weather/v1/getAvgTemAndPre"
+        assert payload == {
+            "farmId": "84911829811210",
+            "startDate": "2026-04-10",
+            "endDate": "2026-04-12",
+        }
+        return [
+            {"dt": "04-10", "temAvg": 20, "preAvg": 0},
+            {"dt": "04-11", "temAvg": None, "preAvg": 1.2},
+            {"dt": "04-12", "temAvg": 24, "preAvg": 0.4},
+        ]
+
+    provider._post_json = fake_post_json  # type: ignore[method-assign]
+
+    weather_data = provider.get_daily_weather(
+        _make_plan(),
+        date(2026, 4, 10),
+        date(2026, 4, 12),
+        as_of_date=date(2026, 4, 13),
+    )
+
+    assert [item["avg_temp"] for item in weather_data] == [20.0, 22.0, 24.0]
+    assert {item["source_type"] for item in weather_data} == {"observed"}
 
 
 def test_http_weather_provider_builds_pest_disease_daily_weather_from_farm_daily_forecast() -> None:

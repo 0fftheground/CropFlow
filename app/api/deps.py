@@ -229,10 +229,12 @@ def get_planting_plan_service(
 def get_planting_plan_query_service(db: Session = Depends(get_db)) -> Generator[PlantingPlanQueryService, None, None]:
     yield PlantingPlanQueryService(
         planting_plan_repository=PlantingPlanRepository(db),
+        planting_plan_field_relation_repository=PlantingPlanFieldRelationRepository(db),
         calendar_item_repository=CalendarItemRepository(db),
         farming_task_repository=FarmingTaskRepository(db),
         task_intent_repository=TaskIntentRepository(db),
         review_request_repository=ReviewRequestRepository(db),
+        operation_plan_repository=OperationPlanRepository(db),
         event_record_repository=EventRecordRepository(db),
         crop_stage_state_repository=CropStageStateRepository(db),
         crop_thermal_time_state_repository=CropThermalTimeStateRepository(db),

@@ -18,7 +18,8 @@ from app.core.logging import (
 )
 
 settings = get_settings()
-configure_logging()
+resolved_log_level = getattr(logging, str(settings.log_level).upper(), logging.INFO)
+configure_logging(level=resolved_log_level, log_dir=settings.log_dir)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.app_name, debug=settings.debug)

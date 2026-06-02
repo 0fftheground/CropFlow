@@ -923,6 +923,7 @@ class HttpWeatherProvider:
     FORECAST_HOURLY_PATH = "/algBaseDataApi/v1/getForecast10DaysBeforeAndAfter"
     FORECAST_DAILY_PATH = "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter"
     AVERAGE_TEMP_PRECIPITATION_PATH = "/weather/v1/getAvgTemAndPre"
+    FORECAST_DAILY_LOOKAHEAD_DAYS = 14
     TYPHOON_ALERTS_PATH = "/Zoomlion/alert"
     TYPHOON_EVENT_KEYWORDS = ("台风", "热带风暴", "强热带风暴", "超强台风", "热带低压", "台风外围", "外围环流")
     TYPHOON_ALERT_PROVINCE_PREFIXES = {
@@ -975,7 +976,8 @@ class HttpWeatherProvider:
             )
 
         forecast_start_date = max(start_date, effective_as_of_date)
-        forecast_end_date = min(end_date, effective_as_of_date + timedelta(days=15))
+        # The upstream API returns current day plus the next 14 calendar days.
+        forecast_end_date = min(end_date, effective_as_of_date + timedelta(days=self.FORECAST_DAILY_LOOKAHEAD_DAYS))
         if forecast_start_date <= forecast_end_date:
             weather_data.extend(
                 self._load_forecast_daily_weather(
@@ -985,7 +987,10 @@ class HttpWeatherProvider:
                 ),
             )
 
-        climatology_start_date = max(start_date, effective_as_of_date + timedelta(days=16))
+        climatology_start_date = max(
+            start_date,
+            effective_as_of_date + timedelta(days=self.FORECAST_DAILY_LOOKAHEAD_DAYS + 1),
+        )
         if climatology_start_date <= end_date:
             weather_data.extend(
                 self._load_climatology_daily_weather(
@@ -1195,11 +1200,15 @@ class HttpWeatherProvider:
                     f"for {chunk_start} to {chunk_end}.",
                 )
             data_version = f"weather-observed:{chunk_start.isoformat()}:{chunk_end.isoformat()}"
-            for expected_date, row in zip(expected_dates, response_data, strict=True):
+            for index, (expected_date, row) in enumerate(zip(expected_dates, response_data, strict=True)):
                 weather_data.append(
                     {
                         "date": expected_date.isoformat(),
-                        "avg_temp": _normalize_optional_float(row.get("temAvg")),
+                        "avg_temp": _resolve_observed_avg_temp(
+                            response_data,
+                            index=index,
+                            expected_date=expected_date,
+                        ),
                         "precipitation": _normalize_optional_float(row.get("preAvg")),
                         "source_type": "observed",
                         "data_version": data_version,
@@ -2843,6 +2852,40 @@ def _normalize_required_float(raw_value: Any, field_name: str, api_name: str) ->
     if normalized is None:
         raise ValueError(f"{api_name} did not return required numeric field {field_name}.")
     return normalized
+
+
+def _resolve_observed_avg_temp(
+    response_data: list[dict[str, Any]],
+    *,
+    index: int,
+    expected_date: date,
+) -> float:
+    current_value = _normalize_optional_float(response_data[index].get("temAvg"))
+    if current_value is not None:
+        return current_value
+
+    previous_value: float | None = None
+    for previous_index in range(index - 1, -1, -1):
+        previous_value = _normalize_optional_float(response_data[previous_index].get("temAvg"))
+        if previous_value is not None:
+            break
+
+    next_value: float | None = None
+    for next_index in range(index + 1, len(response_data)):
+        next_value = _normalize_optional_float(response_data[next_index].get("temAvg"))
+        if next_value is not None:
+            break
+
+    if previous_value is not None and next_value is not None:
+        return round((previous_value + next_value) / 2, 2)
+    if previous_value is not None:
+        return previous_value
+    if next_value is not None:
+        return next_value
+    raise ValueError(
+        "Weather average API did not return a usable observed temAvg value "
+        f"for {expected_date.isoformat()}.",
+    )
 
 
 def _split_affected_area_codes(raw_value: Any) -> list[str]:

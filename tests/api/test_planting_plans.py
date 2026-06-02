@@ -15,6 +15,7 @@ from app.models import (
     CropThermalTimeState,
     EventRecord,
     FarmingTask,
+    OperationPlan,
     PlantingPlan,
     ReviewRequest,
     StagePredictionSnapshot,
@@ -251,6 +252,40 @@ class FakePlantingPlanQueryService:
             thermal_thresholds={"accumulated_thermal_time": 780},
         )
 
+    def get_debug_snapshot(self, planting_plan_id: int):
+        if planting_plan_id == 404:
+            raise LookupError("missing")
+        return type(
+            "DebugSnapshot",
+            (),
+            {
+                "planting_plan": _make_details(planting_plan_id).planting_plan,
+                "field_ids": [10, 11],
+                "calendar_items": self.list_calendar_items(planting_plan_id),
+                "farming_tasks": self.list_farming_tasks(planting_plan_id),
+                "task_intents": self.list_task_intents(planting_plan_id),
+                "review_requests": self.list_review_requests(planting_plan_id),
+                "operation_plans": [
+                    OperationPlan(
+                        id=3,
+                        planting_plan_id=planting_plan_id,
+                        farming_task_id=1,
+                        plan_type="prescription",
+                        status="active",
+                        version=1,
+                        execution_mode="manual",
+                        parameters={"dose": "30ml"},
+                        prescription_map={"herbicide": "A"},
+                        basis="test",
+                    ),
+                ],
+                "event_records": self.list_event_records(planting_plan_id),
+                "crop_stage_state": self.get_crop_stage_state(planting_plan_id),
+                "crop_thermal_time_state": self.get_crop_thermal_time_state(planting_plan_id),
+                "stage_prediction_snapshots": [self.get_latest_stage_prediction_snapshot(planting_plan_id)],
+            },
+        )()
+
 
 class DummySession:
     def commit(self) -> None:
@@ -344,6 +379,7 @@ def test_list_calendar_items_and_tasks_routes() -> None:
     stage_response = client.get("/api/planting-plans/1/stage-state")
     thermal_response = client.get("/api/planting-plans/1/thermal-time-state")
     snapshot_response = client.get("/api/planting-plans/1/stage-predictions/latest")
+    debug_response = client.get("/api/planting-plans/1/debug-snapshot")
 
     assert calendar_response.status_code == 200
     assert calendar_response.json()[0]["task_subtype"] == "plant_protection.stem_leaf_weed_pre_survey"
@@ -361,5 +397,8 @@ def test_list_calendar_items_and_tasks_routes() -> None:
     assert thermal_response.json()["accumulated_thermal_time"] == "780.00"
     assert snapshot_response.status_code == 200
     assert snapshot_response.json()["algorithm_code"] == "stage_prediction_algorithm"
+    assert debug_response.status_code == 200
+    assert debug_response.json()["operation_plans"][0]["farming_task_id"] == 1
+    assert debug_response.json()["stage_prediction_snapshots"][0]["prediction_version"] == 3
 
     app.dependency_overrides.clear()

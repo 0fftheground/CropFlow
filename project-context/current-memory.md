@@ -45,18 +45,26 @@ Roadmap 对应阶段：`T2` 工程实现后段并开始进入 `T3` 扩展接入�
 - 已补最小气象治理审计：同一 Farm / 年 / 日期 / sourceType 只保留一个 active `WeatherSnapshot`，旧快照保留并记录 superseded 链路；`WeatherUpdated.payload` 记录 `weatherChangeType` 与上一版快照引用。
 - 已补 `ActualStageRecorded` / `StageChanged` 最小事件闭环：人工阶段录入接口 `POST /api/planting-plans/{plantingPlanId}/actual-stages` 按 `code: date` 生成事件，编排链路更新 `CropStageState`，阶段变化会记录 `StageChanged`，并进入日历刷新 handler。
 - 已补 `DailyWeatherCheckJob` 失败重试 2 次；`WeatherUpdated` 对新的 observed 日期可走基于 `lastCalculatedDate` 的增量积温更新，历史修正或 forecast 变化仍回退全量重算。
+- 已完成病虫害防治方案 4 个接口接入：`generate-theory-control-plan`、`adjust-control-window`、`get-merge-spray-suitability-range`、`merge-control-plan`。调查结果录入后，单类型场景会生成待审核 `TaskIntent + ReviewRequest`，常规与突发并存时会走合并链路。
+- 已补病虫害防治的 `spray_suitability_data` 组装能力；`dy_ws` 由后端基于天气接口返回的 `wins / pre / rh / tAvg` 自行计算。
+- 已补 `cf_crop_stage_dict` 支撑的生育期 raw stage 字典读取；`StageManagementService` 现在优先读表，查不到再回退默认常量。
+- 已补生育期阈值算法新契约适配：后端现调用 `growth-stage-gdd-thresholds`，并按本地品种码值到算法码值做映射（`cultiType / apprCultiType / subsType / maturType`）。
+- 已补第一版可观察性：日志正式落盘到 `logs/`，上游生育期算法错误可语义化提示，且新增 `GET /api/planting-plans/{plantingPlanId}/debug-snapshot` 聚合排障接口。
+- 已补前端 handoff 文档收口：`plan_detail` 直接承载预备农事项 / 正式任务 / 待审核事项 / 生育期区块，`calendar_list` 下调为可选页，`task_detail` / `survey_entry` / `review_request` 的页面流转和页面职责已重新梳理。
+- 已修正真实天气联调口径：本地联调农场需依赖 `Farm.external_farm_id` 调真实天气；`HttpWeatherProvider` 已按真实接口行为将 daily forecast 窗口收口为“当天起 14 天”，并对 observed `temAvg=null` 增加邻近日回退。
+- 本地联调用 `planting_plan_id=9` 已补齐预备农事项、正式任务、待审核事项和生育期数据；当前可用真实天气回填的最新生育期快照为 `prediction_source=manual_backfill_real_weather`。
 
 ## Remaining
 
 - 前端页面尚未开发，真实前后端联调还未开始。
 - 仍需由前端负责人基于 handoff 和 API contract 开始真实页面联调；当前不由后端侧直接开发前端页面。
 - 如继续开发植保病虫害相关农事任务，应作为 `P3` 多方向扩展启动，而不再并入当前 `P2`。
-- P3 病虫害调查每日更新仍未闭环；当前只完成气象输入拼装和 `/pestDisease/survey/daily-update-survey` 调用能力，仍需把返回的 `new_emergency / merged_into_regular / no_new_event` 映射成具体的病虫调查 CalendarItem / taskSubtype。
+- P3 病虫害调查每日更新仍未彻底验收；接口和 `CalendarItem` 闭环已接入，但还需要在真实算法和前端联调中继续验证 `new_emergency / merged_into_regular / no_new_event` 语义与页面展示。
 - 气象运行期管理仍不完整：
   - 现在已有农场年度 `WeatherSnapshot`，支持同 Farm 同年跨计划复用，但还不是全局气象主数据；
   - `observed / forecast / climatology` 的回刷窗口、历史修正策略还未完整自动化；
   - `climatology` 当前仍是 provider 侧按需拼装，尚未单独定义低频缓存或版本策略；
-  - 天气变化检测已能用 `dataHash` 识别同版本内容变化并记录 active/superseded 审计链路，但 forecast 变化的影响范围和历史 observed 回刷策略还需继续细化。
+  - `forecast` 真实接口的日期边界与文档存在差异，当前已按返回行为修正 provider，但仍需继续确认上游契约是否稳定。
 - 积温管理只做到第一版：
   - 当前已能对新的 observed 日期按 `last_calculated_date` 增量推进；同日修正、历史回刷和 forecast 变化仍走全量回放；
   - `CropThermalTimeState` 还未补充逐日积温明细、跨阈值命中记录和更细的审计信息；
@@ -64,8 +72,7 @@ Roadmap 对应阶段：`T2` 工程实现后段并开始进入 `T3` 扩展接入�
 - 生育期管理仍未彻底完成：
   - `ActualStageRecorded` 已有正式 API 入口并能修正 `CropStageState`，但人工录入表单联调还未开始；
   - `StageChanged` 已作为事件记录落地，但其影响策略当前仍复用日历刷新 handler，尚未拆独立 StageChangeImpactPolicy；
-  - 当前内部主口径仍是 `seedling / tillering / pokou / heading / maturity` 业务阶段；更完整的 raw stage code 枚举与更多业务节点还未扩展；
-  - 当前虽已确认 `21 / 51 / 58 / 89` 的关键映射，但更广泛的 raw code -> business milestone 配置方案仍未收口；
+- 当前内部主口径仍是 `seedling / tillering / pokou / heading / maturity` 业务阶段；完整 raw stage points 已进入 snapshot 和对外接口，但更多业务节点与更多规则消费场景还未扩展；
   - 当前实现仍由后端派生 `stage_timeline`；若后续算法侧实际返回必要原始阶段点，snapshot 合并策略和字段结构还要再收敛。
 - DeviceCommand、InventoryItem / InventoryTransaction 落库（按第一版 deferred 处理）。
 - stageCode 完整枚举、业务阶段映射配置和更广泛的 taskSubtype 收敛延后到后续扩展阶段。
@@ -74,13 +81,13 @@ Roadmap 对应阶段：`T2` 工程实现后段并开始进入 `T3` 扩展接入�
 
 - 前端尚未进入实现，当前无法完成真实页面联调验收。
 - 真实杂草算法服务已通过本地集成测试和 trace 脚本验证；后续仍需在前后端真实联调中继续观察返回语义稳定性。
-- 外部气象接口当前存在契约不一致：平均接口使用 `farmId` 且不返回“今天”数据；逐日预报接口文档已更新为 `farmId`，但真实服务当前仍要求 `farmID`。
-- 生育期接口契约刚切到 vNext 草案：`21 / 51 / 58 / 89` 映射已确认，但算法侧最终返回字段形态，以及必要原始阶段点与后端派生 timeline 的合并方式还未最终冻结。
+- 外部气象接口当前仍存在契约偏差：平均接口使用 `farmId` 且不返回“今天”数据；逐日预报接口真实服务当前仍要求 `farmID`，且实际覆盖窗口为“前10天 + 当天起14天”。
+- 本地联调若未配置 `Farm.external_farm_id`，真实天气接口会直接返回空数组；后续 seed / runbook 仍需继续收口这条依赖。
 
 ## Next Step
 
-后端侧下个 session 优先做两件事：一是继续把生育期 raw stage code 方案做完整，从已确认的 `21 / 51 / 58 / 89` 扩展到 snapshot 合并策略和更广泛 code 配置；二是继续细化气象 / 积温运行期策略，补 forecast 变化影响范围、历史 observed 回刷重算、逐日积温明细和 `daily-update-survey` 结果落 CalendarItem 的闭环。
+下个 session 优先做三件事：一是继续跟前端按新的 handoff 文档做真实页面联调，优先验证 `plan_detail / task_detail / review_request / survey_entry`；二是继续收口生育期运行期策略和完整 raw stage code 消费边界；三是继续验证病虫害调查每日更新与防治方案链路在真实算法下的返回语义和页面展示。
 
 ## Last Updated
 
-`2026-05-31`
+`2026-06-02`

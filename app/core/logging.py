@@ -4,6 +4,8 @@ import contextvars
 import json
 import logging
 import time
+from logging.handlers import TimedRotatingFileHandler
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -20,22 +22,38 @@ class RequestContextFilter(logging.Filter):
         return True
 
 
-def configure_logging(level: int = logging.INFO) -> None:
+def configure_logging(level: int = logging.INFO, *, log_dir: str | Path | None = None) -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
     request_context_filter = RequestContextFilter()
     formatter = logging.Formatter(_LOG_FORMAT)
+    resolved_log_dir = Path(log_dir) if log_dir is not None else None
     if not root_logger.handlers:
         handler = logging.StreamHandler()
         handler.setFormatter(formatter)
         handler.addFilter(request_context_filter)
         root_logger.addHandler(handler)
-        return
-
     for handler in root_logger.handlers:
         handler.setFormatter(formatter)
         if not any(isinstance(existing_filter, RequestContextFilter) for existing_filter in handler.filters):
             handler.addFilter(request_context_filter)
+    if resolved_log_dir is not None:
+        _ensure_file_handler(
+            root_logger,
+            request_context_filter=request_context_filter,
+            formatter=formatter,
+            log_dir=resolved_log_dir,
+            file_name="cropflow-api.log",
+            level=level,
+        )
+        _ensure_file_handler(
+            root_logger,
+            request_context_filter=request_context_filter,
+            formatter=formatter,
+            log_dir=resolved_log_dir,
+            file_name="cropflow-error.log",
+            level=logging.WARNING,
+        )
 
 
 def set_request_id(request_id: str | None = None) -> contextvars.Token[str]:
@@ -139,3 +157,31 @@ def _normalize_for_log(value: Any, *, max_items: int) -> Any:
     if isinstance(value, bytes):
         return f"<bytes {len(value)}>"
     return value
+
+
+def _ensure_file_handler(
+    logger: logging.Logger,
+    *,
+    request_context_filter: RequestContextFilter,
+    formatter: logging.Formatter,
+    log_dir: Path,
+    file_name: str,
+    level: int,
+) -> None:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / file_name
+    for handler in logger.handlers:
+        if isinstance(handler, TimedRotatingFileHandler) and Path(handler.baseFilename) == log_path:
+            handler.setLevel(level)
+            return
+    handler = TimedRotatingFileHandler(
+        filename=log_path,
+        when="midnight",
+        interval=1,
+        backupCount=14,
+        encoding="utf-8",
+    )
+    handler.setLevel(level)
+    handler.setFormatter(formatter)
+    handler.addFilter(request_context_filter)
+    logger.addHandler(handler)

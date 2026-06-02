@@ -71,6 +71,26 @@ _RAW_STAGE_CODE_ALIASES_BY_BUSINESS_STAGE = {
     "maturity": ("89",),
 }
 _BUSINESS_STAGE_BY_RAW_STAGE_CODE: dict[str, str] = {}
+_LOCAL_TO_STAGE_ALGORITHM_CULTI_TYPE = {
+    4: 3,  # 双季晚稻
+    5: 4,  # 早稻
+    6: 5,  # 一季晚稻
+    7: 6,  # 中稻
+    8: 8,  # 再生稻
+}
+_LOCAL_TO_STAGE_ALGORITHM_SUBS_TYPE = {
+    9: 0,   # 籼
+    10: 1,  # 粳
+    11: 2,  # 籼粳交
+}
+_LOCAL_TO_STAGE_ALGORITHM_MATUR_TYPE = {
+    12: 0,  # 早熟
+    13: 1,  # 中熟
+    14: 2,  # 中迟熟
+    15: 3,  # 早中熟
+    16: 4,  # 迟熟
+    17: 5,  # -
+}
 
 
 def _rebuild_stage_registry(raw_stage_sequence: list[dict[str, str | None]]) -> None:
@@ -278,9 +298,12 @@ class HttpStagePredictionClient:
                 summarize_for_log(payload),
                 summarize_for_log(raw_response),
             )
-            message = f"Stage prediction API {path} returned HTTP {exc.code}"
-            if raw_response:
-                message = f"{message}: {raw_response}"
+            message = _build_stage_prediction_upstream_error_message(
+                path=path,
+                status_code=exc.code,
+                request_payload=payload,
+                raw_response=raw_response,
+            )
             raise ValueError(message) from exc
         except error.URLError as exc:
             logger.error(
@@ -341,6 +364,62 @@ class MockStagePredictionClient:
                 },
             },
         )
+
+
+def _build_stage_prediction_upstream_error_message(
+    *,
+    path: str,
+    status_code: int,
+    request_payload: dict[str, Any],
+    raw_response: str,
+) -> str:
+    prefix = f"Stage prediction API {path} returned HTTP {status_code}"
+    parsed_response = _parse_stage_prediction_error_response(raw_response)
+    detail = parsed_response.get("detail")
+    semantic_hint = _build_stage_prediction_error_hint(detail=detail, request_payload=request_payload)
+    if semantic_hint:
+        return f"{prefix}: {semantic_hint}"
+    if raw_response:
+        return f"{prefix}: {raw_response}"
+    return prefix
+
+
+def _parse_stage_prediction_error_response(raw_response: str) -> dict[str, Any]:
+    if not raw_response:
+        return {}
+    try:
+        parsed = json.loads(raw_response)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _build_stage_prediction_error_hint(*, detail: Any, request_payload: dict[str, Any]) -> str | None:
+    detail_text = str(detail).strip() if detail is not None else ""
+    if not detail_text:
+        return None
+    invalid_field_name = None
+    invalid_value = None
+    for field_name in ("apprCultiType", "cultiType", "subsType", "maturType"):
+        payload_value = request_payload.get(field_name)
+        if payload_value is None:
+            continue
+        if str(payload_value) == detail_text:
+            invalid_field_name = field_name
+            invalid_value = payload_value
+            break
+    if invalid_field_name is None:
+        return None
+    expected_codes = {
+        "apprCultiType": "expected algorithm cultiType codes: 3=双季晚稻, 4=早稻, 5=一季晚稻, 6=中稻, 8=再生稻",
+        "cultiType": "expected algorithm cultiType codes: 3=双季晚稻, 4=早稻, 5=一季晚稻, 6=中稻, 8=再生稻",
+        "subsType": "expected algorithm subsType codes: 0=籼, 1=粳, 2=籼粳交",
+        "maturType": "expected algorithm maturType codes: 0=早熟, 1=中熟, 2=中迟熟, 3=早中熟, 4=迟熟, 5=-",
+    }
+    return (
+        f"upstream rejected {invalid_field_name}={invalid_value}; "
+        f"{expected_codes[invalid_field_name]}; upstream detail={detail_text}"
+    )
 
 
 class StageManagementService:
@@ -868,23 +947,21 @@ def _build_stage_rule_request_payload(
             "Stage threshold request requires approveRegion/controlSpec. "
             "Provide them via PlantingPlan.metadata or RiceVariety.approve_region/control_variety.",
         )
-    matur_type = (
-        metadata_payload.get("maturType")
-        or metadata_payload.get("maturity_code")
-        or (rice_variety.maturity_code if rice_variety is not None else None)
-        or 5
+    matur_type = _resolve_stage_algorithm_matur_type(
+        metadata_payload.get("maturType"),
+        metadata_payload.get("maturity_code"),
+        rice_variety.maturity_code if rice_variety is not None else None,
     )
-    appr_culti_type = (
-        metadata_payload.get("apprCultiType")
-        or metadata_payload.get("approve_culti_type")
-        or (rice_variety.culti_type_code if rice_variety is not None else None)
-        or 0
+    culti_type = _resolve_stage_algorithm_culti_type(None, planting_plan.culti_type_code)
+    appr_culti_type = _resolve_stage_algorithm_culti_type(
+        metadata_payload.get("apprCultiType"),
+        metadata_payload.get("approve_culti_type"),
+        rice_variety.culti_type_code if rice_variety is not None else None,
     )
-    subs_type = (
-        metadata_payload.get("subsType")
-        or metadata_payload.get("sub_type_code")
-        or (rice_variety.sub_type_code if rice_variety is not None else None)
-        or 0
+    subs_type = _resolve_stage_algorithm_subs_type(
+        metadata_payload.get("subsType"),
+        metadata_payload.get("sub_type_code"),
+        rice_variety.sub_type_code if rice_variety is not None else None,
     )
     farm_area_name = (
         metadata_payload.get("farm_area_name")
@@ -896,12 +973,74 @@ def _build_stage_rule_request_payload(
         "apprArea": str(appr_area),
         "controlSpec": str(control_spec),
         "maturType": int(matur_type),
-        "cultiType": int(planting_plan.culti_type_code or 0),
+        "cultiType": int(culti_type),
         "apprCultiType": int(appr_culti_type),
         "subsType": int(subs_type),
         "variety_name": str(planting_plan.variety_name or ""),
         "farm_area_name": str(farm_area_name),
     }
+
+
+def _coerce_optional_stage_algorithm_code(raw_value: Any) -> int | None:
+    try:
+        if raw_value is None or raw_value == "":
+            return None
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_stage_algorithm_matur_type(*candidates: Any) -> int:
+    explicit_value = _coerce_optional_stage_algorithm_code(candidates[0]) if candidates else None
+    if explicit_value is not None:
+        return explicit_value
+    for raw_value in candidates[1:]:
+        coerced = _coerce_optional_stage_algorithm_code(raw_value)
+        if coerced is None:
+            continue
+        mapped_value = _LOCAL_TO_STAGE_ALGORITHM_MATUR_TYPE.get(coerced)
+        if mapped_value is not None:
+            logger.info("Mapped local maturity_code to stage algorithm code local=%s mapped=%s", coerced, mapped_value)
+            return mapped_value
+        if 0 <= coerced <= 8:
+            return coerced
+        logger.warning("Unsupported local maturity_code for stage algorithm; using default 5 local=%s", coerced)
+        return 5
+    return 5
+
+
+def _resolve_stage_algorithm_culti_type(*candidates: Any) -> int:
+    explicit_value = _coerce_optional_stage_algorithm_code(candidates[0]) if candidates else None
+    if explicit_value is not None:
+        return explicit_value
+    for raw_value in candidates[1:]:
+        coerced = _coerce_optional_stage_algorithm_code(raw_value)
+        if coerced is None:
+            continue
+        mapped_value = _LOCAL_TO_STAGE_ALGORITHM_CULTI_TYPE.get(coerced)
+        if mapped_value is not None:
+            if mapped_value != coerced:
+                logger.info("Mapped local culti_type_code to stage algorithm code local=%s mapped=%s", coerced, mapped_value)
+            return mapped_value
+        return coerced
+    return 0
+
+
+def _resolve_stage_algorithm_subs_type(*candidates: Any) -> int:
+    explicit_value = _coerce_optional_stage_algorithm_code(candidates[0]) if candidates else None
+    if explicit_value is not None:
+        return explicit_value
+    for raw_value in candidates[1:]:
+        coerced = _coerce_optional_stage_algorithm_code(raw_value)
+        if coerced is None:
+            continue
+        mapped_value = _LOCAL_TO_STAGE_ALGORITHM_SUBS_TYPE.get(coerced)
+        if mapped_value is not None:
+            if mapped_value != coerced:
+                logger.info("Mapped local sub_type_code to stage algorithm code local=%s mapped=%s", coerced, mapped_value)
+            return mapped_value
+        return coerced
+    return 0
 
 
 def _resolve_stage_subs_type_code(raw_value: Any) -> int:

@@ -9,6 +9,7 @@ from app.models import CropStageDict, CropStageState, CropThermalTimeState, Farm
 from app.services.stage_management import (
     MockStagePredictionClient,
     StageManagementService,
+    _build_stage_prediction_upstream_error_message,
     extract_pest_disease_growth_stage,
 )
 
@@ -180,6 +181,18 @@ def _make_rice_variety() -> RiceVariety:
     )
 
 
+def _make_legacy_code_rice_variety() -> RiceVariety:
+    return RiceVariety(
+        id=7569,
+        name="昌盛优美特占",
+        approve_region="湖南",
+        culti_type_code=7,
+        sub_type_code=9,
+        maturity_code=13,
+        control_variety="天优华占",
+    )
+
+
 def test_refresh_prediction_creates_stage_snapshot_and_states() -> None:
     snapshot_repo = FakeStagePredictionSnapshotRepository()
     stage_repo = FakeCropStageStateRepository()
@@ -209,8 +222,8 @@ def test_refresh_prediction_creates_stage_snapshot_and_states() -> None:
             "apprArea": "长江中下游",
             "controlSpec": "五优308",
             "maturType": 5,
-            "cultiType": 5,
-            "apprCultiType": 6,
+            "cultiType": 4,
+            "apprCultiType": 5,
             "subsType": 0,
             "variety_name": "黄广农占",
             "farm_area_name": "湖南",
@@ -312,6 +325,60 @@ def test_refresh_prediction_prefers_stage_names_from_crop_stage_dict() -> None:
     raw_points = {item["stage_code"]: item for item in result.snapshot.stage_timeline["raw_stage_points"]}
     assert raw_points["BBCH13"]["stage_name"] == "三叶一心（字典）"
     assert raw_points["BBCH21"]["stage_name"] == "分蘖始期（字典）"
+
+
+def test_refresh_prediction_maps_local_stage_codes_to_algorithm_codes() -> None:
+    snapshot_repo = FakeStagePredictionSnapshotRepository()
+    stage_repo = FakeCropStageStateRepository()
+    thermal_repo = FakeCropThermalTimeStateRepository()
+    weather_provider = FakeWeatherProvider()
+    plan = PlantingPlan(
+        id=1,
+        plan_code="PLAN-001",
+        plan_name="测试计划",
+        farm_id=1,
+        culti_type_code=7,
+        planting_method_code=1,
+        crop_name="水稻",
+        variety_id=7569,
+        variety_name="昌盛优美特占",
+        sowing_date=date(2026, 4, 10),
+        task_generation_window_days=14,
+        metadata_payload={},
+    )
+    prediction_client = RecordingStagePredictionClient(
+        MockStagePredictionClient().predict_stage(request_payload={"sowing_date": "2026-04-10"}),
+    )
+    service = StageManagementService(
+        planting_plan_repository=FakePlantingPlanRepository(plan),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(_make_legacy_code_rice_variety()),
+        stage_prediction_snapshot_repository=snapshot_repo,
+        crop_stage_state_repository=stage_repo,
+        crop_thermal_time_state_repository=thermal_repo,
+        stage_prediction_client=prediction_client,
+        weather_provider=weather_provider,
+    )
+
+    service.refresh_prediction(
+        1,
+        prediction_source="initial",
+        source_event_id=99,
+        as_of_date=date(2026, 5, 27),
+    )
+
+    assert prediction_client.calls == [
+        {
+            "apprArea": "湖南",
+            "controlSpec": "天优华占",
+            "maturType": 1,
+            "cultiType": 6,
+            "apprCultiType": 6,
+            "subsType": 0,
+            "variety_name": "昌盛优美特占",
+            "farm_area_name": "湖南",
+        },
+    ]
 
 
 def test_refresh_prediction_updates_existing_state_and_detects_stage_change() -> None:
@@ -830,6 +897,22 @@ def test_extract_pest_disease_growth_stage_accepts_raw_stage_codes() -> None:
         "heading_date": "2026-06-17",
         "maturity_date": "2026-07-19",
     }
+
+
+def test_stage_prediction_upstream_error_message_semanticizes_invalid_code() -> None:
+    message = _build_stage_prediction_upstream_error_message(
+        path="/growth-stage-gdd-thresholds",
+        status_code=500,
+        request_payload={
+            "apprCultiType": 7,
+            "subsType": 0,
+            "maturType": 1,
+        },
+        raw_response='{"detail":"7"}',
+    )
+
+    assert "upstream rejected apprCultiType=7" in message
+    assert "expected algorithm cultiType codes" in message
 
 
 def test_extract_pest_disease_growth_stage_still_accepts_legacy_numeric_stage_codes() -> None:

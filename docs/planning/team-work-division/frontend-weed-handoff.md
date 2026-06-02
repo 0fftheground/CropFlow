@@ -1,4 +1,4 @@
-# 杂草防治前端联调交接稿
+# 种植计划前端联调交接稿
 
 > 本文档用于给前端开发提供“当前已可联调”的页面需求和接口契约。  
 > 口径以当前后端代码和已落地 API 为准，不再沿用尚未实现的 `Evaluation`、`SystemNotification` 聚合视图或建议态字段草案。
@@ -6,7 +6,7 @@
 适用阶段：
 
 ```text
-P2 - 杂草防治样板链路前后端联调
+P2 - 杂草防治 / 病虫害防治 / 生育期运行期联调
 ```
 
 接口前缀：
@@ -25,15 +25,15 @@ docs/api/frontend-weed-api-contract.md
 
 ## 1. 当前前端页面范围
 
-按当前已实现链路，建议前端按 9 个独立页面规划：
+按当前已实现链路，建议前端先按 8 个独立页面规划：
 
 | pageKey | pageName | 目标 | 当前状态 | 说明 |
 |---|---|---|---|---|
 | `plan_create` | 计划创建 | 创建 `PlantingPlan` | 可直接接真实接口 | 闭环入口 |
-| `plan_detail` | 计划详情 | 看计划、任务、复核、事件总览 | 可接简化版真实接口 | 当前不包含 `CropStageState` / `SystemNotification` 专门接口 |
-| `calendar_list` | 农事项日历 | 看 `CalendarItem` 列表 | 可直接接真实接口 | 重点区分预备农事项和正式任务 |
+| `plan_detail` | 计划详情 | 看计划、任务、复核、生育期和事件总览 | 可直接接真实接口 | 当前可展示生育期状态、积温状态、预测快照和人工录入入口 |
+| `calendar_list` | 农事项日历 | 看 `CalendarItem` 列表 | 可后置接入 | 第一版可直接由 `plan_detail` 承载预备农事项列表 |
 | `task_detail` | 任务详情 | 看 `FarmingTask`、方案、执行历史 | 可直接接真实接口 | 已有聚合详情接口 |
-| `survey_entry` | 调查录入 | 录入药前/药后调查结果 | 可直接接真实接口 | 复用 `POST /tasks/{id}/survey-results` |
+| `survey_entry` | 调查录入 | 录入杂草 / 病虫害 / 服务评价相关调查结果 | 可直接接真实接口 | 复用 `POST /tasks/{id}/survey-results` |
 | `review_request` | 人工复核 | 看审核上下文并提交决策 | 可直接接真实接口 | 已有详情和处理接口 |
 | `execution_feedback` | 执行反馈 | 录入正式作业执行结果 | 可直接接真实接口 | 复用 `POST /tasks/{id}/execution-completions` |
 | `evaluation_entry` | 服务评价录入 | 录入满意度和联系人 | 可直接接真实接口 | 当前不是独立 `Evaluation` 对象，而是服务评价任务的调查结果录入 |
@@ -46,40 +46,312 @@ docs/api/frontend-weed-api-contract.md
 ```text
 plan_create
   -> plan_detail
-  -> calendar_list
-  -> task_detail
-  -> survey_entry / execution_feedback / review_request / evaluation_entry
+plan_detail
+  -> task_detail (from task card)
+  -> review_request (from pending review block)
+  -> calendar_list (optional, later)
+task_detail
+  -> survey_entry
+  -> execution_feedback
+  -> evaluation_entry
   -> service_effect_survey
+survey_entry
+  -> task_detail / plan_detail
+review_request
+  -> plan_detail
+execution_feedback
+  -> task_detail / plan_detail
+evaluation_entry
+  -> service_effect_survey / plan_detail
+service_effect_survey
   -> plan_detail
 ```
 
-杂草防治主链路页面流转建议：
+主链路页面流转建议：
 
 1. `plan_create` 创建计划后跳转 `plan_detail`
-2. `plan_detail` 进入 `calendar_list` 查看预备农事项
-3. `calendar_list` 或 `plan_detail` 进入 `task_detail`
-4. 调查类任务从 `task_detail` 进入 `survey_entry`
-5. 复核类事项从 `plan_detail` 或 `task_detail` 进入 `review_request`
-6. 正式防治任务从 `task_detail` 进入 `execution_feedback`
-7. 服务评价任务从 `task_detail` 进入 `evaluation_entry`
-8. 服务评价不满意后，跳转 `service_effect_survey`
-9. 现场确认提交后返回 `plan_detail`
+2. `plan_detail` 直接分区查看预备农事项、正式任务和待审核事项
+3. 第一版不强制接 `calendar_list`，`plan_detail` 直接展示预备农事项即可
+4. 后续如需长列表筛选，再把 `calendar_list` 作为可选明细页补上
+5. `plan_detail` 的任务卡片进入 `task_detail`
+6. `plan_detail` 的待审核区块进入 `review_request`
+7. 调查类任务从 `task_detail` 进入 `survey_entry`
+8. 正式防治任务从 `task_detail` 进入 `execution_feedback`
+9. 服务评价任务从 `task_detail` 进入 `evaluation_entry`
+10. 服务评价不满意后，跳转 `service_effect_survey`
+11. 各提交页完成后默认返回任务详情或计划详情，具体按返回 id 选择刷新页面
 
 ---
 
-## 3. 页面需求总表
+## 3. 页面需求
 
-| pageKey | entry | primaryObjects | mustShow | primaryActions | backendReadiness | notes |
-|---|---|---|---|---|---|---|
-| `plan_create` | 入口页 | `PlantingPlan` | 基础表单、创建结果 | 查询选项、创建计划 | ready | 创建前先查稻作类型 / 种植方式 / 品种 |
-| `plan_detail` | 创建后 / 计划列表 | `PlantingPlan` / `CalendarItem` / `FarmingTask` / `ReviewRequest` / `EventRecord` | 计划基础信息、预备事项、正式任务、待复核事项、关键事件 | 跳转详情页 | partial-ready | 当前先做简化版计划总览，不等待 `SystemNotification` |
-| `calendar_list` | 计划详情 | `CalendarItem` | 标题、日期、状态、来源任务、是否已生成正式任务 | 查看详情 | ready | 列表里要显式区分 `CalendarItem` 和 `FarmingTask` |
-| `task_detail` | 计划详情 / 日历页 | `FarmingTask` / `OperationPlan` / `Execution` / `ExecutionRecord` / `EventRecord` | 任务主信息、方案、执行记录、来源对象、下游日历项 | 跳转录入页、复核页 | ready | 当前最适合作为工作台页面 |
-| `survey_entry` | 任务详情 | `FarmingTask` / `ExecutionRecord` | 任务上下文、调查表单 | 提交调查结果 | ready | 根据 `task_subtype` 切换表单 |
-| `review_request` | 计划详情 / 任务详情 | `ReviewRequest` / `TaskIntent` / `OperationPlan` / `ExecutionRecord` | 触发原因、候选任务、方案、来源调查 | 提交审核决策 | ready | 审核后可返回新建任务 id |
-| `execution_feedback` | 任务详情 | `ExecutionRecord` | 作业结果、作业时间、面积/药量 | 提交执行结果 | ready | 仅用于正式作业任务 |
-| `evaluation_entry` | 任务详情 | `FarmingTask` / `ExecutionRecord` | 满意度、评价时间、评价人、联系方式、备注 | 提交服务评价 | ready | 满意结束，不满意生成现场确认任务 |
-| `service_effect_survey` | 服务评价不满意后 | `FarmingTask` / `ExecutionRecord` | 现场日期、实际情况、原因、备注 | 提交现场确认结果 | ready | 当前提交后无下游自动编排 |
+### 3.1 `plan_create`
+
+这个页面只做一件事：创建 `PlantingPlan`。前端需要把基础信息和计划上下文填完整，不要把生育期、任务、复核之类内容塞进创建表单里。
+
+建议展示：
+
+1. 计划名称
+2. 农场
+3. 地块
+4. 稻作类型
+5. 种植方式
+6. 品种
+7. 播种日期
+8. 年份和若干可选计划参数
+
+主要操作：
+
+1. 查询稻作类型、种植方式、品种候选项
+2. 提交创建
+3. 创建成功后进入 `plan_detail`
+
+页面约束：
+
+1. `plan_code` 由后端生成
+2. `farm_id` 不建议硬编码，先查农场列表
+3. 创建完成后再去补任务和日历信息
+
+### 3.2 `plan_detail`
+
+这是计划的主页面，不只是“详情页”，而是整个计划的总览工作台。它应该同时展示生育期、任务、复核和事件，不需要强制先跳 `calendar_list` 才能看预备农事项。
+
+建议展示成 5 个区块：
+
+1. 计划基础信息
+2. 生育期状态
+3. 预备农事项
+4. 正式任务
+5. 待审核事项和事件时间线
+
+每个区块应该展示的内容：
+
+1. 计划基础信息
+   计划名称、作物、品种、播种日期、计划状态、农场、地块、年份、关键时间字段
+
+2. 生育期状态
+   当前阶段、当前阶段中文名、积温累计值、最后计算日、阈值快照、最新预测时间线
+
+3. 预备农事项
+   当前计划下的 `CalendarItem` 列表，重点看标题、建议日期、状态、来源、是否已生成正式任务
+
+4. 正式任务
+   当前计划下的 `FarmingTask` 列表，重点看任务类型、状态、计划时间、是否有执行记录
+
+5. 待审核事项和事件时间线
+   `ReviewRequest` 列表和 `EventRecord` 列表，方便前端快速判断当前计划是否还卡在审核或事件处理中
+
+主要操作：
+
+1. 进入 `task_detail`
+2. 进入 `review_request`
+3. 录入真实生育期
+4. 展开预备农事项的明细查看
+5. 如有权限，进入调试快照
+
+页面约束：
+
+1. 不要把 `CalendarItem`、`FarmingTask`、`ReviewRequest` 混成一个列表
+2. 生育期状态不要从前端自己反推，直接读接口
+3. `debug-snapshot` 只做开发和排障入口
+
+### 3.3 `calendar_list`
+
+这个页面是 `plan_detail` 的可选明细页，不是强制跳页。列表长、筛选条件多，或者要专门看预备农事项时，再进入这里。
+
+建议展示：
+
+1. 预备农事项标题
+2. 建议日期
+3. 当前状态
+4. 来源任务或来源事件
+5. 是否已经生成正式任务
+
+主要操作：
+
+1. 筛选或排序预备农事项
+2. 点击事项进入 `task_detail`
+3. 返回 `plan_detail`
+
+页面约束：
+
+1. `CalendarItem.generated_task_id` 非空时显示“已生成正式任务”
+2. 空值时显示“预备农事项”
+
+### 3.4 `task_detail`
+
+这个页面是任务工作台。不同任务 subtype 不能共用一套页面逻辑，前端至少要拆成调查任务、正式防治任务、服务评价尾链路任务三类。
+
+建议展示的通用区块：
+
+1. 任务主信息
+2. 任务来源
+3. 任务执行与方案
+4. 关联复核
+5. 事件记录
+6. 下游对象
+
+不同任务类型的侧重点：
+
+1. 调查任务
+   适用 subtype：
+   `plant_protection.stem_leaf_weed_pre_survey`
+   `plant_protection.stem_leaf_weed_recontrol_pre_survey`
+   `plant_protection.rice_safety_survey`
+   `plant_protection.control_effect_survey`
+   `plant_protection.regular_disease_pest_survey`
+   `plant_protection.sudden_disease_pest_survey`
+   重点看来源 `CalendarItem`、历史调查记录、当前待处理的审核信息
+
+2. 正式防治任务
+   适用 subtype：
+   `plant_protection.soil_sealing_weed_control`
+   `plant_protection.stem_leaf_weed_control`
+   `plant_protection.injury_mitigation`
+   `plant_protection.disease_pest_control`
+   重点看 `operation_plans`、执行记录、来源 `TaskIntent`、下游 `CalendarItem`
+
+3. 服务评价尾链路任务
+   适用 subtype：
+   `plant_protection.service_effect_evaluation`
+   `plant_protection.service_effect_survey`
+   重点看评价记录、现场确认信息、来源执行记录
+
+主要操作：
+
+1. 调查任务进入 `survey_entry`
+2. 正式防治任务进入 `execution_feedback`
+3. 服务评价任务进入 `evaluation_entry`
+4. 现场确认任务进入 `service_effect_survey`
+5. 有审核上下文时查看关联 `review_request`
+
+页面约束：
+
+1. 按 `task_subtype` 决定按钮和表单，不要统一展示所有操作
+2. 任务详情里要能看出它是从哪张 `CalendarItem`、`TaskIntent` 或执行记录来的
+
+### 3.5 `survey_entry`
+
+这个页面是统一的调查录入页，但表单内容必须按 `task_subtype` 切换。杂草调查、病虫害调查、服务评价任务都在这里录入。
+
+建议展示：
+
+1. 任务基础信息
+2. 调查说明
+3. 动态表单
+4. 历史调查结果或关联上下文
+
+当前应覆盖的 subtype：
+
+1. `plant_protection.stem_leaf_weed_pre_survey`
+2. `plant_protection.stem_leaf_weed_recontrol_pre_survey`
+3. `plant_protection.regular_disease_pest_survey`
+4. `plant_protection.sudden_disease_pest_survey`
+5. `plant_protection.rice_safety_survey`
+6. `plant_protection.control_effect_survey`
+7. `plant_protection.service_effect_evaluation`
+8. `plant_protection.service_effect_survey`
+
+主要操作：
+
+1. 提交调查结果
+2. 提交后刷新任务详情或计划详情
+
+页面约束：
+
+1. 病虫害调查提交后，可能返回 `task_intent_ids` 和 `review_request_ids`
+2. 前端不要假设调查只会生成执行记录
+
+### 3.6 `review_request`
+
+这个页面是审核工作台，不只是查看详情。前端要让审核人看清楚“为什么要审核这件事、审核的是哪份建议、审核通过后会影响什么”。
+
+建议展示：
+
+1. 触发原因
+2. 关联计划和任务
+3. 候选任务或候选方案
+4. 来源调查或来源执行记录
+5. 当前待审核状态
+
+主要操作：
+
+1. 查看审核详情
+2. 通过审核
+3. 拒绝审核
+4. 审核完成后回到 `plan_detail`
+
+页面约束：
+
+1. 审核页不要只显示一个按钮，必须能看清上下文
+2. 审核结果要能带回任务或方案的 id 变化
+
+### 3.7 `execution_feedback`
+
+这个页面是正式作业的执行回填页，只针对已经生成的正式任务。
+
+建议展示：
+
+1. 任务基础信息
+2. 方案信息
+3. 当前执行状态
+4. 实际执行情况
+5. 历史执行记录
+
+主要操作：
+
+1. 录入执行结果
+2. 提交后刷新任务详情和计划详情
+
+页面约束：
+
+1. 只用于正式作业任务，不要给调查任务或审核任务开放
+2. 提交内容要能够回写执行记录和后续事件
+
+### 3.8 `evaluation_entry`
+
+这个页面是服务评价录入页。它不是独立的 `Evaluation` 对象，而是服务评价任务的调查结果录入。
+
+建议展示：
+
+1. 服务评价任务信息
+2. 当前服务对象或执行背景
+3. 满意度
+4. 评价时间
+5. 评价人和联系方式
+6. 备注
+
+主要操作：
+
+1. 提交服务评价
+2. 根据满意/不满意跳转后续页面
+
+页面约束：
+
+1. 满意则结束
+2. 不满意则进入 `service_effect_survey`
+
+### 3.9 `service_effect_survey`
+
+这个页面是服务不满意后的现场确认页，用于记录实际情况和原因。
+
+建议展示：
+
+1. 现场确认任务信息
+2. 现场日期
+3. 实际情况
+4. 原因
+5. 备注
+
+主要操作：
+
+1. 提交现场确认结果
+2. 返回 `plan_detail`
+
+页面约束：
+
+1. 当前提交后不再自动编排下游对象
+2. 这个页面应作为终点表单处理
 
 ---
 
@@ -104,6 +376,10 @@ plan_create
 | action | method | path | 用途 |
 |---|---|---|---|
 | 查看计划详情 | `GET` | `/api/planting-plans/{plantingPlanId}` | 读取计划基础信息 |
+| 查看当前生育期状态 | `GET` | `/api/planting-plans/{plantingPlanId}/stage-state` | 读取 `CropStageState` |
+| 查看积温状态 | `GET` | `/api/planting-plans/{plantingPlanId}/thermal-time-state` | 读取 `CropThermalTimeState` |
+| 查看最新生育期预测快照 | `GET` | `/api/planting-plans/{plantingPlanId}/stage-predictions/latest` | 读取 `StagePredictionSnapshot` |
+| 人工录入真实生育期 | `POST` | `/api/planting-plans/{plantingPlanId}/actual-stages` | 修正已确认的真实生育期 |
 | 查看预备农事项 | `GET` | `/api/planting-plans/{plantingPlanId}/calendar-items` | 读取 `CalendarItem` 列表 |
 | 查看正式任务 | `GET` | `/api/planting-plans/{plantingPlanId}/tasks` | 读取 `FarmingTask` 列表 |
 | 查看待审核事项 | `GET` | `/api/planting-plans/{plantingPlanId}/review-requests` | 读取 `ReviewRequest` 列表 |
@@ -112,9 +388,20 @@ plan_create
 建议布局：
 
 1. 顶部显示计划基础字段
-2. 中部显示 `CalendarItem` / `FarmingTask`
-3. 侧边或底部显示 `ReviewRequest`
-4. 底部显示 `EventRecord`
+2. 单独一个“生育期状态”区块，显示当前阶段、当前阶段中文名、阈值版本、最后计算日
+3. 单独一个“积温状态”区块，显示累计积温、当前阈值快照、最后计算日
+4. 单独一个“预测时间线”区块，显示 `stage_timeline.stages` 和 `raw_stage_points`
+5. 中部显示 `CalendarItem` / `FarmingTask`
+6. 侧边或底部显示 `ReviewRequest`
+7. 底部显示 `EventRecord`
+
+页面操作建议：
+
+1. 点击 `CalendarItem` 卡片跳转 `calendar_list` 或关联 `task_detail`
+2. 点击 `FarmingTask` 卡片跳转 `task_detail`
+3. 点击 `ReviewRequest` 卡片跳转 `review_request`
+4. 对具备权限的人员开放“人工录入真实生育期”入口，提交 `POST /actual-stages`
+5. `debug-snapshot` 可作为开发或排障入口，不作为第一版业务页面必做项
 
 ### 4.3 `calendar_list`
 
@@ -158,6 +445,35 @@ plan_create
 3. `execution_records`
 4. `review_request`
 5. `event_records`
+
+建议按任务类型拆页面区块和按钮，而不是所有任务共用同一套操作：
+
+1. 调查任务
+   适用 subtype：
+   `plant_protection.stem_leaf_weed_pre_survey`
+   `plant_protection.stem_leaf_weed_recontrol_pre_survey`
+   `plant_protection.rice_safety_survey`
+   `plant_protection.control_effect_survey`
+   `plant_protection.regular_disease_pest_survey`
+   `plant_protection.sudden_disease_pest_survey`
+   必显：任务主信息、来源 `CalendarItem`、历史调查记录、关联复核
+   主要操作：进入 `survey_entry`
+
+2. 正式防治任务
+   适用 subtype：
+   `plant_protection.soil_sealing_weed_control`
+   `plant_protection.stem_leaf_weed_control`
+   `plant_protection.injury_mitigation`
+   `plant_protection.disease_pest_control`
+   必显：任务主信息、`operation_plans`、执行记录、来源 `TaskIntent`、下游日历项
+   主要操作：进入 `execution_feedback`
+
+3. 服务评价尾链路任务
+   适用 subtype：
+   `plant_protection.service_effect_evaluation`
+   `plant_protection.service_effect_survey`
+   必显：任务主信息、来源执行记录、历史评价或调查记录
+   主要操作：进入 `evaluation_entry` 或 `service_effect_survey`
 
 ### 4.5 `survey_entry`
 
@@ -366,16 +682,22 @@ plan_create
 3. `PlantingPlan.variety_name`
 4. `PlantingPlan.sowing_date`
 5. `PlantingPlan.status`
-6. `CalendarItem.title`
-7. `CalendarItem.suggested_start_date`
-8. `CalendarItem.status`
-9. `FarmingTask.title`
-10. `FarmingTask.task_subtype`
-11. `FarmingTask.status`
-12. `ReviewRequest.title`
-13. `ReviewRequest.status`
-14. `EventRecord.event_type`
-15. `EventRecord.processing_status`
+6. `CropStageState.current_stage`
+7. `CropStageState.current_stage_name`
+8. `CropThermalTimeState.accumulated_thermal_time`
+9. `CropThermalTimeState.last_calculated_date`
+10. `StagePredictionSnapshot.stage_timeline.stages`
+11. `StagePredictionSnapshot.stage_timeline.raw_stage_points`
+12. `CalendarItem.title`
+13. `CalendarItem.suggested_start_date`
+14. `CalendarItem.status`
+15. `FarmingTask.title`
+16. `FarmingTask.task_subtype`
+17. `FarmingTask.status`
+18. `ReviewRequest.title`
+19. `ReviewRequest.status`
+20. `EventRecord.event_type`
+21. `EventRecord.processing_status`
 
 ### 5.3 `task_detail`
 
@@ -395,21 +717,35 @@ plan_create
 12. `source_calendar_item`
 13. `source_task_intent`
 14. `review_request`
+15. `downstream_calendar_items`
+16. `source_execution_record`
+
+按 subtype 的按钮建议：
+
+1. 调查类任务显示“录入调查结果”
+2. 正式作业类任务显示“提交执行反馈”
+3. 服务评价任务显示“录入服务评价”
+4. 现场确认任务显示“录入现场确认”
+5. 若存在 `review_request`，显示“查看审核上下文”
 
 ### 5.4 `survey_entry`
 
 当前按任务 subtype 切表单：
 
 1. `plant_protection.stem_leaf_weed_pre_survey`
-2. `plant_protection.rice_safety_survey`
-3. `plant_protection.control_effect_survey`
-4. `plant_protection.service_effect_evaluation`
-5. `plant_protection.service_effect_survey`
+2. `plant_protection.stem_leaf_weed_recontrol_pre_survey`
+3. `plant_protection.regular_disease_pest_survey`
+4. `plant_protection.sudden_disease_pest_survey`
+5. `plant_protection.rice_safety_survey`
+6. `plant_protection.control_effect_survey`
+7. `plant_protection.service_effect_evaluation`
+8. `plant_protection.service_effect_survey`
 
 前端实现建议：
 
 1. 页面骨架共用
 2. 表单 schema 按 `task.task_subtype` 切换
+3. 病虫害调查结果提交后，可能返回新的 `task_intent_ids` 和 `review_request_ids`，前端不要假设只会生成执行记录
 
 ### 5.5 `evaluation_entry`
 
@@ -440,21 +776,20 @@ plan_create
 
 ## 6. 前端联调顺序建议
 
-建议按以下顺序接入，而不是同时起 9 个页面：
+建议按以下顺序接入，而不是同时起 8 个页面：
 
 1. `plan_create`
 2. `plan_detail`
-3. `calendar_list`
-4. `task_detail`
-5. `survey_entry`
-6. `review_request`
-7. `execution_feedback`
-8. `evaluation_entry`
-9. `service_effect_survey`
+3. `task_detail`
+4. `survey_entry`
+5. `review_request`
+6. `execution_feedback`
+7. `evaluation_entry`
+8. `service_effect_survey`
 
 原因：
 
-1. 前 7 个页面能先打通主杂草防治链路
+1. 前 6 个页面能先打通杂草防治、病虫害调查和生育期主链路
 2. 后 2 个页面是服务评估尾部链路，独立性更强
 
 ---
@@ -464,7 +799,7 @@ plan_create
 这些点前端需要按“当前后端真实状态”处理：
 
 1. `plan_detail` 当前没有独立 `SystemNotification` 接口
-2. `plan_detail` 当前没有独立 `CropStageState` 读取接口
+2. `calendar_list` 第一版可以不做，`plan_detail` 已足够承载预备农事项
 3. 服务评价当前不是独立 `Evaluation` 对象，而是服务评价任务的调查结果录入
 4. `service_effect_survey` 当前录入后链路直接结束
 5. 若要演示后台自动把 `CalendarItem` 转为正式调查任务，需要本地启用 scheduler 或使用已有 seed / trace 流程
@@ -476,5 +811,5 @@ plan_create
 1. 所有写接口提交成功后，都优先使用返回的 id 刷新对应详情页，而不是只依赖本地状态推断
 2. `survey-results` 返回值要统一处理 `farming_task_ids`、`task_intent_ids`、`review_request_ids`
 3. `task_subtype` 应作为页面渲染和表单切换的主分流字段
-4. `plan_detail` 第一版先做简化总览，不等待缺失对象补齐
+4. `plan_detail` 第一版至少要包含生育期状态、积温状态和预测时间线，不建议只做任务列表
 5. `service_effect_survey` 第一版按终点表单实现，不预埋额外状态机

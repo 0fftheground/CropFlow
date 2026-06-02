@@ -16,6 +16,7 @@ from app.models import (
     CropThermalTimeState,
     EventRecord,
     FarmingTask,
+    OperationPlan,
     ReviewRequest,
     StagePredictionSnapshot,
     TaskIntent,
@@ -255,6 +256,38 @@ class StagePredictionSnapshotResponse(BaseModel):
     updated_at: datetime | None
 
 
+class PlantingPlanDebugOperationPlanResponse(BaseModel):
+    id: int
+    farming_task_id: int
+    plan_type: str
+    status: str
+    version: int
+    algorithm_code: str | None
+    algorithm_version: str | None
+    operation_window_start: datetime | None
+    operation_window_end: datetime | None
+    execution_mode: str
+    parameters: dict[str, Any]
+    prescription_map: dict[str, Any]
+    basis: str | None
+    source_event_id: int | None
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
+class PlantingPlanDebugSnapshotResponse(BaseModel):
+    planting_plan: PlantingPlanResponse
+    calendar_items: list[CalendarItemResponse]
+    farming_tasks: list[FarmingTaskResponse]
+    task_intents: list[TaskIntentResponse]
+    review_requests: list[ReviewRequestResponse]
+    operation_plans: list[PlantingPlanDebugOperationPlanResponse]
+    event_records: list[EventRecordResponse]
+    crop_stage_state: CropStageStateResponse | None
+    crop_thermal_time_state: CropThermalTimeStateResponse | None
+    stage_prediction_snapshots: list[StagePredictionSnapshotResponse]
+
+
 @router.post("", response_model=PlantingPlanResponse, status_code=status.HTTP_201_CREATED)
 def create_planting_plan(
     payload: PlantingPlanCreateRequest,
@@ -385,6 +418,40 @@ def get_latest_stage_prediction_snapshot(
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return _serialize_stage_prediction_snapshot(result) if result is not None else None
+
+
+@router.get("/{planting_plan_id}/debug-snapshot", response_model=PlantingPlanDebugSnapshotResponse)
+def get_planting_plan_debug_snapshot(
+    planting_plan_id: int,
+    service: PlantingPlanQueryService = Depends(get_planting_plan_query_service),
+) -> PlantingPlanDebugSnapshotResponse:
+    try:
+        result = service.get_debug_snapshot(planting_plan_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return PlantingPlanDebugSnapshotResponse(
+        planting_plan=_serialize_planting_plan(
+            PlantingPlanDetails(planting_plan=result.planting_plan, field_ids=result.field_ids),
+        ),
+        calendar_items=[_serialize_calendar_item(item) for item in result.calendar_items],
+        farming_tasks=[_serialize_farming_task(item) for item in result.farming_tasks],
+        task_intents=[_serialize_task_intent(item) for item in result.task_intents],
+        review_requests=[_serialize_review_request(item) for item in result.review_requests],
+        operation_plans=[_serialize_debug_operation_plan(item) for item in result.operation_plans],
+        event_records=[_serialize_event_record(item) for item in result.event_records],
+        crop_stage_state=(
+            _serialize_crop_stage_state(result.crop_stage_state) if result.crop_stage_state is not None else None
+        ),
+        crop_thermal_time_state=(
+            _serialize_crop_thermal_time_state(result.crop_thermal_time_state)
+            if result.crop_thermal_time_state is not None
+            else None
+        ),
+        stage_prediction_snapshots=[
+            _serialize_stage_prediction_snapshot(item)
+            for item in result.stage_prediction_snapshots
+        ],
+    )
 
 
 @router.post(
@@ -677,4 +744,27 @@ def _serialize_stage_prediction_snapshot(
         source_event_id=stage_prediction_snapshot.source_event_id,
         created_at=stage_prediction_snapshot.created_at,
         updated_at=stage_prediction_snapshot.updated_at,
+    )
+
+
+def _serialize_debug_operation_plan(
+    operation_plan: OperationPlan,
+) -> PlantingPlanDebugOperationPlanResponse:
+    return PlantingPlanDebugOperationPlanResponse(
+        id=operation_plan.id,
+        farming_task_id=operation_plan.farming_task_id,
+        plan_type=operation_plan.plan_type,
+        status=operation_plan.status,
+        version=operation_plan.version,
+        algorithm_code=operation_plan.algorithm_code,
+        algorithm_version=operation_plan.algorithm_version,
+        operation_window_start=operation_plan.operation_window_start,
+        operation_window_end=operation_plan.operation_window_end,
+        execution_mode=operation_plan.execution_mode,
+        parameters=operation_plan.parameters,
+        prescription_map=operation_plan.prescription_map,
+        basis=operation_plan.basis,
+        source_event_id=operation_plan.source_event_id,
+        created_at=operation_plan.created_at,
+        updated_at=operation_plan.updated_at,
     )
