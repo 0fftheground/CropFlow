@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
 from app.core.constants import EVENT_TYPE_PLAN_CREATED, EVENT_TYPE_WEATHER_UPDATED
-from app.models import CalendarItem, CodeDict, EventRecord, PlantingPlan, ReviewRequest, RiceVariety, TaskIntent
+from app.models import CalendarItem, CodeDict, EventRecord, Farm, PlantingPlan, RiceControlWindowLevel1, ReviewRequest, RiceVariety, TaskIntent
 from app.orchestrator.core import PlanCalendarRefreshHandler
 from app.services.calendar_tasks import (
     MockWeatherProvider,
@@ -28,6 +28,31 @@ class FakeRiceVarietyRepository:
 
     def get(self, rice_variety_id: int) -> RiceVariety | None:
         return self.variety if self.variety.id == rice_variety_id else None
+
+
+@dataclass
+class FakeFarmRepository:
+    farm: Farm
+
+    def get(self, farm_id: int) -> Farm | None:
+        return self.farm if self.farm.id == farm_id else None
+
+
+@dataclass
+class FakeRiceControlWindowLevel1Repository:
+    record: RiceControlWindowLevel1 | None
+
+    def get_by_region_and_year(self, *, province: str, city: str, county: str, data_year: int) -> RiceControlWindowLevel1 | None:
+        if self.record is None:
+            return None
+        if (
+            self.record.province == province
+            and self.record.city == city
+            and self.record.county == county
+            and self.record.data_year == data_year
+        ):
+            return self.record
+        return None
 
 
 @dataclass
@@ -131,12 +156,13 @@ class FakeReviewRequestRepository:
         ]
 
 
-def _make_plan() -> PlantingPlan:
+def _make_plan(*, metadata_payload: dict | None = None) -> PlantingPlan:
     return PlantingPlan(
         id=1,
         plan_code="PLAN-001",
         plan_name="测试计划",
         farm_id=1,
+        year=2026,
         culti_type_code=5,
         planting_method_code=1,
         crop_name="水稻",
@@ -144,7 +170,7 @@ def _make_plan() -> PlantingPlan:
         variety_name="黄广农占",
         sowing_date=date(2026, 4, 10),
         task_generation_window_days=14,
-        metadata_payload={"province": "湖南省"},
+        metadata_payload=metadata_payload or {"province": "湖南省"},
     )
 
 
@@ -160,6 +186,27 @@ def _make_code_dicts() -> dict[int, CodeDict]:
     }
 
 
+def _make_farm() -> Farm:
+    return Farm(
+        id=1,
+        farm_name="测试农场",
+        province="湖南省",
+        city="益阳市",
+        district_county="桃江县",
+    )
+
+
+def _make_control_window() -> RiceControlWindowLevel1:
+    return RiceControlWindowLevel1(
+        id=1,
+        province="湖南省",
+        city="益阳市",
+        county="桃江县",
+        data_year=2026,
+        detail={"1": ["0509", "0513"]},
+    )
+
+
 def test_plan_refresh_creates_soil_treatment_review_and_pre_survey_calendar_item() -> None:
     calendar_repo = FakeCalendarItemRepository()
     event_repo = FakeEventRecordRepository()
@@ -167,8 +214,10 @@ def test_plan_refresh_creates_soil_treatment_review_and_pre_survey_calendar_item
     review_repo = FakeReviewRequestRepository()
     service = SurveyDateRecommendationService(
         planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
         rice_variety_repository=FakeRiceVarietyRepository(_make_variety()),
         code_dict_repository=FakeCodeDictRepository(_make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(_make_control_window()),
         calendar_item_repository=calendar_repo,
         event_record_repository=event_repo,
         weather_provider=MockWeatherProvider(),
@@ -214,8 +263,10 @@ def test_forecast_weather_update_does_not_refresh_calendar() -> None:
     review_repo = FakeReviewRequestRepository()
     service = SurveyDateRecommendationService(
         planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
         rice_variety_repository=FakeRiceVarietyRepository(_make_variety()),
         code_dict_repository=FakeCodeDictRepository(_make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(_make_control_window()),
         calendar_item_repository=calendar_repo,
         event_record_repository=event_repo,
         weather_provider=MockWeatherProvider(),
@@ -247,3 +298,65 @@ def test_forecast_weather_update_does_not_refresh_calendar() -> None:
     assert result.calendar_items == []
     assert result.task_intents == []
     assert result.review_requests == []
+
+
+def test_weather_update_with_pest_metadata_creates_sudden_disease_pest_calendar_item() -> None:
+    class TyphoonWeatherProvider(MockWeatherProvider):
+        def get_typhoon_alerts(self, planting_plan: PlantingPlan) -> list[dict[str, object]]:
+            return [{"eventType": "台风预警", "effective": "20260529080000"}]
+
+    calendar_repo = FakeCalendarItemRepository()
+    event_repo = FakeEventRecordRepository()
+    task_intent_repo = FakeTaskIntentRepository()
+    review_repo = FakeReviewRequestRepository()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(
+            _make_plan(
+                metadata_payload={
+                    "province": "湖南省",
+                    "pestDisease": {
+                        "growth_stage": {
+                            "tillering_date": "2026-04-20",
+                            "pokou_date": "2026-06-10",
+                            "heading_date": "2026-06-18",
+                            "maturity_date": "2026-07-20",
+                        },
+                    },
+                },
+            ),
+        ),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(_make_variety()),
+        code_dict_repository=FakeCodeDictRepository(_make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(_make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=TyphoonWeatherProvider(),
+        diagnosis_client=MockWeedDiagnosisClient(),
+    )
+    handler = PlanCalendarRefreshHandler(
+        survey_date_recommendation_service=service,
+        event_record_repository=event_repo,
+        task_intent_repository=task_intent_repo,
+        review_request_repository=review_repo,
+    )
+
+    result = handler.handle(
+        EventRecord(
+            planting_plan_id=1,
+            event_type=EVENT_TYPE_WEATHER_UPDATED,
+            event_category="job",
+            event_source="background_job",
+            source_system="cropflow",
+            payload={"weatherDate": "2026-05-29", "sourceType": "observed"},
+            occurred_at=datetime.now(UTC).replace(tzinfo=None),
+            processing_status="received",
+            idempotency_key="weather-updated:observed:1",
+            created_by_type="system",
+            created_by_id="DailyWeatherCheckJob",
+        ),
+    )
+
+    task_subtypes = [item.task_subtype for item in result.calendar_items]
+    assert "plant_protection.regular_disease_pest_survey" in task_subtypes
+    assert "plant_protection.sudden_disease_pest_survey" in task_subtypes

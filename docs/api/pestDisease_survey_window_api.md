@@ -22,11 +22,21 @@
 
 ### 2.2 请求参数
 
+CropFlow 内部调用本接口时，`level1_of_year` 不再要求上游业务方手工传入种植计划 metadata。
+服务端会先根据种植计划的 `farm_id` 查农场，读取 `province`、`city`、`district_county`，再结合种植计划年份匹配表 `pp_rice_control_window_level_1` 的 `detail` 字段，并把该结果作为 `level1_of_year` 传给算法接口。
+
+匹配键如下：
+
+- `province` -> 农场 `province`
+- `city` -> 农场 `city`
+- `county` -> 农场 `district_county`
+- `data_year` -> 种植计划 `year`；若为空则回退到 `sowing_date.year`
+
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `cultivation_type` | string | 是 | 种植制度，例如 `早稻`、`中稻`、`晚稻`、`再生稻`。 |
 | `growth_stage` | object | 是 | 生育期信息。 |
-| `level1_of_year` | object | 是 | 病虫全年一级理论防治日期。 |
+| `level1_of_year` | object | 是 | 病虫全年一级理论防治日期。对算法接口是必填；在 CropFlow 内部由服务端查表组装。 |
 
 #### `growth_stage`
 
@@ -342,3 +352,26 @@
 - 调用方负责保存常规调查初始化接口输出的 `regular_plans`，并在每日更新时传回。
 - 接口不访问数据库、不请求气象接口。
 - 气象数据由 `weather_data` 和 `typhoon_data.hourly_weather_72h` 直接传入，农场坐标不作为生产接口入参。
+
+## 5. CropFlow 当前落库方式
+
+CropFlow 当前把 `daily-update-survey` 的返回映射为调查类 `CalendarItem`，规则如下：
+
+- `new_emergency`
+  - 新增或更新 `plant_protection.sudden_disease_pest_survey`
+  - 调查窗口取 `survey_window`
+  - `generation_condition` 保存 `status / source / targets / exclude_reasons / raw_result / raw_response`
+
+- `merged_into_regular`
+  - 不新建突发调查 `CalendarItem`
+  - 把合并结果回写到匹配窗口的 `plant_protection.regular_disease_pest_survey`
+  - 如存在已激活的旧突发调查 `CalendarItem`，标记为 `invalidated`
+
+- `no_new_event`
+  - 不新建调查 `CalendarItem`
+  - 如存在已激活的旧突发调查 `CalendarItem`，标记为 `invalidated`
+
+补充说明：
+
+- 当前 `survey_window` 命中已有常规调查窗口时，后端优先回写已有 `regular_disease_pest_survey`。
+- `daily-update-survey` 运行结果同时写 `CalendarItemUpdated` 事件，便于联调排查。

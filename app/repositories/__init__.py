@@ -1,6 +1,7 @@
 from app.repositories.core import (
     CalendarItemRepository,
     CodeDictRepository,
+    CropStageDictRepository,
     CropStageStateRepository,
     CropThermalTimeStateRepository,
     EventRecordRepository,
@@ -12,6 +13,7 @@ from app.repositories.core import (
     OperationPlanRepository,
     PlantingPlanRepository,
     PlantingPlanFieldRelationRepository,
+    RiceControlWindowLevel1Repository,
     RiceVarietyRepository,
     Repository,
     ReviewRequestRepository,
@@ -23,6 +25,7 @@ from app.repositories.core import (
 __all__ = [
     "CalendarItemRepository",
     "CodeDictRepository",
+    "CropStageDictRepository",
     "CropStageStateRepository",
     "CropThermalTimeStateRepository",
     "EventRecordRepository",
@@ -34,6 +37,7 @@ __all__ = [
     "OperationPlanRepository",
     "PlantingPlanRepository",
     "PlantingPlanFieldRelationRepository",
+    "RiceControlWindowLevel1Repository",
     "RiceVarietyRepository",
     "Repository",
     "ReviewRequestRepository",

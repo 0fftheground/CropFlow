@@ -35,6 +35,7 @@ from app.core.constants import (
     SURVEY_DATE_RECOMMENDATION_JOB,
     TASK_CATEGORY_PLANT_PROTECTION,
     TASK_DUE_CHECK_JOB,
+    TASK_SUBTYPE_DISEASE_PEST_CONTROL,
     TASK_INTENT_STATUS_NO_ACTION,
     TASK_INTENT_STATUS_PENDING,
     TASK_SUBTYPE_CONTROL_EFFECT_SURVEY,
@@ -47,6 +48,7 @@ from app.core.constants import (
     TASK_SUBTYPE_STEM_LEAF_WEED_CONTROL,
     TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
     TASK_SUBTYPE_STEM_LEAF_WEED_RECONTROL_PRE_SURVEY,
+    TASK_SUBTYPE_SUDDEN_DISEASE_PEST_SURVEY,
 )
 from app.core.logging import summarize_for_log
 from app.models import (
@@ -76,6 +78,7 @@ from app.services.calendar_tasks import (
     WeatherProvider,
     WeedDiagnosisClient,
 )
+from app.services.pest_disease_control import PestDiseaseControlPlanningService
 from app.services.stage_management import StageManagementService
 
 logger = logging.getLogger(__name__)
@@ -232,6 +235,27 @@ class PlanCalendarRefreshHandler:
             )
             logger.warning(
                 "Failed to refresh regular pest disease survey recommendations for planting plan %s.",
+                event_record.planting_plan_id,
+                exc_info=True,
+            )
+        try:
+            daily_update_items = self.survey_date_recommendation_service.recommend_pest_disease_daily_update_surveys(
+                event_record.planting_plan_id,
+                as_of_date=(
+                    _parse_payload_date(event_record.payload, "weatherDate")
+                    if event_record.event_type == EVENT_TYPE_WEATHER_UPDATED
+                    else None
+                ),
+            )
+            calendar_items.extend(daily_update_items)
+        except Exception as exc:
+            self._record_calendar_refresh_failure(
+                event_record.planting_plan_id,
+                TASK_SUBTYPE_SUDDEN_DISEASE_PEST_SURVEY,
+                exc,
+            )
+            logger.warning(
+                "Failed to refresh pest disease daily update survey recommendations for planting plan %s.",
                 event_record.planting_plan_id,
                 exc_info=True,
             )
@@ -492,8 +516,13 @@ class StageRefreshHandler:
                 current_stage_code=actual_result.crop_stage_state.current_stage_code,
                 effective_date=actual_result.crop_stage_state.effective_date,
                 stage_changed=actual_result.stage_changed,
+                source_snapshot_id=actual_result.snapshot.id,
             )
-            return OrchestratorResult(crop_stage_states=[actual_result.crop_stage_state])
+            return OrchestratorResult(
+                crop_stage_states=[actual_result.crop_stage_state],
+                crop_thermal_time_states=[actual_result.crop_thermal_time_state],
+                stage_prediction_snapshots=[actual_result.snapshot],
+            )
         else:
             refresh_result = self.stage_management_service.refresh_prediction(
                 event_record.planting_plan_id,
@@ -685,6 +714,7 @@ class SurveyResultRecordedHandler:
         weather_provider: WeatherProvider,
         diagnosis_client: WeedDiagnosisClient,
         context_resolver: PlantProtectionPlanContextResolver,
+        pest_disease_control_planning_service: PestDiseaseControlPlanningService,
     ) -> None:
         self.planting_plan_repository = planting_plan_repository
         self.farming_task_repository = farming_task_repository
@@ -695,6 +725,7 @@ class SurveyResultRecordedHandler:
         self.weather_provider = weather_provider
         self.diagnosis_client = diagnosis_client
         self.context_resolver = context_resolver
+        self.pest_disease_control_planning_service = pest_disease_control_planning_service
 
     def handle(self, event_record: EventRecord) -> OrchestratorResult:
         event = _SurveyResultRecorded.from_event_record(event_record)
@@ -710,7 +741,186 @@ class SurveyResultRecordedHandler:
             return self._handle_control_effect_survey(event, farming_task, event_record)
         if event.task_subtype == TASK_SUBTYPE_SERVICE_EFFECT_EVALUATION:
             return self._handle_service_effect_evaluation(event, farming_task, event_record)
+        if event.task_subtype in {TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY, TASK_SUBTYPE_SUDDEN_DISEASE_PEST_SURVEY}:
+            return self._handle_pest_disease_survey(event, farming_task, event_record)
         return OrchestratorResult()
+
+    def _handle_pest_disease_survey(
+        self,
+        event: "_SurveyResultRecorded",
+        farming_task: FarmingTask,
+        event_record: EventRecord,
+    ) -> OrchestratorResult:
+        planning_result = self.pest_disease_control_planning_service.generate_theory_plan_for_survey(
+            farming_task=farming_task,
+            survey_data=event.result_payload,
+        )
+        theory_result = planning_result.theory_result
+        adjusted_result = planning_result.adjusted_result
+        if not theory_result.rounds:
+            task_intent = self._create_no_action_intent(
+                event=event,
+                event_record=event_record,
+                task_subtype=TASK_SUBTYPE_DISEASE_PEST_CONTROL,
+                algorithm_code="pest_disease.generate_theory_control_plan",
+                branch_type=f"{planning_result.branch_type}_no_action",
+                reason="病虫调查后理论防治结果为无需防治。",
+                raw_response=theory_result.raw_response,
+            )
+            return OrchestratorResult(task_intents=[task_intent])
+        merge_candidate = self._find_pest_disease_merge_candidate(
+            event.planting_plan_id,
+            current_control_type=planning_result.control_type,
+        )
+        if merge_candidate is not None:
+            merge_result = self._build_pest_disease_merge_result(
+                current_planning_result=planning_result,
+                merge_candidate=merge_candidate,
+                planting_plan_id=event.planting_plan_id,
+            )
+            stale_task_intents, stale_review_requests = self._close_existing_pest_disease_control_recommendations(
+                event.planting_plan_id,
+            )
+            if not merge_result.merged_result.events:
+                task_intent = self._create_no_action_intent(
+                    event=event,
+                    event_record=event_record,
+                    task_subtype=TASK_SUBTYPE_DISEASE_PEST_CONTROL,
+                    algorithm_code="pest_disease.merge_control_plan",
+                    branch_type="disease_pest_merged_control_no_action",
+                    reason="病虫调查后常规与突发合并结果为无可执行防治日期。",
+                    raw_response={
+                        "regularTheory": merge_result.regular_theory,
+                        "emergencyTheory": merge_result.emergency_theory,
+                        "mergeRange": merge_result.merge_range_result.raw_response,
+                        "merge": merge_result.merged_result.raw_response,
+                    },
+                )
+                return OrchestratorResult(
+                    task_intents=[*stale_task_intents, task_intent],
+                    review_requests=stale_review_requests,
+                )
+
+            operation_window = _format_date_range(_resolve_merged_control_operation_window(merge_result.merged_result))
+            proposed_plan = {
+                "planType": "plant_protection_control",
+                "controlType": "merged" if merge_result.merged_result.merged else "regular_and_emergency",
+                "operationWindow": operation_window,
+                "targets": _merge_merged_event_targets(merge_result.merged_result),
+                "events": [_serialize_merged_event_payload(item) for item in merge_result.merged_result.events],
+                "regularTheoryPlan": dict(merge_result.regular_theory),
+                "emergencyTheoryPlan": dict(merge_result.emergency_theory),
+                "mergeRequiredRange": _format_date_range(
+                    merge_result.merge_range_result.spray_suitability_required_range,
+                ),
+                "spraySuitabilityData": [dict(item) for item in merge_result.spray_suitability_data],
+                "mergedPlan": dict(merge_result.merged_result.raw_data),
+                "controlPlan": {
+                    "regularTheory": dict(merge_result.regular_theory),
+                    "emergencyTheory": dict(merge_result.emergency_theory),
+                    "events": [_serialize_merged_event_payload(item) for item in merge_result.merged_result.events],
+                },
+                "basis": (
+                    f"{event.task_subtype} survey result triggered merged disease pest control planning "
+                    "with existing opposite control recommendation."
+                ),
+            }
+            task_intent = self._create_task_intent(
+                event=event,
+                event_record=event_record,
+                task_subtype=TASK_SUBTYPE_DISEASE_PEST_CONTROL,
+                algorithm_code="pest_disease.merge_control_plan",
+                branch_type="disease_pest_merged_control",
+                proposed_task={
+                    "title": merge_result.title,
+                    "recommendedControlDate": operation_window,
+                },
+                proposed_plan=proposed_plan,
+                suggested_action=merge_result.suggested_action,
+                raw_response={
+                    "regularTheory": merge_result.regular_theory,
+                    "emergencyTheory": merge_result.emergency_theory,
+                    "mergeRange": merge_result.merge_range_result.raw_response,
+                    "merge": merge_result.merged_result.raw_response,
+                },
+            )
+            review_request = self._create_review_request(
+                task_intent,
+                review_type=merge_result.review_type,
+                title=merge_result.review_title,
+                description=merge_result.review_description,
+            )
+            return OrchestratorResult(
+                task_intents=[*stale_task_intents, task_intent],
+                review_requests=[*stale_review_requests, review_request],
+            )
+        if not adjusted_result.rounds:
+            task_intent = self._create_no_action_intent(
+                event=event,
+                event_record=event_record,
+                task_subtype=TASK_SUBTYPE_DISEASE_PEST_CONTROL,
+                algorithm_code="pest_disease.adjust_control_window",
+                branch_type=f"{planning_result.branch_type}_weather_no_action",
+                reason="病虫调查后气象调整结果为无可执行防治日期。",
+                raw_response=adjusted_result.raw_response,
+            )
+            return OrchestratorResult(task_intents=[task_intent])
+
+        operation_window = _format_date_range(_resolve_adjusted_control_operation_window(adjusted_result))
+        proposed_plan = {
+            "planType": "plant_protection_control",
+            "controlType": planning_result.control_type,
+            "controlMode": adjusted_result.control_mode,
+            "status": adjusted_result.status,
+            "operationWindow": operation_window,
+            "targets": _merge_adjusted_round_targets(adjusted_result),
+            "rounds": [_serialize_adjusted_round_payload(item) for item in adjusted_result.rounds],
+            "theoryPlan": dict(theory_result.raw_data),
+            "adjustedPlan": dict(adjusted_result.raw_data),
+            "spraySuitabilityRequiredRange": (
+                _format_date_range(theory_result.spray_suitability_required_range)
+                if theory_result.spray_suitability_required_range
+                else []
+            ),
+            "spraySuitabilityData": [dict(item) for item in planning_result.spray_suitability_data],
+            "weatherAdjust": dict(adjusted_result.weather_adjust),
+            "controlPlan": {
+                "rounds": [
+                    {
+                        "round": item.round,
+                        "targets": dict(theory_item.targets),
+                        "prescription": dict(theory_item.prescription),
+                    }
+                    for item, theory_item in zip(adjusted_result.rounds, theory_result.rounds, strict=False)
+                ],
+            },
+            "requestPayload": planning_result.request_payload,
+            "basis": f"{event.task_subtype} survey result triggered {planning_result.control_type} theory control planning.",
+        }
+        task_intent = self._create_task_intent(
+            event=event,
+            event_record=event_record,
+            task_subtype=planning_result.task_subtype,
+            algorithm_code="pest_disease.generate_theory_control_plan",
+            branch_type=planning_result.branch_type,
+            proposed_task={
+                "title": planning_result.title,
+                "recommendedControlDate": operation_window,
+            },
+            proposed_plan=proposed_plan,
+            suggested_action=planning_result.suggested_action,
+            raw_response={
+                "theory": theory_result.raw_response,
+                "adjust": adjusted_result.raw_response,
+            },
+        )
+        review_request = self._create_review_request(
+            task_intent,
+            review_type=planning_result.review_type,
+            title=planning_result.review_title,
+            description=planning_result.review_description,
+        )
+        return OrchestratorResult(task_intents=[task_intent], review_requests=[review_request])
 
     def _handle_pre_treatment_survey(
         self,
@@ -766,6 +976,72 @@ class SurveyResultRecordedHandler:
             description="药前调查结果达到防治条件，需审核后生成正式防治任务。",
         )
         return OrchestratorResult(task_intents=[task_intent], review_requests=[review_request])
+
+    def _find_pest_disease_merge_candidate(
+        self,
+        planting_plan_id: int,
+        *,
+        current_control_type: str,
+    ) -> TaskIntent | None:
+        opposite_control_type = "emergency" if current_control_type == "regular" else "regular"
+        for item in self.task_intent_repository.list_current_by_plan(planting_plan_id):
+            if item.task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
+                continue
+            proposed_plan = dict(item.rule_result.get("proposedPlan") or {})
+            if proposed_plan.get("controlType") != opposite_control_type:
+                continue
+            if not isinstance(proposed_plan.get("theoryPlan"), dict):
+                continue
+            return item
+        return None
+
+    def _build_pest_disease_merge_result(
+        self,
+        *,
+        current_planning_result,
+        merge_candidate: TaskIntent,
+        planting_plan_id: int,
+    ):
+        current_theory = dict(current_planning_result.theory_result.raw_data)
+        candidate_plan = dict(merge_candidate.rule_result.get("proposedPlan") or {})
+        candidate_theory = dict(candidate_plan.get("theoryPlan") or {})
+        if current_planning_result.control_type == "regular":
+            regular_theory = current_theory
+            emergency_theory = candidate_theory
+        else:
+            regular_theory = candidate_theory
+            emergency_theory = current_theory
+        return self.pest_disease_control_planning_service.merge_theory_plans(
+            planting_plan_id=planting_plan_id,
+            regular_theory=regular_theory,
+            emergency_theory=emergency_theory,
+        )
+
+    def _close_existing_pest_disease_control_recommendations(
+        self,
+        planting_plan_id: int,
+    ) -> tuple[list[TaskIntent], list[ReviewRequest]]:
+        closed_task_intents: list[TaskIntent] = []
+        closed_review_requests: list[ReviewRequest] = []
+        active_task_intents = [
+            item
+            for item in self.task_intent_repository.list_current_by_plan(planting_plan_id)
+            if item.task_subtype == TASK_SUBTYPE_DISEASE_PEST_CONTROL
+        ]
+        for item in active_task_intents:
+            item.status = TASK_INTENT_STATUS_REJECTED
+            item.no_action_reason = "Superseded by merged disease pest control recommendation."
+            closed_task_intents.append(item)
+        active_task_intent_ids = {int(item.id) for item in active_task_intents if item.id is not None}
+        for item in self.review_request_repository.list_current_by_plan(planting_plan_id):
+            if item.source_entity_type not in {"task_intent", "cf_task_intent"}:
+                continue
+            if item.source_entity_id not in active_task_intent_ids:
+                continue
+            item.status = "cancelled"
+            item.decision = None
+            closed_review_requests.append(item)
+        return (closed_task_intents, closed_review_requests)
 
     def _handle_rice_safety_survey(
         self,
@@ -1437,6 +1713,7 @@ def build_plan_orchestrator(
     weather_provider: WeatherProvider,
     diagnosis_client: WeedDiagnosisClient,
     context_resolver: PlantProtectionPlanContextResolver,
+    pest_disease_control_planning_service: PestDiseaseControlPlanningService,
 ) -> PlanOrchestrator:
     stage_refresh_handler = StageRefreshHandler(
         stage_management_service=stage_management_service,
@@ -1472,6 +1749,7 @@ def build_plan_orchestrator(
                 weather_provider=weather_provider,
                 diagnosis_client=diagnosis_client,
                 context_resolver=context_resolver,
+                pest_disease_control_planning_service=pest_disease_control_planning_service,
             ),
             EVENT_TYPE_REVIEW_REQUEST_RESOLVED: ReviewRequestResolvedHandler(
                 task_intent_repository=task_intent_repository,
@@ -1495,6 +1773,90 @@ def _parse_payload_date(payload: dict[str, Any], key: str) -> date:
     if isinstance(raw_value, str) and "-" in raw_value:
         return date.fromisoformat(raw_value)
     return datetime.strptime(str(raw_value), "%Y%m%d").date()
+
+
+def _resolve_theory_control_operation_window(theory_result) -> tuple[date, date]:
+    first_start = min(item.theory_window[0] for item in theory_result.rounds)
+    last_end = max(item.theory_window[1] for item in theory_result.rounds)
+    return (first_start, last_end)
+
+
+def _serialize_theory_round_payload(round_item) -> dict[str, Any]:
+    return {
+        "round": round_item.round,
+        "theoryWindow": _format_date_range(round_item.theory_window),
+        "targets": dict(round_item.targets),
+        "prescription": dict(round_item.prescription),
+    }
+
+
+def _merge_theory_round_targets(theory_result) -> dict[str, Any]:
+    merged_targets: dict[str, Any] = {}
+    for round_item in theory_result.rounds:
+        merged_targets.update(dict(round_item.targets))
+    return merged_targets
+
+
+def _resolve_adjusted_control_operation_window(adjusted_result) -> tuple[date, date]:
+    windows = [item.final_window for item in adjusted_result.rounds if item.final_window is not None]
+    if not windows:
+        raise ValueError("Adjusted control result does not contain final_window.")
+    first_start = min(item[0] for item in windows)
+    last_end = max(item[1] for item in windows)
+    return (first_start, last_end)
+
+
+def _serialize_adjusted_round_payload(round_item) -> dict[str, Any]:
+    payload = {
+        "round": round_item.round,
+        "theoryWindow": _format_date_range(round_item.theory_window),
+        "targets": dict(round_item.targets),
+        "suitabilityDates": dict(round_item.suitability_dates),
+        "weatherAdjustReason": round_item.weather_adjust_reason,
+    }
+    if round_item.final_window is not None:
+        payload["finalWindow"] = _format_date_range(round_item.final_window)
+    else:
+        payload["finalWindow"] = []
+    return payload
+
+
+def _merge_adjusted_round_targets(adjusted_result) -> dict[str, Any]:
+    merged_targets: dict[str, Any] = {}
+    for round_item in adjusted_result.rounds:
+        merged_targets.update(dict(round_item.targets))
+    return merged_targets
+
+
+def _resolve_merged_control_operation_window(merged_result) -> tuple[date, date]:
+    windows = [item.final_window for item in merged_result.events if item.final_window is not None]
+    if not windows:
+        raise ValueError("Merged control result does not contain final_window.")
+    first_start = min(item[0] for item in windows)
+    last_end = max(item[1] for item in windows)
+    return (first_start, last_end)
+
+
+def _serialize_merged_event_payload(event_item) -> dict[str, Any]:
+    payload = {
+        "type": event_item.event_type,
+        "round": event_item.round,
+        "theoryWindow": _format_date_range(event_item.theory_window),
+        "targets": dict(event_item.targets),
+        "suitabilityDates": dict(event_item.suitability_dates),
+    }
+    if event_item.final_window is not None:
+        payload["finalWindow"] = _format_date_range(event_item.final_window)
+    else:
+        payload["finalWindow"] = []
+    return payload
+
+
+def _merge_merged_event_targets(merged_result) -> dict[str, Any]:
+    merged_targets: dict[str, Any] = {}
+    for event_item in merged_result.events:
+        merged_targets.update(dict(event_item.targets))
+    return merged_targets
 
 
 def _parse_required_payload_bool(payload: dict[str, Any], *keys: str) -> bool:

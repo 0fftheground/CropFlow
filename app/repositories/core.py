@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.models import (
     CalendarItem,
     CodeDict,
+    CropStageDict,
     CropStageState,
     CropThermalTimeState,
     EventRecord,
@@ -20,6 +21,7 @@ from app.models import (
     OperationPlan,
     PlantingPlan,
     PlantingPlanFieldRelation,
+    RiceControlWindowLevel1,
     RiceVariety,
     ReviewRequest,
     StagePredictionSnapshot,
@@ -83,6 +85,20 @@ class CodeDictRepository(Repository):
         return list(self.session.scalars(stmt))
 
 
+class CropStageDictRepository(Repository):
+    def get_by_stage_code(self, stage_code: str) -> CropStageDict | None:
+        stmt = select(CropStageDict).where(CropStageDict.stage_code == stage_code)
+        return self.session.scalar(stmt)
+
+    def list_active(self) -> list[CropStageDict]:
+        stmt = (
+            select(CropStageDict)
+            .where(CropStageDict.is_active.is_(True))
+            .order_by(CropStageDict.display_order.asc(), CropStageDict.id.asc())
+        )
+        return list(self.session.scalars(stmt))
+
+
 class RiceVarietyRepository(Repository):
     def get(self, rice_variety_id: int) -> RiceVariety | None:
         return self.session.get(RiceVariety, rice_variety_id)
@@ -93,6 +109,27 @@ class RiceVarietyRepository(Repository):
             stmt = stmt.where(RiceVariety.name.ilike(f"%{query.strip()}%"))
         stmt = stmt.order_by(RiceVariety.name.asc()).limit(limit)
         return list(self.session.scalars(stmt))
+
+
+class RiceControlWindowLevel1Repository(Repository):
+    def get_by_region_and_year(
+        self,
+        *,
+        province: str,
+        city: str,
+        county: str,
+        data_year: int,
+    ) -> RiceControlWindowLevel1 | None:
+        stmt = (
+            select(RiceControlWindowLevel1)
+            .where(RiceControlWindowLevel1.province == province)
+            .where(RiceControlWindowLevel1.city == city)
+            .where(RiceControlWindowLevel1.county == county)
+            .where(RiceControlWindowLevel1.data_year == data_year)
+            .order_by(RiceControlWindowLevel1.updated_at.desc(), RiceControlWindowLevel1.id.desc())
+            .limit(1)
+        )
+        return self.session.scalar(stmt)
 
 
 class FieldRepository(Repository):

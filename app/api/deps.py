@@ -11,6 +11,7 @@ from app.orchestrator import PlanOrchestrator, build_plan_orchestrator
 from app.repositories import (
     CalendarItemRepository,
     CodeDictRepository,
+    CropStageDictRepository,
     CropStageStateRepository,
     CropThermalTimeStateRepository,
     EventRecordRepository,
@@ -22,6 +23,7 @@ from app.repositories import (
     OperationPlanRepository,
     PlantingPlanFieldRelationRepository,
     PlantingPlanRepository,
+    RiceControlWindowLevel1Repository,
     RiceVarietyRepository,
     ReviewRequestRepository,
     StagePredictionSnapshotRepository,
@@ -32,14 +34,17 @@ from app.services import (
     FarmQueryService,
     FarmService,
     FarmingTaskQueryService,
+    HttpPestDiseaseControlClient,
     HttpPestDiseaseSurveyWindowClient,
     HttpStagePredictionClient,
     HttpWeatherProvider,
     HttpWeedDiagnosisClient,
+    MockPestDiseaseControlClient,
     MockPestDiseaseSurveyWindowClient,
     MockStagePredictionClient,
     MockWeatherProvider,
     MockWeedDiagnosisClient,
+    PestDiseaseControlPlanningService,
     PlantingPlanQueryService,
     PlantingPlanService,
     PlantProtectionPlanContextResolver,
@@ -88,8 +93,10 @@ def build_survey_date_recommendation_service(
 
     return SurveyDateRecommendationService(
         planting_plan_repository=PlantingPlanRepository(db),
+        farm_repository=FarmRepository(db),
         rice_variety_repository=RiceVarietyRepository(db),
         code_dict_repository=CodeDictRepository(db),
+        rice_control_window_level1_repository=RiceControlWindowLevel1Repository(db),
         calendar_item_repository=CalendarItemRepository(db),
         event_record_repository=EventRecordRepository(db),
         weather_provider=build_weather_provider(db, settings),
@@ -114,11 +121,13 @@ def build_stage_management_service(
     return StageManagementService(
         planting_plan_repository=PlantingPlanRepository(db),
         farm_repository=FarmRepository(db),
+        rice_variety_repository=RiceVarietyRepository(db),
         stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(db),
         crop_stage_state_repository=CropStageStateRepository(db),
         crop_thermal_time_state_repository=CropThermalTimeStateRepository(db),
         stage_prediction_client=stage_prediction_client,
         weather_provider=weather_provider,
+        crop_stage_dict_repository=CropStageDictRepository(db),
     )
 
 
@@ -141,10 +150,21 @@ def build_cropflow_plan_orchestrator(
         if settings.pest_disease_survey_base_url
         else MockPestDiseaseSurveyWindowClient()
     )
+    pest_disease_control_client = (
+        HttpPestDiseaseControlClient(settings.pest_disease_survey_base_url)
+        if settings.pest_disease_survey_base_url
+        else MockPestDiseaseControlClient()
+    )
+    context_resolver = PlantProtectionPlanContextResolver(
+        code_dict_repository=CodeDictRepository(db),
+        rice_variety_repository=RiceVarietyRepository(db),
+    )
     survey_date_service = SurveyDateRecommendationService(
         planting_plan_repository=PlantingPlanRepository(db),
+        farm_repository=FarmRepository(db),
         rice_variety_repository=RiceVarietyRepository(db),
         code_dict_repository=CodeDictRepository(db),
+        rice_control_window_level1_repository=RiceControlWindowLevel1Repository(db),
         calendar_item_repository=CalendarItemRepository(db),
         event_record_repository=EventRecordRepository(db),
         weather_provider=weather_provider,
@@ -153,6 +173,17 @@ def build_cropflow_plan_orchestrator(
         stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(db),
     )
     stage_management_service = build_stage_management_service(db, settings, weather_provider=weather_provider)
+    pest_disease_control_planning_service = PestDiseaseControlPlanningService(
+        planting_plan_repository=PlantingPlanRepository(db),
+        farm_repository=FarmRepository(db),
+        rice_control_window_level1_repository=RiceControlWindowLevel1Repository(db),
+        stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(db),
+        calendar_item_repository=CalendarItemRepository(db),
+        operation_plan_repository=OperationPlanRepository(db),
+        context_resolver=context_resolver,
+        weather_provider=weather_provider,
+        control_client=pest_disease_control_client,
+    )
     return build_plan_orchestrator(
         planting_plan_repository=PlantingPlanRepository(db),
         calendar_item_repository=CalendarItemRepository(db),
@@ -165,10 +196,8 @@ def build_cropflow_plan_orchestrator(
         survey_date_recommendation_service=survey_date_service,
         weather_provider=weather_provider,
         diagnosis_client=diagnosis_client,
-        context_resolver=PlantProtectionPlanContextResolver(
-            code_dict_repository=CodeDictRepository(db),
-            rice_variety_repository=RiceVarietyRepository(db),
-        ),
+        context_resolver=context_resolver,
+        pest_disease_control_planning_service=pest_disease_control_planning_service,
     )
 
 

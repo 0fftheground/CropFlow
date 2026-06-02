@@ -82,6 +82,16 @@ class FakeStageManagementService:
             },
         )
         return ActualStageRecordResult(
+            snapshot=StagePredictionSnapshot(
+                id=11,
+                planting_plan_id=planting_plan_id,
+                prediction_version=3,
+                prediction_source="manual_adjustment",
+                algorithm_code="stage_prediction_algorithm",
+                input_payload={},
+                stage_timeline={"stages": [], "raw_stage_points": []},
+                thermal_thresholds={},
+            ),
             crop_stage_state=CropStageState(
                 planting_plan_id=planting_plan_id,
                 current_stage_code=stage_code,
@@ -89,6 +99,10 @@ class FakeStageManagementService:
                 stage_source="manual",
                 effective_date=effective_date,
                 version=3,
+            ),
+            crop_thermal_time_state=CropThermalTimeState(
+                planting_plan_id=planting_plan_id,
+                accumulated_thermal_time=Decimal("900"),
             ),
             previous_stage_code="tillering",
             stage_changed=True,
@@ -164,3 +178,4 @@ def test_actual_stage_recorded_updates_stage_and_records_stage_changed_event() -
     assert event_repository.records[0].event_type == EVENT_TYPE_STAGE_CHANGED
     assert event_repository.records[0].payload["previousStageCode"] == "tillering"
     assert event_repository.records[0].payload["currentStageCode"] == "heading"
+    assert event_repository.records[0].payload["sourceSnapshotId"] == 11

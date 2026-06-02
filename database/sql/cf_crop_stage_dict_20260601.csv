@@ -1,0 +1,16 @@
+"id","stage_code","stage_name","season_scope","business_stage_code","display_order","is_active"
+1,"BBCH13","三叶一心","main","","1",true
+2,"BBCH21","分蘖始期","main","tillering","2",true
+3,"BBCH28","有效分蘖终止期","main","","3",true
+4,"BBCH41","幼穗分化1期","main","","4",true
+5,"BBCH42","幼穗分化2期","main","","5",true
+6,"BBCH44","幼穗分化4期","main","","6",true
+7,"BBCH45","孕穗期","main","","7",true
+8,"BBCH50","破口期","main","pokou","8",true
+9,"BBCH51","始穗期","main","","9",true
+10,"BBCH55","抽穗期","main","","10",true
+11,"BBCH58","齐穗期","main","heading","11",true
+12,"BBCH89","成熟期","main","maturity","12",true
+13,"Z_BBCH51","再生季始穗期","ratoon","","13",true
+14,"Z_BBCH58","再生季齐穗期","ratoon","","14",true
+15,"Z_BBCH89","再生季成熟期","ratoon","","15",true

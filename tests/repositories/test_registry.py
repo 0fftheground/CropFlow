@@ -8,6 +8,7 @@ from app.repositories import ReviewRequestRepository
 def test_core_models_registered_in_metadata() -> None:
     expected_tables = {
         "cf_code_dict",
+        "cf_crop_stage_dict",
         "cf_field",
         "cf_farm",
         "cf_planting_plan",
@@ -34,7 +35,7 @@ def test_metadata_can_sort_tables() -> None:
     with pytest.warns(SAWarning, match="unresolvable cycles"):
         sorted_tables = Base.metadata.sorted_tables
 
-    assert len(sorted_tables) >= 18
+    assert len(sorted_tables) >= 19
 
 
 def test_review_request_source_entity_mapping_covers_core_entities() -> None:

@@ -233,8 +233,8 @@ Content-Type: application/json
 |---|---|---|
 | `id` | `int` | 主键 |
 | `planting_plan_id` | `int` | 计划 id |
-| `current_stage_code` | `string` | 当前业务阶段编码 |
-| `current_stage_name` | `string` | 当前业务阶段名称 |
+| `current_stage_code` | `string` | 当前阶段编码；预测态通常为业务阶段，人工录入时也可能返回 raw stage code |
+| `current_stage_name` | `string` | 当前阶段名称 |
 | `stage_source` | `string` | `predicted / manual` |
 | `effective_date` | `date` | 当前阶段生效日期 |
 | `source_snapshot_id` | `int \| null` | 来源生育期快照 id |
@@ -251,7 +251,7 @@ Content-Type: application/json
 | `planting_plan_id` | `int` | 计划 id |
 | `accumulated_thermal_time` | `decimal` | 当前累计积温 |
 | `thermal_time_unit` | `string` | 当前固定为 `degree_day` |
-| `base_temperature` | `decimal \| null` | 基础温度 |
+| `base_temperature` | `decimal \| null` | 基础温度；当前按亚种动态取值：`粳(sub=1)=10`，其他 `=12` |
 | `start_date` | `date \| null` | 积温累计起点 |
 | `last_calculated_date` | `date \| null` | 最近一次基于 observed 累积到的日期 |
 | `threshold_snapshot_id` | `int \| null` | 阈值快照 id |
@@ -266,16 +266,24 @@ Content-Type: application/json
 | `id` | `int` | 主键 |
 | `planting_plan_id` | `int` | 计划 id |
 | `prediction_version` | `int` | 快照版本 |
-| `prediction_source` | `string` | `initial / plan_change / weather_update / runtime_refresh` |
+| `prediction_source` | `string` | `initial / plan_change / weather_update / runtime_refresh / manual_adjustment` |
 | `algorithm_code` | `string` | 算法编码 |
 | `algorithm_version` | `string \| null` | 算法版本 |
 | `generated_at` | `datetime \| null` | 生成时间 |
 | `input_payload` | `object` | 请求、重算摘要和审计信息 |
-| `stage_timeline` | `object` | 后端派生的生育期时间线 |
+| `stage_timeline` | `object` | 后端派生的生育期时间线，包含 `stages` 和 `raw_stage_points` |
 | `thermal_thresholds` | `object` | 积温阈值快照 |
 | `source_event_id` | `int \| null` | 来源事件 id |
 | `created_at` | `datetime \| null` | 创建时间 |
 | `updated_at` | `datetime \| null` | 更新时间 |
+
+`stage_timeline` 当前读取建议：
+
+1. `stage_timeline.stages`：给现有关键业务节点使用
+2. `stage_timeline.raw_stage_points`：给前端完整阶段展示使用
+3. `raw_stage_points[*].season_scope`：`main / ratoon`
+4. `raw_stage_points[*].source`：`predicted / manual`
+5. 当前 raw stage points 覆盖完整主季 `BBCH13/21/28/41/42/44/45/50/51/55/58/89`；再生稻才会额外出现 `Z_BBCH51/58/89`
 
 ---
 
@@ -556,7 +564,7 @@ Query 参数：
 
 当前前端使用建议：
 
-1. 展示阶段时间线优先读 `stage_timeline`
+1. 展示阶段时间线优先读 `stage_timeline.raw_stage_points`
 2. 需要排查 forecast/observed 回刷时，再读 `input_payload.recalculation_summary`
 3. 当前阶段显示优先读 `/stage-state`，不要直接自己从 `stage_timeline` 反推
 
@@ -574,12 +582,23 @@ Query 参数：
 | `note` | `string \| null` | no | 备注 |
 | `metadata` | `object` | no | 默认 `{}` |
 
-`stages` 当前建议使用的 key：
+`stages` 当前建议直接使用完整 raw stage code，例如：
 
-1. `BBCH21`
-2. `BBCH50`
-3. `BBCH58`
-4. `BBCH89`
+1. `BBCH13`
+2. `BBCH21`
+3. `BBCH28`
+4. `BBCH41`
+5. `BBCH42`
+6. `BBCH44`
+7. `BBCH45`
+8. `BBCH50`
+9. `BBCH51`
+10. `BBCH55`
+11. `BBCH58`
+12. `BBCH89`
+13. `Z_BBCH51`
+14. `Z_BBCH58`
+15. `Z_BBCH89`
 
 后端同时兼容：
 

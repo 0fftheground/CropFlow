@@ -18,7 +18,7 @@ from app.core.constants import (
     TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
     TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
 )
-from app.models import CalendarItem, CodeDict, EventRecord, FarmingTask, PlantingPlan, RiceVariety
+from app.models import CalendarItem, CodeDict, EventRecord, Farm, FarmingTask, PlantingPlan, RiceControlWindowLevel1, RiceVariety
 from app.models import StagePredictionSnapshot
 from app.orchestrator.core import PlanOrchestrator, TaskDueCheckTriggeredHandler
 from app.services.calendar_tasks import (
@@ -48,6 +48,31 @@ class FakeRiceVarietyRepository:
 
     def get(self, rice_variety_id: int) -> RiceVariety | None:
         return self.variety if self.variety.id == rice_variety_id else None
+
+
+@dataclass
+class FakeFarmRepository:
+    farm: Farm
+
+    def get(self, farm_id: int) -> Farm | None:
+        return self.farm if self.farm.id == farm_id else None
+
+
+@dataclass
+class FakeRiceControlWindowLevel1Repository:
+    record: RiceControlWindowLevel1 | None
+
+    def get_by_region_and_year(self, *, province: str, city: str, county: str, data_year: int) -> RiceControlWindowLevel1 | None:
+        if self.record is None:
+            return None
+        if (
+            self.record.province == province
+            and self.record.city == city
+            and self.record.county == county
+            and self.record.data_year == data_year
+        ):
+            return self.record
+        return None
 
 
 @dataclass
@@ -290,6 +315,7 @@ def make_plan() -> PlantingPlan:
         plan_code="PLAN-001",
         plan_name="Test Plan",
         farm_id=1,
+        year=2026,
         culti_type_code=5,
         planting_method_code=1,
         crop_name="水稻",
@@ -310,26 +336,45 @@ def make_plan_with_pest_disease_metadata() -> PlantingPlan:
                 "heading_date": "2026-06-18",
                 "maturity_date": "2026-07-20",
             },
-            "level1_of_year": {
-                "1": ["0509", "0513"],
-                "2": ["0607", "0611"],
-            },
         },
     }
     return plan
 
 
-def make_plan_with_pest_disease_level1_only() -> PlantingPlan:
+def make_plan_with_pest_disease_growth_stage_only() -> PlantingPlan:
     plan = make_plan()
     plan.metadata_payload = {
         "pestDisease": {
-            "level1_of_year": {
-                "1": ["0509", "0513"],
-                "2": ["0607", "0611"],
+            "growth_stage": {
+                "tillering_date": "2026-04-20",
+                "pokou_date": "2026-06-10",
+                "heading_date": "2026-06-18",
+                "maturity_date": "2026-07-20",
             },
         },
     }
     return plan
+
+
+def make_farm() -> Farm:
+    return Farm(
+        id=1,
+        farm_name="测试农场",
+        province="湖南省",
+        city="益阳市",
+        district_county="桃江县",
+    )
+
+
+def make_control_window() -> RiceControlWindowLevel1:
+    return RiceControlWindowLevel1(
+        id=1,
+        province="湖南省",
+        city="益阳市",
+        county="桃江县",
+        data_year=2026,
+        detail={"1": ["0509", "0513"], "2": ["0607", "0611"]},
+    )
 
 
 def make_variety() -> RiceVariety:
@@ -350,8 +395,10 @@ def test_recommend_pre_treatment_survey_creates_calendar_item_and_event() -> Non
     weather_provider = FakeWeatherProvider()
     service = SurveyDateRecommendationService(
         planting_plan_repository=FakePlantingPlanRepository(make_plan()),
+        farm_repository=None,
         rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
         code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=None,
         calendar_item_repository=calendar_repo,
         event_record_repository=event_repo,
         weather_provider=weather_provider,
@@ -370,8 +417,10 @@ def test_recommend_post_treatment_surveys_creates_two_traceable_calendar_items()
     calendar_repo = FakeCalendarItemRepository()
     service = SurveyDateRecommendationService(
         planting_plan_repository=FakePlantingPlanRepository(make_plan()),
+        farm_repository=None,
         rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
         code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=None,
         calendar_item_repository=calendar_repo,
         event_record_repository=FakeEventRecordRepository(),
         weather_provider=FakeWeatherProvider(),
@@ -397,8 +446,10 @@ def test_recommend_regular_disease_pest_surveys_creates_multiple_calendar_items(
     event_repo = FakeEventRecordRepository()
     service = SurveyDateRecommendationService(
         planting_plan_repository=FakePlantingPlanRepository(make_plan_with_pest_disease_metadata()),
+        farm_repository=FakeFarmRepository(make_farm()),
         rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
         code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(make_control_window()),
         calendar_item_repository=calendar_repo,
         event_record_repository=event_repo,
         weather_provider=FakeWeatherProvider(),
@@ -425,8 +476,10 @@ def test_recommend_regular_disease_pest_surveys_creates_multiple_calendar_items(
 def test_recommend_regular_disease_pest_surveys_skips_plan_without_metadata() -> None:
     service = SurveyDateRecommendationService(
         planting_plan_repository=FakePlantingPlanRepository(make_plan()),
+        farm_repository=FakeFarmRepository(make_farm()),
         rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
         code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(make_control_window()),
         calendar_item_repository=FakeCalendarItemRepository(),
         event_record_repository=FakeEventRecordRepository(),
         weather_provider=FakeWeatherProvider(),
@@ -484,9 +537,11 @@ def test_recommend_regular_disease_pest_surveys_uses_latest_stage_snapshot_growt
         ),
     )
     service = SurveyDateRecommendationService(
-        planting_plan_repository=FakePlantingPlanRepository(make_plan_with_pest_disease_level1_only()),
+        planting_plan_repository=FakePlantingPlanRepository(make_plan_with_pest_disease_growth_stage_only()),
+        farm_repository=FakeFarmRepository(make_farm()),
         rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
         code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(make_control_window()),
         calendar_item_repository=calendar_repo,
         event_record_repository=event_repo,
         weather_provider=FakeWeatherProvider(),

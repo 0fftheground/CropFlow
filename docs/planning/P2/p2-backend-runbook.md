@@ -3,7 +3,18 @@
 > 本文档用于在 P2 阶段重复执行本地后端、scheduler、seed、trace 和真实杂草算法联调。  
 > 范围只覆盖当前已实现的杂草防治样板后端。
 
-## 1. 启动前提
+## 1. 文档边界
+
+本文件继续保留 `P2` 阶段特有的联调、自检和 trace 说明。  
+仓库级的本地启动、migration、seed 和环境注意事项，统一收敛到：
+
+```text
+docs/development/local-dev-runbook.md
+```
+
+如只是要把本地后端或 scheduler 跑起来，优先看上面的仓库级 runbook。
+
+## 2. 启动前提
 
 需要具备：
 
@@ -18,44 +29,41 @@
 2. 否则读取 database/sql/db_config.json
 ```
 
-## 2. 本地启动
+## 3. 本地启动
 
 ### 2.1 启动 API
 
-```powershell
-scripts/start-dev.ps1 -Mode api -Port 8000
-```
+见：
 
-等价命令：
-
-```powershell
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```text
+docs/planning/local-dev-runbook.md
 ```
 
 ### 2.2 启动 scheduler
 
-```powershell
-scripts/start-dev.ps1 -Mode scheduler
+见：
+
+```text
+docs/planning/local-dev-runbook.md
 ```
 
-等价命令：
+## 4. 初始化本地数据
 
-```powershell
-python -m app.jobs.runner
-```
+如本地库还没建到最新结构，先执行：
 
-## 3. 初始化本地数据
+详见：
 
-```powershell
-.venv\Scripts\python.exe scripts/seed_local_dev_data.py
+```text
+docs/planning/local-dev-runbook.md
 ```
 
 用途：
 
 1. 准备联调所需基础数据
 2. 预置示例计划和地块
+3. 同步导入 `pp_rice_control_window_level_1.csv`，供病虫害常规调查初始化查表使用
 
-## 4. 后端自检
+## 5. 后端自检
 
 ### 4.1 健康检查
 
@@ -69,7 +77,7 @@ curl http://127.0.0.1:8000/api/health
 .venv\Scripts\python.exe -m pytest
 ```
 
-## 5. Trace 脚本
+## 6. Trace 脚本
 
 ### 5.1 杂草主链路 trace
 
@@ -95,7 +103,7 @@ curl http://127.0.0.1:8000/api/health
 2. 会验证土壤封闭建议、审核、正式任务、执行完成
 3. 结果写入 `project-context/session-log/e2e-traces/`
 
-## 6. 真实杂草算法联调
+## 7. 真实杂草算法联调
 
 ### 6.1 配置真实算法地址
 
@@ -119,7 +127,7 @@ $env:CROPFLOW_REAL_WEED_API_BASE_URL="http://47.99.129.235:3319"
 1. 默认不会跑真实外部测试
 2. 只有设置 `CROPFLOW_REAL_WEED_API_BASE_URL` 后才会执行
 
-## 7. 常见排查点
+## 8. 常见排查点
 
 ### 7.1 算法接口不可达
 

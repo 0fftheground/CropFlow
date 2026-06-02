@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
-from app.models import CalendarItem, CodeDict, PlantingPlan, RiceVariety
+from app.models import CalendarItem, CodeDict, Farm, PlantingPlan, RiceControlWindowLevel1, RiceVariety
 from app.services.calendar_tasks import (
     PestDiseaseDailyUpdateResult,
     SurveyDateRecommendationService,
@@ -27,6 +27,31 @@ class FakeRiceVarietyRepository:
 
 
 @dataclass
+class FakeFarmRepository:
+    farm: Farm
+
+    def get(self, farm_id: int) -> Farm | None:
+        return self.farm if self.farm.id == farm_id else None
+
+
+@dataclass
+class FakeRiceControlWindowLevel1Repository:
+    record: RiceControlWindowLevel1 | None
+
+    def get_by_region_and_year(self, *, province: str, city: str, county: str, data_year: int) -> RiceControlWindowLevel1 | None:
+        if self.record is None:
+            return None
+        if (
+            self.record.province == province
+            and self.record.city == city
+            and self.record.county == county
+            and self.record.data_year == data_year
+        ):
+            return self.record
+        return None
+
+
+@dataclass
 class FakeCodeDictRepository:
     items: dict[int, CodeDict]
 
@@ -37,6 +62,14 @@ class FakeCodeDictRepository:
 @dataclass
 class FakeCalendarItemRepository:
     items: list[CalendarItem] = field(default_factory=list)
+    next_id: int = 1
+
+    def add(self, item: CalendarItem) -> CalendarItem:
+        if item.id is None:
+            item.id = self.next_id
+            self.next_id += 1
+        self.items.append(item)
+        return item
 
     def list_active_by_plan_and_subtype(
         self,
@@ -141,12 +174,77 @@ class FakePestDiseaseClient:
         )
 
 
+class FakeMergedPestDiseaseClient(FakePestDiseaseClient):
+    def daily_update_surveys(
+        self,
+        *,
+        growth_stage: dict[str, str],
+        regular_plans: list[dict[str, object]],
+        weather_data: list[dict[str, object]],
+        typhoon_data: dict[str, object],
+        actual_control_date: date | None = None,
+    ) -> PestDiseaseDailyUpdateResult:
+        self.daily_update_calls.append(
+            {
+                "growth_stage": growth_stage,
+                "regular_plans": regular_plans,
+                "weather_data": weather_data,
+                "typhoon_data": typhoon_data,
+                "actual_control_date": actual_control_date,
+            },
+        )
+        return PestDiseaseDailyUpdateResult(
+            status="merged_into_regular",
+            message="突发调查已合并到常规调查",
+            survey_window=(date(2026, 5, 30), date(2026, 6, 1)),
+            spray_stage="封行药",
+            targets=["二化螟", "稻飞虱"],
+            exclude_reasons={},
+            source="merge",
+            raw_result={"mock": True},
+            raw_response={"code": 200},
+        )
+
+
+class FakeNoEventPestDiseaseClient(FakePestDiseaseClient):
+    def daily_update_surveys(
+        self,
+        *,
+        growth_stage: dict[str, str],
+        regular_plans: list[dict[str, object]],
+        weather_data: list[dict[str, object]],
+        typhoon_data: dict[str, object],
+        actual_control_date: date | None = None,
+    ) -> PestDiseaseDailyUpdateResult:
+        self.daily_update_calls.append(
+            {
+                "growth_stage": growth_stage,
+                "regular_plans": regular_plans,
+                "weather_data": weather_data,
+                "typhoon_data": typhoon_data,
+                "actual_control_date": actual_control_date,
+            },
+        )
+        return PestDiseaseDailyUpdateResult(
+            status="no_new_event",
+            message="当天无新增调查事件",
+            survey_window=None,
+            spray_stage=None,
+            targets=[],
+            exclude_reasons={},
+            source="none",
+            raw_result={"mock": True},
+            raw_response={"code": 200},
+        )
+
+
 def _make_plan() -> PlantingPlan:
     return PlantingPlan(
         id=1,
         plan_code="PLAN-001",
         plan_name="Test Plan",
         farm_id=1,
+        year=2026,
         culti_type_code=5,
         planting_method_code=1,
         crop_name="水稻",
@@ -162,9 +260,6 @@ def _make_plan() -> PlantingPlan:
                     "heading_date": "2026-06-18",
                     "maturity_date": "2026-07-20",
                 },
-                "level1_of_year": {
-                    "1": ["0509", "0513"],
-                },
             },
         },
     )
@@ -172,6 +267,27 @@ def _make_plan() -> PlantingPlan:
 
 def _make_variety() -> RiceVariety:
     return RiceVariety(id=1, name="黄广农占", sub_type_code=9)
+
+
+def _make_farm() -> Farm:
+    return Farm(
+        id=1,
+        farm_name="测试农场",
+        province="湖南省",
+        city="益阳市",
+        district_county="桃江县",
+    )
+
+
+def _make_control_window() -> RiceControlWindowLevel1:
+    return RiceControlWindowLevel1(
+        id=1,
+        province="湖南省",
+        city="益阳市",
+        county="桃江县",
+        data_year=2026,
+        detail={"1": ["0509", "0513"]},
+    )
 
 
 def _make_code_dicts() -> dict[int, CodeDict]:
@@ -212,8 +328,10 @@ def test_build_pest_disease_daily_update_payload_uses_farm_hourly_and_alert_sour
     weather_provider = FakeWeatherProvider()
     service = SurveyDateRecommendationService(
         planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
         rice_variety_repository=FakeRiceVarietyRepository(_make_variety()),
         code_dict_repository=FakeCodeDictRepository(_make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(_make_control_window()),
         calendar_item_repository=FakeCalendarItemRepository(items=[_make_regular_calendar_item()]),
         event_record_repository=FakeEventRecordRepository(),
         weather_provider=weather_provider,
@@ -255,8 +373,10 @@ def test_run_pest_disease_daily_update_calls_client_with_built_payload() -> None
     pest_disease_client = FakePestDiseaseClient()
     service = SurveyDateRecommendationService(
         planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
         rice_variety_repository=FakeRiceVarietyRepository(_make_variety()),
         code_dict_repository=FakeCodeDictRepository(_make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(_make_control_window()),
         calendar_item_repository=FakeCalendarItemRepository(items=[_make_regular_calendar_item()]),
         event_record_repository=FakeEventRecordRepository(),
         weather_provider=weather_provider,
@@ -275,3 +395,94 @@ def test_run_pest_disease_daily_update_calls_client_with_built_payload() -> None
     assert result.survey_window == (date(2026, 6, 1), date(2026, 6, 2))
     assert len(pest_disease_client.daily_update_calls) == 1
     assert pest_disease_client.daily_update_calls[0]["actual_control_date"] == date(2026, 5, 28)
+
+
+def test_recommend_pest_disease_daily_update_surveys_creates_sudden_calendar_item() -> None:
+    calendar_repo = FakeCalendarItemRepository(items=[_make_regular_calendar_item()], next_id=11)
+    event_repo = FakeEventRecordRepository()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(_make_variety()),
+        code_dict_repository=FakeCodeDictRepository(_make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(_make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=FakeWeatherProvider(),
+        diagnosis_client=FakeDiagnosisClient(),
+        pest_disease_client=FakePestDiseaseClient(),
+    )
+
+    items = service.recommend_pest_disease_daily_update_surveys(1, as_of_date=date(2026, 5, 29))
+
+    assert len(items) == 1
+    assert items[0].task_subtype == "plant_protection.sudden_disease_pest_survey"
+    assert items[0].suggested_start_date == date(2026, 6, 1)
+    assert items[0].suggested_end_date == date(2026, 6, 2)
+    assert items[0].generation_condition["status"] == "new_emergency"
+    assert items[0].generation_condition["surveyType"] == "sudden_disease_pest"
+    assert event_repo.items[-1].payload["status"] == "new_emergency"
+    assert event_repo.items[-1].payload["calendarItems"][0]["taskSubtype"] == "plant_protection.sudden_disease_pest_survey"
+
+
+def test_recommend_pest_disease_daily_update_surveys_merges_into_existing_regular_calendar_item() -> None:
+    calendar_repo = FakeCalendarItemRepository(items=[_make_regular_calendar_item()], next_id=11)
+    event_repo = FakeEventRecordRepository()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(_make_variety()),
+        code_dict_repository=FakeCodeDictRepository(_make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(_make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=FakeWeatherProvider(),
+        diagnosis_client=FakeDiagnosisClient(),
+        pest_disease_client=FakeMergedPestDiseaseClient(),
+    )
+
+    items = service.recommend_pest_disease_daily_update_surveys(1, as_of_date=date(2026, 5, 29))
+
+    assert len(items) == 1
+    assert items[0].id == 10
+    assert items[0].task_subtype == "plant_protection.regular_disease_pest_survey"
+    assert items[0].generation_condition["dailyUpdateStatus"] == "merged_into_regular"
+    assert items[0].generation_condition["dailyUpdateSource"] == "merge"
+    assert event_repo.items[-1].payload["status"] == "merged_into_regular"
+
+
+def test_recommend_pest_disease_daily_update_surveys_invalidates_stale_sudden_item_when_no_new_event() -> None:
+    stale_sudden_item = CalendarItem(
+        id=11,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype="plant_protection.sudden_disease_pest_survey",
+        title="突发病虫调查",
+        description="旧的突发调查",
+        suggested_start_date=date(2026, 5, 28),
+        suggested_end_date=date(2026, 5, 29),
+        status="active",
+        generation_condition={"status": "new_emergency"},
+        idempotency_key="calendar-item:1:stale-sudden",
+    )
+    calendar_repo = FakeCalendarItemRepository(items=[_make_regular_calendar_item(), stale_sudden_item], next_id=12)
+    event_repo = FakeEventRecordRepository()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(_make_variety()),
+        code_dict_repository=FakeCodeDictRepository(_make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(_make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=FakeWeatherProvider(),
+        diagnosis_client=FakeDiagnosisClient(),
+        pest_disease_client=FakeNoEventPestDiseaseClient(),
+    )
+
+    items = service.recommend_pest_disease_daily_update_surveys(1, as_of_date=date(2026, 5, 29))
+
+    assert items == []
+    assert stale_sudden_item.status == "invalidated"
+    assert stale_sudden_item.invalidated_reason == "pest_disease_daily_update_resolved"
+    assert event_repo.items[-1].payload["status"] == "no_new_event"

@@ -76,8 +76,10 @@ def test_complete_stem_leaf_weed_task_schedules_post_treatment_surveys() -> None
     variety_repo = FakeRiceVarietyRepository(make_variety())
     survey_date_service = SurveyDateRecommendationService(
         planting_plan_repository=plan_repo,
+        farm_repository=None,
         rice_variety_repository=variety_repo,
         code_dict_repository=code_repo,
+        rice_control_window_level1_repository=None,
         calendar_item_repository=calendar_repo,
         event_record_repository=event_repo,
         weather_provider=weather_provider,
@@ -106,6 +108,7 @@ def test_complete_stem_leaf_weed_task_schedules_post_treatment_surveys() -> None
         weather_provider=weather_provider,
         diagnosis_client=diagnosis_client,
         context_resolver=PlantProtectionPlanContextResolver(code_repo, variety_repo),
+        pest_disease_control_planning_service=object(),
     )
     service = TaskExecutionService(
         farming_task_repository=farming_task_repo,

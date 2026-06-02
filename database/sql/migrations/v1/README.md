@@ -19,6 +19,11 @@
 004_create_execution_tables.sql
 005_create_feedback_and_notification_tables.sql
 006_add_traceability_fks_and_indexes.sql
+007_add_farm_region_columns.sql
+008_add_farm_external_id.sql
+009_create_weather_snapshot.sql
+010_create_rice_control_window_level_1.sql
+011_create_crop_stage_dict.sql
 ```
 
 Deferred：

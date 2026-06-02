@@ -27,16 +27,27 @@ from app.core.constants import (
     TASK_SUBTYPE_RICE_SAFETY_SURVEY,
     TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
     TASK_SUBTYPE_SERVICE_EFFECT_EVALUATION,
+    TASK_SUBTYPE_SUDDEN_DISEASE_PEST_SURVEY,
     TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
     TASK_SUBTYPE_STEM_LEAF_WEED_RECONTROL_PRE_SURVEY,
 )
-from app.models import CalendarItem, EventRecord, Farm, FarmingTask, PlantingPlan, RiceVariety, WeatherSnapshot
+from app.models import (
+    CalendarItem,
+    EventRecord,
+    Farm,
+    FarmingTask,
+    PlantingPlan,
+    RiceControlWindowLevel1,
+    RiceVariety,
+    WeatherSnapshot,
+)
 from app.repositories import (
     CalendarItemRepository,
     CodeDictRepository,
     EventRecordRepository,
     FarmRepository,
     PlantingPlanRepository,
+    RiceControlWindowLevel1Repository,
     RiceVarietyRepository,
     StagePredictionSnapshotRepository,
     WeatherSnapshotRepository,
@@ -54,6 +65,13 @@ class WeatherProvider(Protocol):
         end_date: date,
         *,
         as_of_date: date | None = None,
+    ) -> list[dict[str, Any]]: ...
+
+    def get_spray_suitability_weather(
+        self,
+        planting_plan: PlantingPlan,
+        start_date: date,
+        end_date: date,
     ) -> list[dict[str, Any]]: ...
 
 
@@ -1018,6 +1036,45 @@ class HttpWeatherProvider:
         weather_data.sort(key=lambda item: str(item["DATE"]))
         return weather_data
 
+    def get_spray_suitability_weather(
+        self,
+        planting_plan: PlantingPlan,
+        start_date: date,
+        end_date: date,
+    ) -> list[dict[str, Any]]:
+        if start_date > end_date:
+            return []
+
+        farm = self._get_farm(planting_plan.farm_id)
+        external_farm_id = self._resolve_external_farm_id(farm)
+        response_data = self._post_json(
+            self.FORECAST_DAILY_PATH,
+            {
+                "farmID": external_farm_id,
+            },
+        )
+        weather_data: list[dict[str, Any]] = []
+        for row in response_data:
+            row_date = date.fromisoformat(str(row.get("datatime")))
+            if row_date < start_date or row_date > end_date:
+                continue
+            weather_data.append(
+                {
+                    "date": row_date.strftime("%Y%m%d"),
+                    "wins": _normalize_required_float(row.get("wins"), "wins", self.FORECAST_DAILY_PATH),
+                    "pre": _normalize_required_float(row.get("pre"), "pre", self.FORECAST_DAILY_PATH),
+                    "rh": _normalize_required_float(row.get("rh"), "rh", self.FORECAST_DAILY_PATH),
+                    "tAvg": _normalize_required_float(row.get("tAvg"), "tAvg", self.FORECAST_DAILY_PATH),
+                },
+            )
+        expected_dates = {item.strftime("%Y%m%d") for item in _build_closed_date_range(start_date, end_date)}
+        returned_dates = {str(item["date"]) for item in weather_data}
+        missing_dates = sorted(expected_dates - returned_dates)
+        if missing_dates:
+            raise ValueError(f"Spray suitability weather is missing rows for dates: {missing_dates}.")
+        weather_data.sort(key=lambda item: str(item["date"]))
+        return weather_data
+
     def get_hourly_weather_72h(
         self,
         planting_plan: PlantingPlan,
@@ -1410,6 +1467,27 @@ class MockWeatherProvider:
             current_date += timedelta(days=1)
         return weather_data
 
+    def get_spray_suitability_weather(
+        self,
+        planting_plan: PlantingPlan,
+        start_date: date,
+        end_date: date,
+    ) -> list[dict[str, Any]]:
+        weather_data: list[dict[str, Any]] = []
+        current_date = start_date
+        while current_date <= end_date:
+            weather_data.append(
+                {
+                    "date": current_date.strftime("%Y%m%d"),
+                    "wins": 2.0,
+                    "pre": 0.0,
+                    "rh": 70.0,
+                    "tAvg": 24.0,
+                },
+            )
+            current_date += timedelta(days=1)
+        return weather_data
+
     def get_hourly_weather_72h(
         self,
         planting_plan: PlantingPlan,
@@ -1484,8 +1562,10 @@ class SurveyDateRecommendationService:
     def __init__(
         self,
         planting_plan_repository: PlantingPlanRepository,
+        farm_repository: FarmRepository | None,
         rice_variety_repository: RiceVarietyRepository,
         code_dict_repository: CodeDictRepository,
+        rice_control_window_level1_repository: RiceControlWindowLevel1Repository | None,
         calendar_item_repository: CalendarItemRepository,
         event_record_repository: EventRecordRepository,
         weather_provider: WeatherProvider,
@@ -1494,8 +1574,10 @@ class SurveyDateRecommendationService:
         stage_prediction_snapshot_repository: StagePredictionSnapshotRepository | None = None,
     ) -> None:
         self.planting_plan_repository = planting_plan_repository
+        self.farm_repository = farm_repository
         self.rice_variety_repository = rice_variety_repository
         self.code_dict_repository = code_dict_repository
+        self.rice_control_window_level1_repository = rice_control_window_level1_repository
         self.calendar_item_repository = calendar_item_repository
         self.event_record_repository = event_record_repository
         self.weather_provider = weather_provider
@@ -1772,6 +1854,68 @@ class SurveyDateRecommendationService:
             actual_control_date=actual_control_date,
         )
 
+    def recommend_pest_disease_daily_update_surveys(
+        self,
+        planting_plan_id: int,
+        *,
+        as_of_date: date | None = None,
+        actual_control_date: date | None = None,
+    ) -> list[CalendarItem]:
+        planting_plan = self._get_plan(planting_plan_id)
+        effective_as_of_date = as_of_date or date.today()
+        result = self.run_pest_disease_daily_update(
+            planting_plan_id,
+            as_of_date=effective_as_of_date,
+            actual_control_date=actual_control_date,
+        )
+        if result is None:
+            return []
+
+        if result.status == "new_emergency":
+            calendar_item = self._upsert_sudden_disease_pest_survey(
+                planting_plan=planting_plan,
+                result=result,
+                as_of_date=effective_as_of_date,
+            )
+            self._invalidate_stale_sudden_disease_pest_surveys(
+                planting_plan.id,
+                active_idempotency_keys={calendar_item.idempotency_key},
+            )
+            self._record_pest_disease_daily_update_event(
+                planting_plan_id=planting_plan.id,
+                result=result,
+                as_of_date=effective_as_of_date,
+                calendar_items=[calendar_item],
+            )
+            return [calendar_item]
+
+        self._invalidate_stale_sudden_disease_pest_surveys(planting_plan.id, active_idempotency_keys=set())
+        if result.status == "merged_into_regular":
+            regular_item = self._upsert_merged_regular_disease_pest_survey(
+                planting_plan=planting_plan,
+                result=result,
+                as_of_date=effective_as_of_date,
+            )
+            calendar_items = [regular_item] if regular_item is not None else []
+            self._record_pest_disease_daily_update_event(
+                planting_plan_id=planting_plan.id,
+                result=result,
+                as_of_date=effective_as_of_date,
+                calendar_items=calendar_items,
+            )
+            return calendar_items
+
+        if result.status == "no_new_event":
+            self._record_pest_disease_daily_update_event(
+                planting_plan_id=planting_plan.id,
+                result=result,
+                as_of_date=effective_as_of_date,
+                calendar_items=[],
+            )
+            return []
+
+        raise ValueError(f"Unsupported pest disease daily update status: {result.status}.")
+
     def schedule_recontrol_pre_survey(
         self,
         planting_plan_id: int,
@@ -1865,15 +2009,14 @@ class SurveyDateRecommendationService:
             raise ValueError("Planting plan pest disease metadata must be an object.")
 
         growth_stage = pest_disease_payload.get("growth_stage") or metadata_payload.get("growth_stage")
-        level1_of_year = pest_disease_payload.get("level1_of_year") or metadata_payload.get("level1_of_year")
         if growth_stage is None and self.stage_prediction_snapshot_repository is not None:
             latest_snapshot = self.stage_prediction_snapshot_repository.get_latest_by_plan(planting_plan.id)
             if latest_snapshot is not None:
                 growth_stage = extract_pest_disease_growth_stage(latest_snapshot.stage_timeline)
-        if growth_stage is None and level1_of_year is None:
+        if growth_stage is None:
             return None
-        if not isinstance(growth_stage, dict) or not isinstance(level1_of_year, dict):
-            raise ValueError("Pest disease regular survey metadata requires growth_stage and level1_of_year objects.")
+        if not isinstance(growth_stage, dict):
+            raise ValueError("Pest disease regular survey metadata requires growth_stage object.")
 
         required_stage_fields = {"tillering_date", "pokou_date", "heading_date", "maturity_date"}
         missing_stage_fields = sorted(required_stage_fields - set(growth_stage))
@@ -1884,19 +2027,48 @@ class SurveyDateRecommendationService:
             key: _normalize_iso_date_string(growth_stage[key], key)
             for key in sorted(required_stage_fields)
         }
-        normalized_level1_of_year: dict[str, list[str]] = {}
-        for sequence, window in level1_of_year.items():
-            if not isinstance(window, list) or len(window) != 2:
-                raise ValueError(f"Pest disease level1_of_year[{sequence!r}] must be a two-item MMDD list.")
-            normalized_level1_of_year[str(sequence)] = [
-                _normalize_month_day_string(window[0], f"level1_of_year[{sequence!r}][0]"),
-                _normalize_month_day_string(window[1], f"level1_of_year[{sequence!r}][1]"),
-            ]
 
         return {
             "growth_stage": normalized_growth_stage,
-            "level1_of_year": normalized_level1_of_year,
+            "level1_of_year": self._resolve_pest_disease_level1_of_year(planting_plan),
         }
+
+    def _resolve_pest_disease_level1_of_year(self, planting_plan: PlantingPlan) -> dict[str, list[str]]:
+        if self.farm_repository is None:
+            raise RuntimeError("SurveyDateRecommendationService requires FarmRepository for pest disease control window lookup.")
+        if self.rice_control_window_level1_repository is None:
+            raise RuntimeError(
+                "SurveyDateRecommendationService requires RiceControlWindowLevel1Repository for pest disease control window lookup.",
+            )
+        farm = self.farm_repository.get(planting_plan.farm_id)
+        if farm is None:
+            raise ValueError(f"Farm {planting_plan.farm_id} does not exist.")
+
+        province = str(farm.province or "").strip()
+        city = str(farm.city or "").strip()
+        county = str(farm.district_county or "").strip()
+        missing_fields = [
+            field_name
+            for field_name, value in (("province", province), ("city", city), ("district_county", county))
+            if not value
+        ]
+        if missing_fields:
+            raise ValueError(
+                "Pest disease control window lookup requires Farm region fields: " + ", ".join(missing_fields) + ".",
+            )
+        data_year = int(planting_plan.year or planting_plan.sowing_date.year)
+        control_window = self.rice_control_window_level1_repository.get_by_region_and_year(
+            province=province,
+            city=city,
+            county=county,
+            data_year=data_year,
+        )
+        if control_window is None:
+            raise ValueError(
+                "Pest disease control window level1 is missing for "
+                f"{province}/{city}/{county}/{data_year}.",
+            )
+        return _normalize_pest_disease_level1_of_year_detail(control_window)
 
     def _resolve_pest_disease_daily_update_regular_plans(
         self,
@@ -1971,6 +2143,180 @@ class SurveyDateRecommendationService:
             item.status = CALENDAR_STATUS_INVALIDATED
             item.invalidated_reason = "regular_disease_pest_survey_window_changed"
             item.last_generation_checked_at = _utcnow()
+
+    def _invalidate_stale_sudden_disease_pest_surveys(
+        self,
+        planting_plan_id: int,
+        *,
+        active_idempotency_keys: set[str],
+    ) -> None:
+        active_items = self.calendar_item_repository.list_active_by_plan_and_subtype(
+            planting_plan_id,
+            TASK_SUBTYPE_SUDDEN_DISEASE_PEST_SURVEY,
+        )
+        for item in active_items:
+            if item.idempotency_key in active_idempotency_keys:
+                continue
+            item.status = CALENDAR_STATUS_INVALIDATED
+            item.invalidated_reason = "pest_disease_daily_update_resolved"
+            item.last_generation_checked_at = _utcnow()
+
+    def _upsert_sudden_disease_pest_survey(
+        self,
+        *,
+        planting_plan: PlantingPlan,
+        result: PestDiseaseDailyUpdateResult,
+        as_of_date: date,
+    ) -> CalendarItem:
+        if result.survey_window is None:
+            raise ValueError("new_emergency result must provide survey_window.")
+        return self._upsert_calendar_item(
+            planting_plan=planting_plan,
+            task_subtype=TASK_SUBTYPE_SUDDEN_DISEASE_PEST_SURVEY,
+            title="突发病虫调查",
+            description=_build_sudden_disease_pest_survey_description(result),
+            suggested_start_date=result.survey_window[0],
+            suggested_end_date=result.survey_window[1],
+            generation_condition={
+                "algorithmCode": "pestDisease.daily_update_survey",
+                "jobKey": SURVEY_DATE_RECOMMENDATION_JOB,
+                "surveyType": "sudden_disease_pest",
+                "status": result.status,
+                "message": result.message,
+                "source": result.source,
+                "targets": list(result.targets),
+                "excludeReasons": dict(result.exclude_reasons),
+                "sprayStage": result.spray_stage,
+                "checkDate": as_of_date.isoformat(),
+                "rawResult": dict(result.raw_result),
+                "rawResponse": result.raw_response,
+            },
+            idempotency_scope=(
+                f"{TASK_SUBTYPE_SUDDEN_DISEASE_PEST_SURVEY}:"
+                f"{result.survey_window[0].isoformat()}:{result.survey_window[1].isoformat()}"
+            ),
+            allow_multiple_active=True,
+        )
+
+    def _upsert_merged_regular_disease_pest_survey(
+        self,
+        *,
+        planting_plan: PlantingPlan,
+        result: PestDiseaseDailyUpdateResult,
+        as_of_date: date,
+    ) -> CalendarItem | None:
+        if result.survey_window is None:
+            return None
+        matched_item = self._find_active_calendar_item_by_window(
+            planting_plan_id=planting_plan.id,
+            task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+            suggested_start_date=result.survey_window[0],
+            suggested_end_date=result.survey_window[1],
+        )
+        if matched_item is None:
+            matched_item = self._upsert_calendar_item(
+                planting_plan=planting_plan,
+                task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+                title="病虫害常规调查",
+                description=_build_merged_regular_disease_pest_survey_description(result),
+                suggested_start_date=result.survey_window[0],
+                suggested_end_date=result.survey_window[1],
+                generation_condition={
+                    "algorithmCode": "pestDisease.daily_update_survey",
+                    "jobKey": SURVEY_DATE_RECOMMENDATION_JOB,
+                    "surveyType": "regular_disease_pest",
+                    "status": result.status,
+                    "message": result.message,
+                    "source": result.source,
+                    "targets": list(result.targets),
+                    "excludeReasons": dict(result.exclude_reasons),
+                    "sprayStage": result.spray_stage,
+                    "checkDate": as_of_date.isoformat(),
+                    "rawResult": dict(result.raw_result),
+                    "rawResponse": result.raw_response,
+                },
+                idempotency_scope=(
+                    f"{TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY}:merged:"
+                    f"{result.survey_window[0].isoformat()}:{result.survey_window[1].isoformat()}"
+                ),
+                allow_multiple_active=True,
+            )
+            return matched_item
+
+        generation_condition = dict(matched_item.generation_condition or {})
+        generation_condition.update(
+            {
+                "dailyUpdateStatus": result.status,
+                "dailyUpdateMessage": result.message,
+                "dailyUpdateSource": result.source,
+                "dailyUpdateCheckDate": as_of_date.isoformat(),
+                "dailyUpdateTargets": list(result.targets),
+                "dailyUpdateExcludeReasons": dict(result.exclude_reasons),
+                "dailyUpdateRawResult": dict(result.raw_result),
+                "dailyUpdateRawResponse": result.raw_response,
+            },
+        )
+        matched_item.generation_condition = generation_condition
+        matched_item.description = _build_merged_regular_disease_pest_survey_description(result)
+        matched_item.status = CALENDAR_STATUS_ACTIVE
+        matched_item.invalidated_reason = None
+        matched_item.last_generation_checked_at = _utcnow()
+        return matched_item
+
+    def _find_active_calendar_item_by_window(
+        self,
+        *,
+        planting_plan_id: int,
+        task_subtype: str,
+        suggested_start_date: date,
+        suggested_end_date: date,
+    ) -> CalendarItem | None:
+        active_items = self.calendar_item_repository.list_active_by_plan_and_subtype(
+            planting_plan_id,
+            task_subtype,
+        )
+        return next(
+            (
+                item
+                for item in active_items
+                if item.suggested_start_date == suggested_start_date and item.suggested_end_date == suggested_end_date
+            ),
+            None,
+        )
+
+    def _record_pest_disease_daily_update_event(
+        self,
+        *,
+        planting_plan_id: int,
+        result: PestDiseaseDailyUpdateResult,
+        as_of_date: date,
+        calendar_items: list[CalendarItem],
+    ) -> EventRecord:
+        return self._record_event(
+            planting_plan_id=planting_plan_id,
+            event_type=EVENT_TYPE_CALENDAR_ITEM_UPDATED,
+            payload={
+                "jobKey": SURVEY_DATE_RECOMMENDATION_JOB,
+                "algorithmCode": "pestDisease.daily_update_survey",
+                "checkDate": as_of_date.isoformat(),
+                "status": result.status,
+                "message": result.message,
+                "source": result.source,
+                "calendarItems": [
+                    {
+                        "taskSubtype": item.task_subtype,
+                        "suggestedStartDate": item.suggested_start_date.isoformat(),
+                        "suggestedEndDate": item.suggested_end_date.isoformat(),
+                        "calendarItemId": item.id,
+                    }
+                    for item in calendar_items
+                ],
+            },
+            idempotency_key=(
+                f"{SURVEY_DATE_RECOMMENDATION_JOB}:{planting_plan_id}:pest-disease-daily-update:"
+                f"{as_of_date.isoformat()}:{result.status}"
+            ),
+        )
 
     def _get_plan(self, planting_plan_id: int) -> PlantingPlan:
         planting_plan = self.planting_plan_repository.get(planting_plan_id)
@@ -2409,6 +2755,46 @@ def _build_regular_disease_pest_survey_description(plan: PestDiseaseRegularSurve
     if plan.survey_method:
         parts.append(f"调查日期来源：{plan.survey_method}。")
     return "".join(parts)
+
+
+def _build_sudden_disease_pest_survey_description(result: PestDiseaseDailyUpdateResult) -> str:
+    targets = "、".join(result.targets) if result.targets else "未返回调查对象"
+    parts = [f"由 pestDisease daily-update-survey 推荐的突发病虫调查；调查对象：{targets}。"]
+    if result.spray_stage:
+        parts.append(f"打药阶段：{result.spray_stage}。")
+    if result.message:
+        parts.append(f"结果说明：{result.message}。")
+    return "".join(parts)
+
+
+def _build_merged_regular_disease_pest_survey_description(result: PestDiseaseDailyUpdateResult) -> str:
+    targets = "、".join(result.targets) if result.targets else "未返回调查对象"
+    parts = [f"常规病虫害调查窗口已吸收 daily-update-survey 合并结果；调查对象：{targets}。"]
+    if result.spray_stage:
+        parts.append(f"打药阶段：{result.spray_stage}。")
+    if result.message:
+        parts.append(f"结果说明：{result.message}。")
+    return "".join(parts)
+
+
+def _normalize_pest_disease_level1_of_year_detail(
+    control_window: RiceControlWindowLevel1,
+) -> dict[str, list[str]]:
+    raw_detail = control_window.detail or {}
+    if not isinstance(raw_detail, dict) or not raw_detail:
+        raise ValueError(
+            "Pest disease control window level1 detail must be a non-empty object for "
+            f"{control_window.province}/{control_window.city}/{control_window.county}/{control_window.data_year}.",
+        )
+    normalized_level1_of_year: dict[str, list[str]] = {}
+    for sequence, window in raw_detail.items():
+        if not isinstance(window, list) or len(window) != 2:
+            raise ValueError(f"Pest disease level1_of_year[{sequence!r}] must be a two-item MMDD list.")
+        normalized_level1_of_year[str(sequence)] = [
+            _normalize_month_day_string(window[0], f"level1_of_year[{sequence!r}][0]"),
+            _normalize_month_day_string(window[1], f"level1_of_year[{sequence!r}][1]"),
+        ]
+    return normalized_level1_of_year
 
 
 def _normalize_iso_date_string(raw_value: Any, field_name: str) -> str:

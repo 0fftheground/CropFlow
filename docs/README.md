@@ -55,6 +55,7 @@ Use $cropflow-wrap-up to summarize today, update memory, and prepare commit acti
 ```text
 docs/
 ├── README.md
+├── development/
 ├── overview/
 │   └── team-technical-briefing.md
 ├── planning/
@@ -105,6 +106,7 @@ docs/
 
 | 目录 | 用途 |
 |---|---|
+| `development/` | 仓库级本地启动、迁移、seed、联调环境说明 |
 | `overview/` | 给团队说明项目目标、系统架构、核心对象和关键流转 |
 | `planning/` | 推进节奏、团队分工、AI agent 开发规范 |
 | `architecture/` | 系统架构、模块边界、事件、编排器设计 |
@@ -122,6 +124,12 @@ docs/
 | `api/growth_stage_prediction_api.md` | 生育期预测算法接口，用于 Stage Orchestrator 初始化和阶段状态管理 |
 | `api/pestDisease_survey_window_api.md` | 病虫害调查窗口算法接口当前版，用于初始化常规调查计划和每日更新调查事件 |
 | `api/weather_api.pdf` | 气象数据接口原始文档，用于后续组装逐日天气、逐小时天气和预警数据 |
+
+## 本地开发入口
+
+| 文档 | 用途 |
+|---|---|
+| `development/local-dev-runbook.md` | 仓库级本地启动、migration、seed 和联调环境说明 |
 
 ## 精简规则
 

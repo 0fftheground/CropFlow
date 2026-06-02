@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -13,9 +14,11 @@ from app.db.session import get_session_factory
 from app.models import (
     CalendarItem,
     CodeDict,
+    CropStageDict,
     Farm,
     FarmingTask,
     Field,
+    RiceControlWindowLevel1,
     RiceVariety,
     User,
 )
@@ -23,6 +26,7 @@ from app.orchestrator import build_plan_orchestrator
 from app.repositories import (
     CalendarItemRepository,
     CodeDictRepository,
+    CropStageDictRepository,
     CropStageStateRepository,
     CropThermalTimeStateRepository,
     EventRecordRepository,
@@ -32,15 +36,18 @@ from app.repositories import (
     OperationPlanRepository,
     PlantingPlanFieldRelationRepository,
     PlantingPlanRepository,
+    RiceControlWindowLevel1Repository,
     RiceVarietyRepository,
     ReviewRequestRepository,
     StagePredictionSnapshotRepository,
     TaskIntentRepository,
 )
 from app.services import (
+    MockPestDiseaseControlClient,
     MockStagePredictionClient,
     MockWeatherProvider,
     MockWeedDiagnosisClient,
+    PestDiseaseControlPlanningService,
     PlantingPlanCreateInput,
     PlantingPlanService,
     PlantProtectionPlanContextResolver,
@@ -51,7 +58,9 @@ from app.services import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CODE_DICT_CSV = REPO_ROOT / "database" / "sql" / "agri_code_dict_202605181653.csv"
+STAGE_DICT_CSV = REPO_ROOT / "database" / "sql" / "cf_crop_stage_dict_20260601.csv"
 RICE_VARIETY_CSV = REPO_ROOT / "database" / "sql" / "agri_rice_variety_202605181649.csv"
+RICE_CONTROL_WINDOW_LEVEL1_CSV = REPO_ROOT / "database" / "sql" / "pp_rice_control_window_level_1.csv"
 SEED_ACTOR = "seed_local_dev_data"
 DEMO_PLAN_CODE = "DEV-PLAN-001"
 
@@ -59,7 +68,9 @@ DEMO_PLAN_CODE = "DEV-PLAN-001"
 @dataclass(slots=True)
 class SeedSummary:
     code_dict_count: int
+    crop_stage_dict_count: int
     rice_variety_count: int
+    rice_control_window_level1_count: int
     farm_id: int
     field_ids: list[int]
     reviewer_user_id: str
@@ -76,7 +87,9 @@ def main() -> None:
 
     print("Seed completed.")
     print(f"code_dict_count={summary.code_dict_count}")
+    print(f"crop_stage_dict_count={summary.crop_stage_dict_count}")
     print(f"rice_variety_count={summary.rice_variety_count}")
+    print(f"rice_control_window_level1_count={summary.rice_control_window_level1_count}")
     print(f"farm_id={summary.farm_id}")
     print(f"field_ids={summary.field_ids}")
     print(f"reviewer_user_id={summary.reviewer_user_id}")
@@ -87,7 +100,9 @@ def main() -> None:
 
 def seed_local_dev_data(session: Session) -> SeedSummary:
     code_dict_count = _seed_code_dicts(session)
+    crop_stage_dict_count = _seed_crop_stage_dict(session)
     rice_variety_count = _seed_rice_varieties(session)
+    rice_control_window_level1_count = _seed_rice_control_window_level1(session)
     farm = _upsert_demo_farm(session)
     fields = _upsert_demo_fields(session)
     _ensure_farm_field_relations(session, farm_id=farm.id, field_ids=[field.id for field in fields])
@@ -100,7 +115,9 @@ def seed_local_dev_data(session: Session) -> SeedSummary:
 
     return SeedSummary(
         code_dict_count=code_dict_count,
+        crop_stage_dict_count=crop_stage_dict_count,
         rice_variety_count=rice_variety_count,
+        rice_control_window_level1_count=rice_control_window_level1_count,
         farm_id=farm.id,
         field_ids=[field.id for field in fields],
         reviewer_user_id=reviewer.id,
@@ -128,6 +145,28 @@ def _seed_code_dicts(session: Session) -> int:
     session.flush()
     _sync_id_sequence(session, "cf_code_dict")
     return _count_rows(session, select(func.count()).select_from(CodeDict))
+
+
+def _seed_crop_stage_dict(session: Session) -> int:
+    with STAGE_DICT_CSV.open("r", encoding="utf-8-sig", newline="") as handle:
+        for row in csv.DictReader(handle):
+            item = session.get(CropStageDict, int(row["id"]))
+            if item is None:
+                item = CropStageDict(id=int(row["id"]))
+                session.add(item)
+
+            item.stage_code = row["stage_code"].strip()
+            item.stage_name = row["stage_name"].strip()
+            item.season_scope = row["season_scope"].strip()
+            item.business_stage_code = row["business_stage_code"].strip() or None
+            item.display_order = int(row["display_order"])
+            item.is_active = str(row["is_active"]).strip().lower() == "true"
+            item.created_by_type = "system"
+            item.created_by_id = SEED_ACTOR
+
+    session.flush()
+    _sync_id_sequence(session, "cf_crop_stage_dict")
+    return _count_rows(session, select(func.count()).select_from(CropStageDict))
 
 
 def _seed_rice_varieties(session: Session) -> int:
@@ -158,6 +197,25 @@ def _seed_rice_varieties(session: Session) -> int:
     return _count_rows(session, select(func.count()).select_from(RiceVariety))
 
 
+def _seed_rice_control_window_level1(session: Session) -> int:
+    with RICE_CONTROL_WINDOW_LEVEL1_CSV.open("r", encoding="utf-8-sig", newline="") as handle:
+        for row in csv.DictReader(handle):
+            item = session.get(RiceControlWindowLevel1, int(row["id"]))
+            if item is None:
+                item = RiceControlWindowLevel1(id=int(row["id"]))
+                session.add(item)
+
+            item.province = row["province"].strip()
+            item.city = row["city"].strip()
+            item.county = row["county"].strip()
+            item.data_year = int(str(row["data_year"]).strip().strip('"'))
+            item.detail = json.loads(row["detail"])
+
+    session.flush()
+    _sync_id_sequence(session, "pp_rice_control_window_level_1")
+    return _count_rows(session, select(func.count()).select_from(RiceControlWindowLevel1))
+
+
 def _upsert_demo_farm(session: Session) -> Farm:
     farm = session.get(Farm, 1)
     if farm is None:
@@ -166,11 +224,11 @@ def _upsert_demo_farm(session: Session) -> Farm:
 
     farm.farm_name = "本地联调农场"
     farm.province = "湖南省"
-    farm.city = "长沙市"
-    farm.district_county = "岳麓区"
-    farm.adcode = "430104"
-    farm.centroid_lat = Decimal("28.194090")
-    farm.centroid_lon = Decimal("112.982279")
+    farm.city = "益阳市"
+    farm.district_county = "桃江县"
+    farm.adcode = "430922"
+    farm.centroid_lat = Decimal("28.514220")
+    farm.centroid_lon = Decimal("112.139118")
     farm.created_by_type = "system"
     farm.created_by_id = SEED_ACTOR
     session.flush()
@@ -268,14 +326,31 @@ def _ensure_demo_plan(session: Session, *, farm_id: int, field_ids: list[int]) -
     event_record_repository = EventRecordRepository(session)
     survey_date_service = SurveyDateRecommendationService(
         planting_plan_repository=planting_plan_repository,
+        farm_repository=FarmRepository(session),
         rice_variety_repository=RiceVarietyRepository(session),
         code_dict_repository=CodeDictRepository(session),
+        rice_control_window_level1_repository=RiceControlWindowLevel1Repository(session),
         calendar_item_repository=CalendarItemRepository(session),
         event_record_repository=event_record_repository,
         weather_provider=MockWeatherProvider(),
         diagnosis_client=MockWeedDiagnosisClient(),
     )
     stage_management_service = _build_seed_stage_management_service(session)
+    context_resolver = PlantProtectionPlanContextResolver(
+        code_dict_repository=CodeDictRepository(session),
+        rice_variety_repository=RiceVarietyRepository(session),
+    )
+    pest_disease_control_planning_service = PestDiseaseControlPlanningService(
+        planting_plan_repository=planting_plan_repository,
+        farm_repository=FarmRepository(session),
+        rice_control_window_level1_repository=RiceControlWindowLevel1Repository(session),
+        stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(session),
+        calendar_item_repository=CalendarItemRepository(session),
+        operation_plan_repository=OperationPlanRepository(session),
+        context_resolver=context_resolver,
+        weather_provider=MockWeatherProvider(),
+        control_client=MockPestDiseaseControlClient(),
+    )
     plan_orchestrator = build_plan_orchestrator(
         planting_plan_repository=planting_plan_repository,
         calendar_item_repository=CalendarItemRepository(session),
@@ -288,10 +363,8 @@ def _ensure_demo_plan(session: Session, *, farm_id: int, field_ids: list[int]) -
         survey_date_recommendation_service=survey_date_service,
         weather_provider=MockWeatherProvider(),
         diagnosis_client=MockWeedDiagnosisClient(),
-        context_resolver=PlantProtectionPlanContextResolver(
-            code_dict_repository=CodeDictRepository(session),
-            rice_variety_repository=RiceVarietyRepository(session),
-        ),
+        context_resolver=context_resolver,
+        pest_disease_control_planning_service=pest_disease_control_planning_service,
     )
     service = PlantingPlanService(
         planting_plan_repository=planting_plan_repository,
@@ -346,14 +419,31 @@ def _ensure_due_tasks(session: Session, planting_plan_id: int) -> list[int]:
     event_record_repository = EventRecordRepository(session)
     survey_date_service = SurveyDateRecommendationService(
         planting_plan_repository=planting_plan_repository,
+        farm_repository=FarmRepository(session),
         rice_variety_repository=RiceVarietyRepository(session),
         code_dict_repository=CodeDictRepository(session),
+        rice_control_window_level1_repository=RiceControlWindowLevel1Repository(session),
         calendar_item_repository=CalendarItemRepository(session),
         event_record_repository=event_record_repository,
         weather_provider=MockWeatherProvider(),
         diagnosis_client=MockWeedDiagnosisClient(),
     )
     stage_management_service = _build_seed_stage_management_service(session)
+    context_resolver = PlantProtectionPlanContextResolver(
+        code_dict_repository=CodeDictRepository(session),
+        rice_variety_repository=RiceVarietyRepository(session),
+    )
+    pest_disease_control_planning_service = PestDiseaseControlPlanningService(
+        planting_plan_repository=planting_plan_repository,
+        farm_repository=FarmRepository(session),
+        rice_control_window_level1_repository=RiceControlWindowLevel1Repository(session),
+        stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(session),
+        calendar_item_repository=CalendarItemRepository(session),
+        operation_plan_repository=OperationPlanRepository(session),
+        context_resolver=context_resolver,
+        weather_provider=MockWeatherProvider(),
+        control_client=MockPestDiseaseControlClient(),
+    )
     plan_orchestrator = build_plan_orchestrator(
         planting_plan_repository=planting_plan_repository,
         calendar_item_repository=CalendarItemRepository(session),
@@ -366,10 +456,8 @@ def _ensure_due_tasks(session: Session, planting_plan_id: int) -> list[int]:
         survey_date_recommendation_service=survey_date_service,
         weather_provider=MockWeatherProvider(),
         diagnosis_client=MockWeedDiagnosisClient(),
-        context_resolver=PlantProtectionPlanContextResolver(
-            code_dict_repository=CodeDictRepository(session),
-            rice_variety_repository=RiceVarietyRepository(session),
-        ),
+        context_resolver=context_resolver,
+        pest_disease_control_planning_service=pest_disease_control_planning_service,
     )
     task_generation_service = TaskGenerationService(
         planting_plan_repository=planting_plan_repository,
@@ -387,11 +475,13 @@ def _build_seed_stage_management_service(session: Session) -> StageManagementSer
     return StageManagementService(
         planting_plan_repository=PlantingPlanRepository(session),
         farm_repository=FarmRepository(session),
+        rice_variety_repository=RiceVarietyRepository(session),
         stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(session),
         crop_stage_state_repository=CropStageStateRepository(session),
         crop_thermal_time_state_repository=CropThermalTimeStateRepository(session),
         stage_prediction_client=MockStagePredictionClient(),
         weather_provider=MockWeatherProvider(),
+        crop_stage_dict_repository=CropStageDictRepository(session),
     )
 
 

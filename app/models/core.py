@@ -59,6 +59,35 @@ class CodeDict(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
 
 
+class RiceControlWindowLevel1(Base):
+    __tablename__ = "pp_rice_control_window_level_1"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    province: Mapped[str] = mapped_column(String(100))
+    city: Mapped[str] = mapped_column(String(100))
+    county: Mapped[str] = mapped_column(String(100))
+    data_year: Mapped[int] = mapped_column(Integer)
+    detail: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+
+
+class CropStageDict(Base):
+    __tablename__ = "cf_crop_stage_dict"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    stage_code: Mapped[str] = mapped_column(String(50), unique=True)
+    stage_name: Mapped[str] = mapped_column(String(100))
+    season_scope: Mapped[str] = mapped_column(String(20))
+    business_stage_code: Mapped[str | None] = mapped_column(String(50))
+    display_order: Mapped[int] = mapped_column(Integer)
+    is_active: Mapped[bool] = mapped_column(server_default=text("true"))
+    created_by_type: Mapped[str] = mapped_column(String(20), server_default=text("'system'"))
+    created_by_id: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+
+
 class User(Base):
     __tablename__ = "cf_user"
 
