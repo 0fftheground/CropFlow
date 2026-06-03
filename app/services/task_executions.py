@@ -11,6 +11,7 @@ from app.core.constants import (
     EXECUTION_MODE_MANUAL,
     EXECUTION_RECORD_TYPE_OPERATION_RESULT,
     EXECUTION_STATUS_COMPLETED,
+    FARMING_TASK_STATUS_COMPLETED,
 )
 from app.models import CalendarItem, EventRecord, Execution, ExecutionRecord
 from app.repositories import (
@@ -18,6 +19,7 @@ from app.repositories import (
     ExecutionRecordRepository,
     ExecutionRepository,
     FarmingTaskRepository,
+    OperationPlanRepository,
 )
 
 
@@ -49,12 +51,14 @@ class TaskExecutionService:
     def __init__(
         self,
         farming_task_repository: FarmingTaskRepository,
+        operation_plan_repository: OperationPlanRepository | None,
         execution_repository: ExecutionRepository,
         execution_record_repository: ExecutionRecordRepository,
         event_record_repository: EventRecordRepository,
         plan_orchestrator: TaskExecutionEventDispatcher,
     ) -> None:
         self.farming_task_repository = farming_task_repository
+        self.operation_plan_repository = operation_plan_repository
         self.execution_repository = execution_repository
         self.execution_record_repository = execution_record_repository
         self.event_record_repository = event_record_repository
@@ -70,6 +74,7 @@ class TaskExecutionService:
             raise LookupError(f"Farming task {farming_task_id} does not exist.")
 
         execution = self._get_or_create_execution(farming_task)
+        farming_task.status = FARMING_TASK_STATUS_COMPLETED
         execution.status = EXECUTION_STATUS_COMPLETED
         execution.completed_at = payload.actual_end_at or _utcnow()
 
@@ -109,14 +114,22 @@ class TaskExecutionService:
         )
 
     def _get_or_create_execution(self, farming_task) -> Execution:
+        active_operation_plan = (
+            self.operation_plan_repository.get_active_by_task(farming_task.id)
+            if self.operation_plan_repository is not None
+            else None
+        )
         executions = self.execution_repository.list_by_task(farming_task.id)
         if executions:
-            return executions[0]
+            execution = executions[0]
+            if execution.operation_plan_id is None and active_operation_plan is not None:
+                execution.operation_plan_id = active_operation_plan.id
+            return execution
 
         execution = Execution(
             planting_plan_id=farming_task.planting_plan_id,
             farming_task_id=farming_task.id,
-            operation_plan_id=None,
+            operation_plan_id=active_operation_plan.id if active_operation_plan is not None else None,
             execution_mode=farming_task.execution_mode or EXECUTION_MODE_MANUAL,
             status=EXECUTION_STATUS_COMPLETED,
             completed_at=_utcnow(),

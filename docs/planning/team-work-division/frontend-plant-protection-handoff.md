@@ -18,7 +18,7 @@ P2 - 杂草防治 / 病虫害防治 / 生育期运行期联调
 接口出入参明细请同时阅读：
 
 ```text
-docs/api/frontend-weed-api-contract.md
+docs/api/frontend-plant-protection-api-contract.md
 ```
 
 ---
@@ -261,6 +261,25 @@ service_effect_survey
 
 1. 病虫害调查提交后，可能返回 `task_intent_ids` 和 `review_request_ids`
 2. 前端不要假设调查只会生成执行记录
+
+病虫调查表单建议：
+
+1. `plant_protection.regular_disease_pest_survey`
+   建议固定区先展示：
+   `survey_date`、`survey_method`、`bbch_stage`
+   动态区按任务上下文里的调查对象展开，例如：
+   `DaoFeiShi.insects_per_100_hills`
+   `DaoWenBing.acute_lesion`
+   `DaoWenBing.diseased_leaf_rate`
+
+2. `plant_protection.sudden_disease_pest_survey`
+   建议固定区先展示：
+   `survey_date`、`bbch_stage`
+   动态区同样按调查对象展开，不强制展示 `survey_method`
+
+3. 病虫调查对象字段建议按“对象卡片”组织，而不是平铺成一个超长表单
+4. 前端不要硬编码只支持某一种病虫对象，应允许按任务上下文动态拼 `result_payload`
+5. 若当前页面暂时没有完整病虫 schema，可先支持最小字段提交，再逐步扩展对象卡片
 
 ### 3.6 `review_request`
 
@@ -746,6 +765,30 @@ service_effect_survey
 1. 页面骨架共用
 2. 表单 schema 按 `task.task_subtype` 切换
 3. 病虫害调查结果提交后，可能返回新的 `task_intent_ids` 和 `review_request_ids`，前端不要假设只会生成执行记录
+4. `regular_disease_pest_survey` 建议默认带出 `survey_method`
+5. `regular_disease_pest_survey` 和 `sudden_disease_pest_survey` 都建议至少支持：
+   `survey_date`
+   `bbch_stage`
+   一个动态病虫对象字段组
+6. 动态病虫对象字段组的 key 直接使用后端 contract 中的对象名，如 `DaoFeiShi`、`DaoWenBing`
+7. 第一版若缺少完整中文映射，可先保留对象 code 作为开发态字段名，再补中文展示映射
+
+当前可用病虫对象字段对照表：
+
+| 对象 key | 中文建议 | 当前字段 | 当前来源 |
+|---|---|---|---|
+| `DaoFeiShi` | 稻飞虱 | `insects_per_100_hills` | 已在后端测试和本地真实联调中使用 |
+| `DaoWenBing` | 稻瘟病 | `acute_lesion`、`diseased_leaf_rate` | 已在后端测试和合并防治分支验证中使用 |
+| `ErHuaMing` | 二化螟 | `dead_sheath_rate`、`dead_heart_rate`、`main_larval_instars`、`damaged_plant_rate` | 当前按上游算法接口文档预留 |
+| `DaoZongJuanYeMing` | 稻纵卷叶螟 | `rolled_leaf_tips_per_100_hills`、`larvae_count`、`moths_per_square_meter` | 当前按上游算法接口文档预留 |
+| `WenKuBing` | 纹枯病 | `lesion_on_upper_leaf_sheath`、`diseased_hill_rate` | 当前按上游算法接口文档预留 |
+
+前端组装建议：
+
+1. 只提交当前任务调查对象实际出现的对象字段组，未调查的对象可以不传
+2. 每个对象字段组都作为 `result_payload` 下的一个子对象，不要拍平成顶层字段
+3. `survey_date`、`survey_method`、`bbch_stage` 仍保持在 `result_payload` 顶层
+4. 第一版可以先按数字输入框 / 布尔开关实现，不必等待完整农艺字段组件
 
 ### 5.5 `evaluation_entry`
 

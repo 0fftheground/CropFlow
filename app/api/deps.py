@@ -318,6 +318,7 @@ def get_task_execution_service(
     )
     yield TaskExecutionService(
         farming_task_repository=FarmingTaskRepository(db),
+        operation_plan_repository=OperationPlanRepository(db),
         execution_repository=ExecutionRepository(db),
         execution_record_repository=ExecutionRecordRepository(db),
         event_record_repository=EventRecordRepository(db),

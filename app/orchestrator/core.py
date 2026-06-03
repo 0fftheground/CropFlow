@@ -191,7 +191,8 @@ class PlanCalendarRefreshHandler:
                 diagnosis=soil_diagnosis,
             )
             task_intents.append(task_intent)
-            review_requests.append(review_request)
+            if review_request is not None:
+                review_requests.append(review_request)
         except Exception as exc:
             self._record_calendar_refresh_failure(
                 event_record.planting_plan_id,
@@ -270,20 +271,24 @@ class PlanCalendarRefreshHandler:
         *,
         event_record: EventRecord,
         diagnosis: SoilTreatmentDiagnosisResult,
-    ) -> tuple[TaskIntent, ReviewRequest]:
+    ) -> tuple[TaskIntent, ReviewRequest | None]:
         planting_plan_id = int(event_record.planting_plan_id)
-        existing_task_intent = next(
-            (
-                item
-                for item in self.task_intent_repository.list_current_by_plan(planting_plan_id)
-                if item.task_subtype == TASK_SUBTYPE_SOIL_SEALING_WEED_CONTROL
-            ),
-            None,
-        )
         idempotency_key = (
             f"task-intent:soil-treatment:{planting_plan_id}:"
             f"{diagnosis.recommended_date[0].isoformat()}:{diagnosis.recommended_date[1].isoformat()}"
         )
+        existing_task_intent = None
+        if hasattr(self.task_intent_repository, "get_by_idempotency_key"):
+            existing_task_intent = self.task_intent_repository.get_by_idempotency_key(idempotency_key)
+        if existing_task_intent is None:
+            existing_task_intent = next(
+                (
+                    item
+                    for item in self.task_intent_repository.list_current_by_plan(planting_plan_id)
+                    if item.task_subtype == TASK_SUBTYPE_SOIL_SEALING_WEED_CONTROL
+                ),
+                None,
+            )
         trigger_summary = "soil_treatment_diagnosis recommended a soil-sealing treatment window."
         rule_result = {
             "algorithmCode": "soil_treatment_diagnosis",
@@ -303,6 +308,8 @@ class PlanCalendarRefreshHandler:
             "inputExecutionRecordIds": [],
             "rawResponse": diagnosis.raw_response,
         }
+        if existing_task_intent is not None and existing_task_intent.status == TASK_INTENT_STATUS_CONVERTED:
+            return existing_task_intent, None
         if existing_task_intent is None:
             task_intent = TaskIntent(
                 planting_plan_id=planting_plan_id,

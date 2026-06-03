@@ -8,10 +8,10 @@
 
 因此本方向当前任务以非代码交付为主，用于补齐页面信息架构和字段需求，而不是立即交付正式页面代码。
 
-当前如果要支持杂草防治样板链路联调，请优先阅读：
+当前如果要支持当前植保链路联调，请优先阅读：
 
 ```text
-docs/planning/team-work-division/frontend-weed-handoff.md
+docs/planning/team-work-division/frontend-plant-protection-handoff.md
 ```
 
 该文档只保留“当前后端已实现、前端可直接接入”的页面需求和接口契约。
@@ -143,7 +143,7 @@ docs/planning/team-work-division/frontend-weed-handoff.md
 |---|---|---|---|---|---|---|---|
 ```
 
-## 杂草 P1 前端建议稿
+## 植保前端建议稿
 
 以下内容不是直接从 `weed_diagnosis_api.md` 逐字提取，而是基于当前对象模型、植保主文档和已确认口径整理的前端建议稿，用于先推动 P1 页面定义。
 

@@ -404,6 +404,10 @@ class TaskIntentRepository(Repository):
     def get(self, task_intent_id: int) -> TaskIntent | None:
         return self.session.get(TaskIntent, task_intent_id)
 
+    def get_by_idempotency_key(self, idempotency_key: str) -> TaskIntent | None:
+        stmt = select(TaskIntent).where(TaskIntent.idempotency_key == idempotency_key)
+        return self.session.scalar(stmt)
+
     def list_current_by_plan(self, planting_plan_id: int) -> list[TaskIntent]:
         stmt = (
             select(TaskIntent)

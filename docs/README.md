@@ -81,7 +81,7 @@ docs/
 │   │   ├── fertilization.md
 │   │   ├── remote-sensing.md
 │   │   ├── frontend.md
-│   │   └── frontend-weed-handoff.md
+│   │   └── frontend-plant-protection-handoff.md
 ├── architecture/
 │   ├── architecture.md
 │   ├── system-function.md
@@ -119,7 +119,7 @@ docs/
 
 | 文档 | 用途 |
 |---|---|
-| `api/frontend-weed-api-contract.md` | 杂草防治样板链路前端联调 contract |
+| `api/frontend-plant-protection-api-contract.md` | 植保链路前端联调 contract |
 | `api/weed_diagnosis_api.md` | 杂草诊断算法接口 |
 | `api/growth_stage_prediction_api.md` | 生育期预测算法接口，用于 Stage Orchestrator 初始化和阶段状态管理 |
 | `api/pestDisease_survey_window_api.md` | 病虫害调查窗口算法接口当前版，用于初始化常规调查计划和每日更新调查事件 |

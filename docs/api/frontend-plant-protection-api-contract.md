@@ -1,4 +1,4 @@
-# 杂草防治前端 API Contract
+# 植保前端 API Contract
 
 > 本文档面向前端联调，描述当前后端已实现接口的真实出入参。  
 > 口径以当前 FastAPI 路由和响应模型为准。
@@ -6,7 +6,7 @@
 适用阶段：
 
 ```text
-P2 - 杂草防治样板链路前后端联调
+P2 - 植保链路前后端联调
 ```
 
 基础信息：
@@ -764,6 +764,78 @@ Query 参数：
 }
 ```
 
+##### `plant_protection.regular_disease_pest_survey`
+
+最小示例：
+
+```json
+{
+  "survey_date": "20260603",
+  "survey_method": "一级理论防治日期",
+  "bbch_stage": 23,
+  "DaoFeiShi": {
+    "insects_per_100_hills": 12
+  }
+}
+```
+
+字段说明：
+
+1. `survey_date` 必填，格式建议用 `YYYYMMDD`
+2. `survey_method` 建议直接回传任务上下文中的调查日期来源，如 `一级理论防治日期`
+3. `bbch_stage` 为当前调查时的 BBCH 阶段数值
+4. 其他病虫字段按实际调查对象动态传入，例如 `DaoFeiShi`、`DaoWenBing`
+
+行为：
+
+1. 常规情况下会生成一个 `plant_protection.disease_pest_control` 的 `TaskIntent`，同时生成 `review_request_ids`
+2. 如果理论防治结果为无需防治，或气象调整后无可执行日期，则返回 `task_intent_ids`，但不会生成 `review_request_ids`
+3. 前端不要假设病虫调查提交后一定进入审核，也不要假设一定直接结束
+
+##### `plant_protection.sudden_disease_pest_survey`
+
+最小示例：
+
+```json
+{
+  "survey_date": "20260629",
+  "bbch_stage": 45,
+  "DaoWenBing": {
+    "acute_lesion": true,
+    "diseased_leaf_rate": 5
+  }
+}
+```
+
+字段说明：
+
+1. `survey_date` 必填
+2. `bbch_stage` 建议按实际调查阶段传入
+3. 具体病害 / 虫害对象字段按任务调查对象动态传入
+
+行为：
+
+1. 常规情况下会生成一个 `plant_protection.disease_pest_control` 的 `TaskIntent`
+2. 若与已有常规病虫防治建议满足合并条件，后端可能关闭旧的 `TaskIntent / ReviewRequest`，并返回新的合并后 `task_intent_ids / review_request_ids`
+3. 若理论防治结果为无需防治，则只返回 `task_intent_ids`，且对应 intent 状态为 `no_action`
+
+病虫对象字段对照表：
+
+| 对象 key | 中文建议 | 当前字段 | 当前来源 |
+|---|---|---|---|
+| `DaoFeiShi` | 稻飞虱 | `insects_per_100_hills` | 已在后端测试和本地真实联调中使用 |
+| `DaoWenBing` | 稻瘟病 | `acute_lesion`、`diseased_leaf_rate` | 已在后端测试和合并防治分支验证中使用 |
+| `ErHuaMing` | 二化螟 | `dead_sheath_rate`、`dead_heart_rate`、`main_larval_instars`、`damaged_plant_rate` | 当前按上游算法接口文档预留 |
+| `DaoZongJuanYeMing` | 稻纵卷叶螟 | `rolled_leaf_tips_per_100_hills`、`larvae_count`、`moths_per_square_meter` | 当前按上游算法接口文档预留 |
+| `WenKuBing` | 纹枯病 | `lesion_on_upper_leaf_sheath`、`diseased_hill_rate` | 当前按上游算法接口文档预留 |
+
+组装建议：
+
+1. 只提交当前任务调查对象实际出现的对象字段组，未调查的对象可以不传
+2. 每个对象字段组都作为 `result_payload` 下的一个子对象，不要拍平成顶层字段
+3. `survey_date`、`survey_method`、`bbch_stage` 仍保持在 `result_payload` 顶层
+4. 第一版可以先按数字输入框 / 布尔开关实现，不必等待完整农艺字段组件
+
 ##### `plant_protection.service_effect_evaluation`
 
 | field | type | required | notes |
@@ -817,6 +889,34 @@ Query 参数：
 | `execution_record_id` | `int` | 执行记录 id |
 | `event_record_id` | `int` | 事件 id |
 | `calendar_item_ids` | `int[]` | 新生成的下游 CalendarItem |
+
+#### `plant_protection.disease_pest_control`
+
+病虫正式防治任务当前复用通用执行结果录入接口，没有单独的专用路由。
+
+最小示例：
+
+```json
+{
+  "operation_date": "2026-05-09T09:00:00",
+  "result_payload": {
+    "operator": "agronomist-demo",
+    "targets": ["二化螟", "稻瘟病", "稻飞虱"],
+    "note": "local disease pest control smoke"
+  },
+  "actual_start_at": "2026-05-09T09:00:00",
+  "actual_end_at": "2026-05-09T10:00:00",
+  "actual_area": 12.5,
+  "actual_amount": 3.0,
+  "amount_unit": "亩"
+}
+```
+
+行为：
+
+1. 当前会生成执行记录和 `ExecutionCompleted` 事件
+2. 当前病虫正式防治完成后，默认不会像杂草那样继续自动生成药后调查 `CalendarItem`
+3. 成功响应仍使用通用格式；病虫任务下 `calendar_item_ids` 可能为空，前端不要假设一定会生成下游事项
 
 ---
 

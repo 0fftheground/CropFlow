@@ -189,6 +189,12 @@ class FakeOperationPlanRepository:
     def list_by_plan(self, planting_plan_id: int) -> list[OperationPlan]:
         return [item for item in self.items if item.planting_plan_id == planting_plan_id]
 
+    def get_active_by_task(self, farming_task_id: int) -> OperationPlan | None:
+        for item in self.items:
+            if item.farming_task_id == farming_task_id and item.status == "active":
+                return item
+        return None
+
 
 @dataclass
 class FakeRiceVarietyRepository:
@@ -590,6 +596,7 @@ def test_pre_treatment_survey_creates_task_intent_and_review_request() -> None:
     result = service.record_survey_result(10, make_pre_treatment_payload())
 
     assert result.execution_record.id == 1
+    assert service.farming_task_repository.get(10).status == "completed"
     assert task_intent_repo.items[0].task_subtype == "plant_protection.stem_leaf_weed_control"
     assert task_intent_repo.items[0].status == "pending"
     assert review_repo.items[0].source_entity_id == task_intent_repo.items[0].id
@@ -737,6 +744,7 @@ def test_regular_disease_pest_survey_creates_control_task_intent_and_review_requ
     assert task_intent_repo.items[0].rule_result["algorithmCode"] == "pest_disease.generate_theory_control_plan"
     assert task_intent_repo.items[0].rule_result["proposedPlan"]["controlType"] == "regular"
     assert task_intent_repo.items[0].rule_result["proposedPlan"]["requestPayload"]["spray_info"]["stage"] == "封行药"
+    assert task_intent_repo.items[0].rule_result["proposedPlan"]["requestPayload"]["level1_window"] == ["0702", "0706"]
     assert task_intent_repo.items[0].rule_result["proposedTask"]["recommendedControlDate"] == ["2026-06-29", "2026-06-29"]
     assert task_intent_repo.items[0].rule_result["proposedPlan"]["operationWindow"] == ["2026-06-29", "2026-06-29"]
     assert task_intent_repo.items[0].rule_result["proposedPlan"]["spraySuitabilityRequiredRange"] == ["2026-06-29", "2026-07-10"]

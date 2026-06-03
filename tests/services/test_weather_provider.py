@@ -186,6 +186,78 @@ def test_http_weather_provider_builds_pest_disease_daily_weather_from_farm_daily
     ]
 
 
+def test_http_weather_provider_merges_observed_and_forecast_for_spray_suitability(
+    monkeypatch,
+) -> None:
+    provider = HttpWeatherProvider(
+        farm_repository=FakeFarmRepository(_make_farm()),
+        base_url="http://weather.local",
+        auth_token="token",
+    )
+
+    class FrozenDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 6, 3)
+
+    monkeypatch.setattr("app.services.calendar_tasks.date", FrozenDate)
+
+    def fake_post_json(path: str, payload: dict[str, str]) -> list[dict[str, object]]:
+        if path.endswith("getAvgTemAndPre"):
+            assert payload == {
+                "farmId": "84911829811210",
+                "startDate": "2026-05-20",
+                "endDate": "2026-06-02",
+            }
+            rows: list[dict[str, object]] = []
+            current = FrozenDate(2026, 5, 20)
+            while current <= FrozenDate(2026, 6, 2):
+                rows.append({"dt": current.strftime("%m-%d"), "temAvg": 20.0, "preAvg": 1.5})
+                current += timedelta(days=1)
+            return rows
+        if path.endswith("getForecast10DaysBeforeAnd15DaysAfter"):
+            rows: list[dict[str, object]] = []
+            current = FrozenDate(2026, 6, 3)
+            while current <= FrozenDate(2026, 6, 5):
+                rows.append(
+                    {
+                        "datatime": current.isoformat(),
+                        "wins": 3.5,
+                        "pre": 0.5,
+                        "rh": 61.0,
+                        "tAvg": 25.0,
+                        "tMin": 20.0,
+                        "tMax": 30.0,
+                    },
+                )
+                current += timedelta(days=1)
+            return rows
+        raise AssertionError(f"Unexpected weather API call: {path} {payload}")
+
+    provider._post_json = fake_post_json  # type: ignore[method-assign]
+
+    weather_data = provider.get_spray_suitability_weather(
+        _make_plan(),
+        FrozenDate(2026, 5, 20),
+        FrozenDate(2026, 6, 5),
+    )
+
+    assert weather_data[0] == {
+        "date": "20260520",
+        "wins": 2.0,
+        "pre": 1.5,
+        "rh": 70.0,
+        "tAvg": 20.0,
+    }
+    assert weather_data[-1] == {
+        "date": "20260605",
+        "wins": 3.5,
+        "pre": 0.5,
+        "rh": 61.0,
+        "tAvg": 25.0,
+    }
+
+
 def test_http_weather_provider_builds_hourly_weather_and_filters_typhoon_alerts() -> None:
     provider = HttpWeatherProvider(
         farm_repository=FakeFarmRepository(_make_farm()),
@@ -254,3 +326,48 @@ def test_http_weather_provider_builds_hourly_weather_and_filters_typhoon_alerts(
     }
     assert hourly_weather[-1]["datetime"] == "2026-05-31 23:00:00"
     assert alerts == [{"eventType": "台风预警", "effective": "20260529080000"}]
+
+
+def test_http_weather_provider_falls_back_to_daily_forecast_for_hourly_weather() -> None:
+    provider = HttpWeatherProvider(
+        farm_repository=FakeFarmRepository(_make_farm()),
+        base_url="http://weather.local",
+        auth_token="token",
+    )
+
+    def fake_post_json(path: str, payload: dict[str, str]) -> list[dict[str, object]]:
+        if path.endswith("getForecast10DaysBeforeAndAfter"):
+            raise ValueError("Weather API /algBaseDataApi/v1/getForecast10DaysBeforeAndAfter returned HTTP 500: Api not exists!")
+        if path.endswith("getForecast10DaysBeforeAnd15DaysAfter"):
+            rows: list[dict[str, object]] = []
+            current = date(2026, 5, 29)
+            while current <= date(2026, 6, 1):
+                rows.append(
+                    {
+                        "datatime": current.isoformat(),
+                        "wins": 2.4,
+                        "pre": 4.8,
+                        "wmax": 6.5,
+                        "tAvg": 24.0,
+                    },
+                )
+                current += timedelta(days=1)
+            return rows
+        raise AssertionError(f"Unexpected weather API call: {path} {payload}")
+
+    provider._post_json = fake_post_json  # type: ignore[method-assign]
+
+    hourly_weather = provider.get_hourly_weather_72h(
+        _make_plan(),
+        as_of_datetime=datetime(2026, 5, 29, 0, 0, 0),
+    )
+
+    assert len(hourly_weather) == 72
+    assert hourly_weather[0] == {
+        "datetime": "2026-05-29 00:00:00",
+        "pre": 0.2,
+        "wins": 2.4,
+        "gust": 6.5,
+        "wp": None,
+    }
+    assert hourly_weather[-1]["datetime"] == "2026-05-31 23:00:00"

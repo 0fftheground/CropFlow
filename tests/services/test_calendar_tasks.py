@@ -652,6 +652,50 @@ def test_mock_weather_provider_returns_closed_interval_weather_data() -> None:
     assert {item["TEMP"] for item in weather_data} == {26}
 
 
+def test_http_weed_diagnosis_client_normalizes_internal_weather_rows_for_pre_survey(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = HttpWeedDiagnosisClient("http://diagnosis.local")
+    captured_payload: dict[str, Any] = {}
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return b'{"code":200,"data":{"pre_stem_leaf_herbicide_survey_date":"20260418"}}'
+
+    def fake_urlopen(req, timeout):
+        del timeout
+        captured_payload.update(__import__("json").loads(req.data.decode("utf-8")))
+        return FakeResponse()
+
+    monkeypatch.setattr("app.services.calendar_tasks.request.urlopen", fake_urlopen)
+
+    result = client.recommend_pre_treatment_survey_date(
+        weather_data=[
+            {
+                "date": "2026-04-09",
+                "avg_temp": 24.5,
+                "source_type": "observed",
+                "data_version": "weather-observed:2026-04-09:2026-04-09",
+            },
+        ],
+        rice_type="籼稻",
+        cultivation_system="早稻",
+        cultivation_pattern="直播",
+        cultivation_date=date(2026, 4, 10),
+    )
+
+    assert result.recommendation_date == date(2026, 4, 18)
+    assert captured_payload["weather_data"] == [{"DATE": "20260409", "TEMP": 24.5}]
+
+
 def test_http_weed_diagnosis_client_surfaces_http_error_body(monkeypatch: pytest.MonkeyPatch) -> None:
     client = HttpWeedDiagnosisClient("http://diagnosis.local")
 

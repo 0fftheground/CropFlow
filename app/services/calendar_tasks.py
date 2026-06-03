@@ -300,7 +300,7 @@ class HttpWeedDiagnosisClient:
         cultivation_date: date,
     ) -> PreTreatmentSurveyRecommendation:
         payload = {
-            "weather_data": weather_data,
+            "weather_data": self._normalize_weather_data(weather_data),
             "rice_type": rice_type,
             "cultivation_system": cultivation_system,
             "cultivation_pattern": cultivation_pattern,
@@ -350,7 +350,7 @@ class HttpWeedDiagnosisClient:
             "/api/weed_treatment_diagnosis",
             {
                 "province": province,
-                "weather_data": weather_data,
+                "weather_data": self._normalize_weather_data(weather_data),
                 "rice_type": rice_type,
                 "cultivation_system": cultivation_system,
                 "cultivation_pattern": cultivation_pattern,
@@ -369,6 +369,31 @@ class HttpWeedDiagnosisClient:
             next_survey_date=_parse_api_date(next_survey_date) if next_survey_date else None,
             raw_response=response,
         )
+
+    def _normalize_weather_data(self, weather_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        normalized: list[dict[str, Any]] = []
+        for row in weather_data:
+            if "DATE" in row and "TEMP" in row:
+                normalized.append(dict(row))
+                continue
+            raw_date = row.get("date")
+            raw_temp = row.get("avg_temp")
+            if raw_date is None or raw_temp is None:
+                normalized.append(dict(row))
+                continue
+            if isinstance(raw_date, date):
+                normalized_date = raw_date.strftime("%Y%m%d")
+            else:
+                normalized_date = str(raw_date).strip()
+                if "-" in normalized_date:
+                    normalized_date = date.fromisoformat(normalized_date).strftime("%Y%m%d")
+            normalized.append(
+                {
+                    "DATE": normalized_date,
+                    "TEMP": float(raw_temp),
+                },
+            )
+        return normalized
 
     def diagnose_injury_mitigation(
         self,
@@ -924,6 +949,8 @@ class HttpWeatherProvider:
     FORECAST_DAILY_PATH = "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter"
     AVERAGE_TEMP_PRECIPITATION_PATH = "/weather/v1/getAvgTemAndPre"
     FORECAST_DAILY_LOOKAHEAD_DAYS = 14
+    DEFAULT_SUITABILITY_WINDS = 2.0
+    DEFAULT_SUITABILITY_RH = 70.0
     TYPHOON_ALERTS_PATH = "/Zoomlion/alert"
     TYPHOON_EVENT_KEYWORDS = ("台风", "热带风暴", "强热带风暴", "超强台风", "热带低压", "台风外围", "外围环流")
     TYPHOON_ALERT_PROVINCE_PREFIXES = {
@@ -1014,12 +1041,7 @@ class HttpWeatherProvider:
 
         farm = self._get_farm(planting_plan.farm_id)
         external_farm_id = self._resolve_external_farm_id(farm)
-        response_data = self._post_json(
-            self.FORECAST_DAILY_PATH,
-            {
-                "farmID": external_farm_id,
-            },
-        )
+        response_data = self._load_forecast_daily_response_data(external_farm_id)
         weather_data: list[dict[str, Any]] = []
         for row in response_data:
             row_date = date.fromisoformat(str(row.get("datatime")))
@@ -1052,26 +1074,47 @@ class HttpWeatherProvider:
 
         farm = self._get_farm(planting_plan.farm_id)
         external_farm_id = self._resolve_external_farm_id(farm)
-        response_data = self._post_json(
-            self.FORECAST_DAILY_PATH,
-            {
-                "farmID": external_farm_id,
-            },
-        )
-        weather_data: list[dict[str, Any]] = []
-        for row in response_data:
+        effective_as_of_date = date.today()
+        weather_rows_by_date: dict[str, dict[str, Any]] = {}
+
+        observed_end_date = min(end_date, effective_as_of_date - timedelta(days=1))
+        if start_date <= observed_end_date:
+            for row in self._load_observed_daily_weather(
+                external_farm_id,
+                start_date=start_date,
+                end_date=observed_end_date,
+            ):
+                weather_rows_by_date[str(row["date"])] = self._build_suitability_row_from_daily_weather(row)
+
+        for row in self._load_forecast_daily_response_data(external_farm_id):
             row_date = date.fromisoformat(str(row.get("datatime")))
             if row_date < start_date or row_date > end_date:
                 continue
-            weather_data.append(
-                {
-                    "date": row_date.strftime("%Y%m%d"),
-                    "wins": _normalize_required_float(row.get("wins"), "wins", self.FORECAST_DAILY_PATH),
-                    "pre": _normalize_required_float(row.get("pre"), "pre", self.FORECAST_DAILY_PATH),
-                    "rh": _normalize_required_float(row.get("rh"), "rh", self.FORECAST_DAILY_PATH),
-                    "tAvg": _normalize_required_float(row.get("tAvg"), "tAvg", self.FORECAST_DAILY_PATH),
-                },
-            )
+            weather_rows_by_date[row_date.isoformat()] = {
+                "date": row_date.strftime("%Y%m%d"),
+                "wins": _normalize_required_float(row.get("wins"), "wins", self.FORECAST_DAILY_PATH),
+                "pre": _normalize_required_float(row.get("pre"), "pre", self.FORECAST_DAILY_PATH),
+                "rh": _normalize_required_float(row.get("rh"), "rh", self.FORECAST_DAILY_PATH),
+                "tAvg": _normalize_required_float(row.get("tAvg"), "tAvg", self.FORECAST_DAILY_PATH),
+            }
+
+        climatology_start_date = max(
+            start_date,
+            effective_as_of_date + timedelta(days=self.FORECAST_DAILY_LOOKAHEAD_DAYS + 1),
+        )
+        if climatology_start_date <= end_date:
+            for row in self._load_climatology_daily_weather(
+                external_farm_id,
+                start_date=climatology_start_date,
+                end_date=end_date,
+            ):
+                weather_rows_by_date[str(row["date"])] = self._build_suitability_row_from_daily_weather(row)
+
+        weather_data = [
+            weather_rows_by_date[item.isoformat()]
+            for item in _build_closed_date_range(start_date, end_date)
+            if item.isoformat() in weather_rows_by_date
+        ]
         expected_dates = {item.strftime("%Y%m%d") for item in _build_closed_date_range(start_date, end_date)}
         returned_dates = {str(item["date"]) for item in weather_data}
         missing_dates = sorted(expected_dates - returned_dates)
@@ -1088,38 +1131,20 @@ class HttpWeatherProvider:
     ) -> list[dict[str, Any]]:
         farm = self._get_farm(planting_plan.farm_id)
         external_farm_id = self._resolve_external_farm_id(farm)
-        response_data = self._post_json(
-            self.FORECAST_HOURLY_PATH,
-            {
-                "farmId": external_farm_id,
-            },
-        )
         effective_as_of = _floor_to_hour(as_of_datetime or _utcnow())
-        end_datetime = effective_as_of + timedelta(hours=72)
-        weather_data: list[dict[str, Any]] = []
-        for row in response_data:
-            raw_datetime = str(row.get("datatime") or "").strip()
-            if not raw_datetime:
-                continue
-            row_datetime = datetime.fromisoformat(raw_datetime)
-            if row_datetime < effective_as_of or row_datetime >= end_datetime:
-                continue
-            weather_data.append(
+        try:
+            response_data = self._post_json(
+                self.FORECAST_HOURLY_PATH,
                 {
-                    "datetime": row_datetime.strftime("%Y-%m-%d %H:%M:%S"),
-                    "pre": _normalize_required_float(row.get("pre"), "pre", self.FORECAST_HOURLY_PATH),
-                    "wins": _normalize_required_float(row.get("wins"), "wins", self.FORECAST_HOURLY_PATH),
-                    "gust": _normalize_optional_float(row.get("gust")),
-                    "wp": str(row.get("wp") or "").strip() or None,
+                    "farmId": external_farm_id,
                 },
             )
-        weather_data.sort(key=lambda item: str(item["datetime"]))
-        if len(weather_data) < 72:
-            raise ValueError(
-                "Hourly weather API did not return enough rows for the next 72 hours. "
-                f"expected at least 72, got {len(weather_data)}."
+            return self._build_hourly_weather_from_hourly_rows(response_data, effective_as_of=effective_as_of)
+        except (RuntimeError, ValueError):
+            return self._build_hourly_weather_from_daily_forecast(
+                external_farm_id,
+                effective_as_of=effective_as_of,
             )
-        return weather_data[:72]
 
     def get_typhoon_alerts(self, planting_plan: PlantingPlan) -> list[dict[str, Any]]:
         if not self.alert_base_url:
@@ -1224,12 +1249,7 @@ class HttpWeatherProvider:
         start_date: date,
         end_date: date,
     ) -> list[dict[str, Any]]:
-        response_data = self._post_json(
-            self.FORECAST_DAILY_PATH,
-            {
-                "farmID": external_farm_id,
-            },
-        )
+        response_data = self._load_forecast_daily_response_data(external_farm_id)
         data_version = f"weather-forecast:{date.today().isoformat()}"
         weather_data: list[dict[str, Any]] = []
         for row in response_data:
@@ -1253,6 +1273,14 @@ class HttpWeatherProvider:
         if missing_dates:
             raise ValueError(f"Weather forecast API is missing daily rows for dates: {missing_dates}.")
         return weather_data
+
+    def _load_forecast_daily_response_data(self, external_farm_id: str) -> list[dict[str, Any]]:
+        return self._post_json(
+            self.FORECAST_DAILY_PATH,
+            {
+                "farmID": external_farm_id,
+            },
+        )
 
     def _load_climatology_daily_weather(
         self,
@@ -1292,6 +1320,80 @@ class HttpWeatherProvider:
                     "precipitation": _normalize_optional_float(row.get("preAvg")),
                     "source_type": "climatology",
                     "data_version": data_version,
+                },
+            )
+        return weather_data
+
+    def _build_suitability_row_from_daily_weather(self, row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "date": date.fromisoformat(str(row["date"])).strftime("%Y%m%d"),
+            "wins": self.DEFAULT_SUITABILITY_WINDS,
+            "pre": float(row.get("precipitation") or 0.0),
+            "rh": self.DEFAULT_SUITABILITY_RH,
+            "tAvg": float(row["avg_temp"]),
+        }
+
+    def _build_hourly_weather_from_hourly_rows(
+        self,
+        response_data: list[dict[str, Any]],
+        *,
+        effective_as_of: datetime,
+    ) -> list[dict[str, Any]]:
+        end_datetime = effective_as_of + timedelta(hours=72)
+        weather_data: list[dict[str, Any]] = []
+        for row in response_data:
+            raw_datetime = str(row.get("datatime") or "").strip()
+            if not raw_datetime:
+                continue
+            row_datetime = datetime.fromisoformat(raw_datetime)
+            if row_datetime < effective_as_of or row_datetime >= end_datetime:
+                continue
+            weather_data.append(
+                {
+                    "datetime": row_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                    "pre": _normalize_required_float(row.get("pre"), "pre", self.FORECAST_HOURLY_PATH),
+                    "wins": _normalize_required_float(row.get("wins"), "wins", self.FORECAST_HOURLY_PATH),
+                    "gust": _normalize_optional_float(row.get("gust")),
+                    "wp": str(row.get("wp") or "").strip() or None,
+                },
+            )
+        weather_data.sort(key=lambda item: str(item["datetime"]))
+        if len(weather_data) < 72:
+            raise ValueError(
+                "Hourly weather API did not return enough rows for the next 72 hours. "
+                f"expected at least 72, got {len(weather_data)}."
+            )
+        return weather_data[:72]
+
+    def _build_hourly_weather_from_daily_forecast(
+        self,
+        external_farm_id: str,
+        *,
+        effective_as_of: datetime,
+    ) -> list[dict[str, Any]]:
+        rows_by_date = {
+            str(item.get("datatime")): item
+            for item in self._load_forecast_daily_response_data(external_farm_id)
+            if str(item.get("datatime") or "").strip()
+        }
+        weather_data: list[dict[str, Any]] = []
+        for offset in range(72):
+            current_datetime = effective_as_of + timedelta(hours=offset)
+            current_date = current_datetime.date().isoformat()
+            row = rows_by_date.get(current_date)
+            if row is None:
+                raise ValueError(
+                    "Daily forecast API did not return enough rows to synthesize the next 72 hours. "
+                    f"missing date {current_date}.",
+                )
+            daily_precipitation = _normalize_required_float(row.get("pre"), "pre", self.FORECAST_DAILY_PATH)
+            weather_data.append(
+                {
+                    "datetime": current_datetime.strftime("%Y-%m-%d %H:%M:%S"),
+                    "pre": round(daily_precipitation / 24.0, 4),
+                    "wins": _normalize_required_float(row.get("wins"), "wins", self.FORECAST_DAILY_PATH),
+                    "gust": _normalize_optional_float(row.get("wmax")),
+                    "wp": None,
                 },
             )
         return weather_data

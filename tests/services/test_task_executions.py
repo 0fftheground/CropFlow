@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from app.models import CalendarItem, EventRecord, Execution, ExecutionRecord, FarmingTask
+from app.models import CalendarItem, EventRecord, Execution, ExecutionRecord, FarmingTask, OperationPlan
 from app.orchestrator import build_plan_orchestrator
 from app.services import (
     MockWeatherProvider,
@@ -95,6 +95,20 @@ def test_complete_stem_leaf_weed_task_schedules_post_treatment_surveys() -> None
         idempotency_key="task:10",
     )
     farming_task_repo = FakeFarmingTaskRepository({10: farming_task})
+    operation_plan_repo = FakeOperationPlanRepository(
+        [
+            OperationPlan(
+                id=20,
+                planting_plan_id=1,
+                farming_task_id=10,
+                plan_type="plant_protection_control",
+                status="active",
+                version=1,
+                execution_mode="manual",
+                idempotency_key="operation-plan:20",
+            )
+        ]
+    )
     plan_orchestrator = build_plan_orchestrator(
         planting_plan_repository=plan_repo,
         calendar_item_repository=calendar_repo,
@@ -112,6 +126,7 @@ def test_complete_stem_leaf_weed_task_schedules_post_treatment_surveys() -> None
     )
     service = TaskExecutionService(
         farming_task_repository=farming_task_repo,
+        operation_plan_repository=operation_plan_repo,
         execution_repository=FakeExecutionRepository(),
         execution_record_repository=FakeExecutionRecordRepository(),
         event_record_repository=event_repo,
@@ -127,6 +142,8 @@ def test_complete_stem_leaf_weed_task_schedules_post_treatment_surveys() -> None
     )
 
     assert result.execution_record.record_type == "operation_result"
+    assert farming_task.status == "completed"
+    assert result.execution.operation_plan_id == 20
     assert [item.task_subtype for item in result.calendar_items] == [
         "plant_protection.rice_safety_survey",
         "plant_protection.control_effect_survey",

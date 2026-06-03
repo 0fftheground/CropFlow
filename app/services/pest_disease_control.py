@@ -39,7 +39,7 @@ class PestDiseaseControlClient(Protocol):
         survey_data: dict[str, Any],
         spray_info: dict[str, Any] | None,
         spray_info_list: list[dict[str, Any]] | None,
-        level1_window: dict[str, Any] | None,
+        level1_window: list[str] | None,
         herb_control_date: list[str] | None,
         harvest_date: str | None,
     ) -> "PestDiseaseTheoryControlResult": ...
@@ -186,7 +186,7 @@ class HttpPestDiseaseControlClient:
         survey_data: dict[str, Any],
         spray_info: dict[str, Any] | None,
         spray_info_list: list[dict[str, Any]] | None,
-        level1_window: dict[str, Any] | None,
+        level1_window: list[str] | None,
         herb_control_date: list[str] | None,
         harvest_date: str | None,
     ) -> PestDiseaseTheoryControlResult:
@@ -353,7 +353,7 @@ class MockPestDiseaseControlClient:
         survey_data: dict[str, Any],
         spray_info: dict[str, Any] | None,
         spray_info_list: list[dict[str, Any]] | None,
-        level1_window: dict[str, Any] | None,
+        level1_window: list[str] | None,
         herb_control_date: list[str] | None,
         harvest_date: str | None,
     ) -> PestDiseaseTheoryControlResult:
@@ -650,7 +650,11 @@ class PestDiseaseControlPlanningService:
         if control_type == "regular":
             spray_info = self._build_regular_spray_info(planting_plan.id, farming_task)
             spray_info_list = None
-            level1_window = self._resolve_level1_detail(planting_plan, farm)
+            level1_window = self._resolve_level1_window(
+                planting_plan,
+                farm,
+                round_number=int(spray_info["round"]),
+            )
         else:
             spray_info = None
             spray_info_list = self._build_emergency_spray_info_list(planting_plan.id)
@@ -827,7 +831,7 @@ class PestDiseaseControlPlanningService:
             raise ValueError(f"Pest disease control growth_stage is missing fields: {sorted(missing_fields)}.")
         return normalized
 
-    def _resolve_level1_detail(self, planting_plan: PlantingPlan, farm: Farm) -> dict[str, Any]:
+    def _resolve_level1_window(self, planting_plan: PlantingPlan, farm: Farm, *, round_number: int) -> list[str]:
         city = str(farm.city or "").strip()
         county = str(farm.district_county or "").strip()
         missing_fields = [
@@ -853,7 +857,12 @@ class PestDiseaseControlPlanningService:
         detail = control_window.detail or {}
         if not isinstance(detail, dict) or not detail:
             raise ValueError("Pest disease control window level1 detail must be a non-empty object.")
-        return json.loads(json.dumps(detail, ensure_ascii=False))
+        normalized_detail = json.loads(json.dumps(detail, ensure_ascii=False))
+        round_key = str(round_number)
+        window = normalized_detail.get(round_key)
+        if not isinstance(window, list) or len(window) != 2:
+            raise ValueError(f"Pest disease control window level1 detail is missing round {round_key}.")
+        return [str(window[0]), str(window[1])]
 
     def _build_regular_spray_info(self, planting_plan_id: int, farming_task: FarmingTask) -> dict[str, Any]:
         spray_stage = "常规病虫预防"

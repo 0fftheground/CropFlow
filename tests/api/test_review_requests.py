@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import get_review_request_query_service, get_review_request_service
 from app.db.session import get_db
 from app.main import app
-from app.models import EventRecord, ExecutionRecord, FarmingTask, OperationPlan, ReviewRequest, TaskIntent
+from app.models import EventRecord, ExecutionRecord, FarmingTask, OperationPlan, ReviewRequest, TaskIntent, User
 from app.services import ReviewRequestDetail, ReviewRequestQueryService, ReviewRequestResolveInput, ReviewRequestResolveResult
 
 
@@ -156,6 +156,11 @@ class FakeReviewRequestQueryService:
 
 
 class DummySession:
+    def get(self, model, key):
+        if model is User and key == "agronomist-1":
+            return User(id="agronomist-1", username="agronomist-1")
+        return None
+
     def commit(self) -> None:
         return None
 
@@ -200,9 +205,14 @@ def test_resolve_review_request_route_maps_errors() -> None:
 
     not_found_response = client.post("/api/review-requests/404/resolve", json={"decision": "approve"})
     bad_request_response = client.post("/api/review-requests/20/resolve", json={"decision": "invalid"})
+    missing_user_response = client.post(
+        "/api/review-requests/20/resolve",
+        json={"decision": "approve", "resolved_by": "missing-user"},
+    )
 
     assert not_found_response.status_code == 404
     assert bad_request_response.status_code == 400
+    assert missing_user_response.status_code == 400
 
     app.dependency_overrides.clear()
 

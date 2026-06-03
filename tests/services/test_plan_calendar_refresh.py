@@ -125,6 +125,9 @@ class FakeTaskIntentRepository:
                 task_intent.id = self.next_id
                 self.next_id += 1
 
+    def get_by_idempotency_key(self, idempotency_key: str) -> TaskIntent | None:
+        return next((item for item in self.items if item.idempotency_key == idempotency_key), None)
+
     def list_current_by_plan(self, planting_plan_id: int) -> list[TaskIntent]:
         return [
             item
@@ -360,3 +363,59 @@ def test_weather_update_with_pest_metadata_creates_sudden_disease_pest_calendar_
     task_subtypes = [item.task_subtype for item in result.calendar_items]
     assert "plant_protection.regular_disease_pest_survey" in task_subtypes
     assert "plant_protection.sudden_disease_pest_survey" in task_subtypes
+
+
+def test_plan_refresh_skips_reopening_converted_soil_treatment_recommendation() -> None:
+    calendar_repo = FakeCalendarItemRepository()
+    event_repo = FakeEventRecordRepository()
+    task_intent_repo = FakeTaskIntentRepository(
+        items=[
+            TaskIntent(
+                id=10,
+                planting_plan_id=1,
+                task_category="plant_protection",
+                task_subtype="plant_protection.soil_sealing_weed_control",
+                status="converted",
+                idempotency_key="task-intent:soil-treatment:1:2026-04-18:2026-04-21",
+            ),
+        ],
+        next_id=11,
+    )
+    review_repo = FakeReviewRequestRepository()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(_make_variety()),
+        code_dict_repository=FakeCodeDictRepository(_make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(_make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=MockWeatherProvider(),
+        diagnosis_client=MockWeedDiagnosisClient(),
+    )
+    handler = PlanCalendarRefreshHandler(
+        survey_date_recommendation_service=service,
+        event_record_repository=event_repo,
+        task_intent_repository=task_intent_repo,
+        review_request_repository=review_repo,
+    )
+
+    result = handler.handle(
+        EventRecord(
+            planting_plan_id=1,
+            event_type=EVENT_TYPE_PLAN_CREATED,
+            event_category="plan",
+            event_source="api",
+            source_system="cropflow",
+            payload={"planCode": "PLAN-001"},
+            occurred_at=datetime.now(UTC).replace(tzinfo=None),
+            processing_status="received",
+            idempotency_key="plan-created:1:second-pass",
+            created_by_type="user",
+            created_by_id="api",
+        ),
+    )
+
+    assert [item.id for item in result.task_intents] == [10]
+    assert result.review_requests == []
+    assert len(task_intent_repo.items) == 1

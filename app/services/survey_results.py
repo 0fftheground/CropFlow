@@ -10,6 +10,7 @@ from app.core.constants import (
     EXECUTION_MODE_MANUAL,
     EXECUTION_RECORD_TYPE_SURVEY_RESULT,
     EXECUTION_STATUS_COMPLETED,
+    FARMING_TASK_STATUS_COMPLETED,
     TASK_SUBTYPE_SERVICE_EFFECT_SURVEY,
 )
 from app.models import EventRecord, Execution, ExecutionRecord, FarmingTask, ReviewRequest, TaskIntent
@@ -74,6 +75,7 @@ class SurveyResultService:
 
         self._validate_result_payload(farming_task.task_subtype, result_payload)
         execution = self._get_or_create_execution(farming_task)
+        farming_task.status = FARMING_TASK_STATUS_COMPLETED
         execution_record = ExecutionRecord(
             planting_plan_id=farming_task.planting_plan_id,
             execution_id=execution.id,

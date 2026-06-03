@@ -217,7 +217,7 @@ docs/planning/team-work-division/
   - 范围冻结、规则拍板、跨方向收口：product-architecture-owner.md
   - 核心对象、API contract、编排骨架：core-backend.md
   - 业务方向细节：calendar-stage.md / plant-protection.md / irrigation.md / fertilization.md / remote-sensing.md
-  - 页面范围和联调：frontend.md / frontend-weed-handoff.md
+  - 页面范围和联调：frontend.md / frontend-plant-protection-handoff.md
 
 docs/planning/P1/
   适合回看杂草样板闭环的历史收口材料和业务语义。

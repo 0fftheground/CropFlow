@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_review_request_query_service, get_review_request_service
 from app.db.session import get_db
-from app.models import EventRecord, ExecutionRecord, FarmingTask, OperationPlan, ReviewRequest, TaskIntent
+from app.models import EventRecord, ExecutionRecord, FarmingTask, OperationPlan, ReviewRequest, TaskIntent, User
 from app.services import (
     ReviewRequestDetail,
     ReviewRequestQueryService,
@@ -136,6 +136,7 @@ def resolve_review_request(
     db: Session = Depends(get_db),
 ) -> ReviewRequestResolveResponse:
     try:
+        _validate_resolved_by_user(db, payload.resolved_by)
         result = service.resolve(
             review_request_id,
             ReviewRequestResolveInput(
@@ -154,6 +155,14 @@ def resolve_review_request(
 
     db.commit()
     return _serialize_resolve_response(result)
+
+
+def _validate_resolved_by_user(db: Session, resolved_by: str | None) -> None:
+    if resolved_by is None:
+        return
+    if db.get(User, resolved_by) is not None:
+        return
+    raise ValueError(f"Resolved user {resolved_by} does not exist.")
 
 
 def _serialize_resolve_response(result: ReviewRequestResolveResult) -> ReviewRequestResolveResponse:
