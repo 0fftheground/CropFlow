@@ -36,7 +36,7 @@ router = APIRouter(prefix="/planting-plans")
 class PlantingPlanCreateRequest(BaseModel):
     plan_name: str
     farm_id: int
-    field_ids: list[int]
+    field_ids: list[int] = PydanticField(default_factory=list)
     culti_type_code: int
     planting_method_code: int
     crop_name: str

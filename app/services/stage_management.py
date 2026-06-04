@@ -335,8 +335,6 @@ class MockStagePredictionClient:
         else:
             if not str(request_payload.get("apprArea") or "").strip():
                 raise ValueError("apprArea is required.")
-            if not str(request_payload.get("controlSpec") or "").strip():
-                raise ValueError("controlSpec is required.")
         threshold_rule = {
             "stage_thresholds": {
                 "BBCH13": 64,
@@ -594,25 +592,48 @@ class StageManagementService:
         stage_name: str | None = None,
         source_event_id: int | None = None,
     ) -> ActualStageRecordResult:
+        return self.apply_actual_stage_records(
+            planting_plan_id,
+            stage_dates={stage_code: effective_date},
+            stage_names={stage_code: stage_name} if stage_name is not None else None,
+            source_event_id=source_event_id,
+        )
+
+    def apply_actual_stage_records(
+        self,
+        planting_plan_id: int,
+        *,
+        stage_dates: dict[str, date],
+        stage_names: dict[str, str | None] | None = None,
+        source_event_id: int | None = None,
+    ) -> ActualStageRecordResult:
         planting_plan = self._get_plan(planting_plan_id)
         farm = self._get_farm(planting_plan.farm_id)
-        normalized_raw_stage_code = _normalize_raw_stage_code(str(stage_code).strip())
-        normalized_stage_code = _normalize_business_stage_code(str(stage_code).strip(), normalized_raw_stage_code)
-        if not normalized_stage_code:
-            raise ValueError("ActualStageRecorded requires stage_code.")
-        if normalized_raw_stage_code is None and normalized_stage_code not in _STAGE_NAME_BY_CODE:
-            raise ValueError(f"Unsupported actual stage code: {stage_code}.")
+        if not stage_dates:
+            raise ValueError("ActualStageRecorded requires at least one raw stage code.")
+        normalized_stage_dates: dict[str, date] = {}
+        for stage_code, effective_date in stage_dates.items():
+            normalized_input_stage_code = str(stage_code).strip()
+            if not normalized_input_stage_code:
+                raise ValueError("ActualStageRecorded requires stage_code.")
+            if not is_raw_stage_code(normalized_input_stage_code):
+                raise ValueError(f"ActualStageRecorded requires raw stage code, got: {stage_code}.")
+            normalized_stage_dates[normalized_input_stage_code] = effective_date
+        validate_manual_raw_stage_dates(normalized_stage_dates)
+        latest_stage_code, latest_effective_date = max(
+            normalized_stage_dates.items(),
+            key=lambda item: (item[1], get_raw_stage_order_index(item[0]) or -1),
+        )
+        normalized_raw_stage_code = latest_stage_code
+        normalized_stage_code = _normalize_business_stage_code(latest_stage_code, normalized_raw_stage_code)
+        stage_name = stage_names.get(latest_stage_code) if stage_names is not None else None
         resolved_stage_name = (
             stage_name
             or (normalized_raw_stage_code and _RAW_STAGE_NAME_BY_CODE.get(normalized_raw_stage_code))
             or _STAGE_NAME_BY_CODE.get(normalized_stage_code)
             or normalized_stage_code
         )
-        current_stage_code = (
-            normalized_stage_code
-            if normalized_raw_stage_code in _BUSINESS_STAGE_BY_RAW_STAGE_CODE
-            else (normalized_raw_stage_code or normalized_stage_code)
-        )
+        current_stage_code = normalized_raw_stage_code
         latest_snapshot = self.stage_prediction_snapshot_repository.get_latest_by_plan(planting_plan_id)
         request_payload = _build_stage_rule_request_payload(
             planting_plan,
@@ -631,9 +652,13 @@ class StageManagementService:
         existing_thermal_state = self.crop_thermal_time_state_repository.get_by_plan(planting_plan_id)
         latest_as_of_date = _resolve_snapshot_as_of_date(latest_snapshot)
         calculation_as_of_date = max(
-            effective_date,
-            existing_thermal_state.last_calculated_date if existing_thermal_state and existing_thermal_state.last_calculated_date else effective_date,
-            latest_as_of_date or effective_date,
+            latest_effective_date,
+            (
+                existing_thermal_state.last_calculated_date
+                if existing_thermal_state and existing_thermal_state.last_calculated_date
+                else latest_effective_date
+            ),
+            latest_as_of_date or latest_effective_date,
         )
         calculation_context = _build_stage_calculation_context(
             planting_plan,
@@ -641,9 +666,15 @@ class StageManagementService:
             weather_provider=self.weather_provider,
             weather_lookahead_days=self.weather_lookahead_days,
         )
-        manual_raw_stage_dates = _extract_manual_raw_stage_dates(latest_snapshot.stage_timeline) if latest_snapshot else {}
-        if normalized_raw_stage_code is not None:
-            manual_raw_stage_dates[normalized_raw_stage_code] = effective_date
+        latest_stage_timeline = latest_snapshot.stage_timeline if latest_snapshot else {}
+        manual_raw_stage_dates = _extract_manual_raw_stage_dates(latest_stage_timeline) if latest_snapshot else {}
+        manual_raw_stage_dates.update(normalized_stage_dates)
+        preserved_stage_start_dates = _build_preserved_manual_stage_start_dates(
+            existing_raw_stage_start_dates=(
+                _extract_raw_stage_start_dates(latest_stage_timeline) if latest_snapshot else {}
+            ),
+            manual_raw_stage_dates=manual_raw_stage_dates,
+        )
         refresh_result = self._refresh_from_threshold_rule(
             planting_plan=planting_plan,
             request_payload=request_payload,
@@ -654,19 +685,27 @@ class StageManagementService:
             calculation_context=calculation_context,
             source_event_id=source_event_id,
             rule_snapshot_id=latest_snapshot.id if latest_snapshot is not None else None,
+            initial_stage_start_dates=preserved_stage_start_dates,
             manual_raw_stage_dates=manual_raw_stage_dates,
             stage_state_override={
                 "current_stage_code": current_stage_code,
                 "current_stage_name": resolved_stage_name,
                 "stage_source": "manual",
-                "effective_date": effective_date,
+                "effective_date": latest_effective_date,
                 "created_by_id": "ActualStageRecorded",
             },
             recalculation_summary={
-                "mode": "manual_stage_override",
-                "source_stage_code": str(stage_code).strip(),
+                "mode": "manual_stage_override_batch" if len(normalized_stage_dates) > 1 else "manual_stage_override",
+                "source_stage_code": latest_stage_code,
                 "normalized_raw_stage_code": normalized_raw_stage_code,
-                "effective_date": effective_date.isoformat(),
+                "effective_date": latest_effective_date.isoformat(),
+                "manual_stage_dates": {
+                    stage_code: stage_date.isoformat()
+                    for stage_code, stage_date in sorted(
+                        normalized_stage_dates.items(),
+                        key=lambda item: (item[1], get_raw_stage_order_index(item[0]) or -1),
+                    )
+                },
                 "current_stage_basis": "manual_priority",
             },
         )
@@ -942,10 +981,10 @@ def _build_stage_rule_request_payload(
         or metadata_payload.get("control_spec")
         or (rice_variety.control_variety if rice_variety is not None else None)
     )
-    if not appr_area or not control_spec:
+    if not appr_area:
         raise ValueError(
-            "Stage threshold request requires approveRegion/controlSpec. "
-            "Provide them via PlantingPlan.metadata or RiceVariety.approve_region/control_variety.",
+            "Stage threshold request requires approveRegion. "
+            "Provide it via PlantingPlan.metadata or RiceVariety.approve_region.",
         )
     matur_type = _resolve_stage_algorithm_matur_type(
         metadata_payload.get("maturType"),
@@ -971,7 +1010,7 @@ def _build_stage_rule_request_payload(
     )
     return {
         "apprArea": str(appr_area),
-        "controlSpec": str(control_spec),
+        "controlSpec": str(control_spec or ""),
         "maturType": int(matur_type),
         "cultiType": int(culti_type),
         "apprCultiType": int(appr_culti_type),
@@ -1719,6 +1758,41 @@ def _normalize_business_stage_code(stage_identifier: str, raw_stage_code: str | 
     return stage_identifier
 
 
+def is_raw_stage_code(stage_identifier: str) -> bool:
+    return stage_identifier in _RAW_STAGE_METADATA_BY_CODE
+
+
+def get_raw_stage_season_scope(stage_identifier: str) -> str | None:
+    metadata = _RAW_STAGE_METADATA_BY_CODE.get(stage_identifier)
+    if metadata is None:
+        return None
+    season_scope = metadata.get("season_scope")
+    return str(season_scope) if season_scope is not None else None
+
+
+def get_raw_stage_order_index(stage_identifier: str) -> int | None:
+    return _RAW_STAGE_ORDER_INDEX.get(stage_identifier)
+
+
+def validate_manual_raw_stage_dates(stage_dates: dict[str, date]) -> None:
+    previous_by_season: dict[str, tuple[str, date]] = {}
+    for raw_stage_code in _RAW_STAGE_METADATA_BY_CODE:
+        effective_date = stage_dates.get(raw_stage_code)
+        if effective_date is None:
+            continue
+        season_scope = get_raw_stage_season_scope(raw_stage_code)
+        if season_scope is None:
+            continue
+        previous = previous_by_season.get(season_scope)
+        if previous is not None and effective_date < previous[1]:
+            raise ValueError(
+                "Actual stage dates conflict with raw stage order: "
+                f"{raw_stage_code} ({effective_date.isoformat()}) is earlier than "
+                f"{previous[0]} ({previous[1].isoformat()}).",
+            )
+        previous_by_season[season_scope] = (raw_stage_code, effective_date)
+
+
 def _normalize_raw_stage_code(stage_identifier: str) -> str | None:
     if stage_identifier in _RAW_STAGE_METADATA_BY_CODE:
         return stage_identifier
@@ -1794,6 +1868,43 @@ def _derive_business_stage_start_dates(raw_stage_start_dates: dict[str, date]) -
         if start_date is not None:
             business_stage_start_dates[business_stage_code] = start_date
     return business_stage_start_dates
+
+
+def _build_preserved_manual_stage_start_dates(
+    *,
+    existing_raw_stage_start_dates: dict[str, date],
+    manual_raw_stage_dates: dict[str, date],
+) -> dict[str, date]:
+    if not existing_raw_stage_start_dates:
+        return {}
+    manual_anchor_indices_by_season: dict[str, list[int]] = {}
+    for raw_stage_code in manual_raw_stage_dates:
+        season_scope = get_raw_stage_season_scope(raw_stage_code)
+        order_index = get_raw_stage_order_index(raw_stage_code)
+        if season_scope is None or order_index is None:
+            continue
+        manual_anchor_indices_by_season.setdefault(season_scope, []).append(order_index)
+    for indices in manual_anchor_indices_by_season.values():
+        indices.sort()
+
+    preserved_stage_start_dates: dict[str, date] = {}
+    for raw_stage_code, start_date in existing_raw_stage_start_dates.items():
+        season_scope = get_raw_stage_season_scope(raw_stage_code)
+        order_index = get_raw_stage_order_index(raw_stage_code)
+        if season_scope is None or order_index is None:
+            continue
+        manual_anchor_indices = manual_anchor_indices_by_season.get(season_scope)
+        if not manual_anchor_indices:
+            preserved_stage_start_dates[raw_stage_code] = start_date
+            continue
+        if order_index < manual_anchor_indices[0]:
+            preserved_stage_start_dates[raw_stage_code] = start_date
+            continue
+        for left_anchor_index, right_anchor_index in zip(manual_anchor_indices, manual_anchor_indices[1:]):
+            if left_anchor_index < order_index < right_anchor_index:
+                preserved_stage_start_dates[raw_stage_code] = start_date
+                break
+    return preserved_stage_start_dates
 
 
 def _extract_raw_stage_start_dates(

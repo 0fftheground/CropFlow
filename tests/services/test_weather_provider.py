@@ -371,3 +371,111 @@ def test_http_weather_provider_falls_back_to_daily_forecast_for_hourly_weather()
         "wp": None,
     }
     assert hourly_weather[-1]["datetime"] == "2026-05-31 23:00:00"
+
+
+def test_http_weather_provider_retries_daily_forecast_with_alternate_farm_id_key() -> None:
+    provider = HttpWeatherProvider(
+        farm_repository=FakeFarmRepository(_make_farm()),
+        base_url="http://weather.local",
+        auth_token="token",
+    )
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def fake_post_json(path: str, payload: dict[str, str]) -> list[dict[str, object]]:
+        calls.append((path, payload))
+        assert path == "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter"
+        if "farmID" in payload:
+            raise ValueError("Weather API /weather/v1/getForecast10DaysBeforeAnd15DaysAfter returned business code 4001.")
+        assert payload == {"farmId": "84911829811210"}
+        return [
+            {
+                "datatime": "2026-05-28",
+                "tAvg": 25.0,
+                "tMin": 20.0,
+                "tMax": 30.0,
+                "pre": 0.0,
+            },
+        ]
+
+    provider._post_json = fake_post_json  # type: ignore[method-assign]
+
+    weather_data = provider.get_daily_weather(
+        _make_plan(),
+        date(2026, 5, 28),
+        date(2026, 5, 28),
+        as_of_date=date(2026, 5, 28),
+    )
+
+    assert weather_data == [
+        {
+            "date": "2026-05-28",
+            "avg_temp": 25.0,
+            "min_temp": 20.0,
+            "max_temp": 30.0,
+            "precipitation": 0.0,
+            "source_type": "forecast",
+            "data_version": f"weather-forecast:{date.today().isoformat()}",
+        },
+    ]
+    assert calls == [
+        ("/weather/v1/getForecast10DaysBeforeAnd15DaysAfter", {"farmID": "84911829811210"}),
+        ("/weather/v1/getForecast10DaysBeforeAnd15DaysAfter", {"farmId": "84911829811210"}),
+    ]
+
+
+def test_http_weather_provider_retries_average_weather_with_alternate_farm_id_key() -> None:
+    provider = HttpWeatherProvider(
+        farm_repository=FakeFarmRepository(_make_farm()),
+        base_url="http://weather.local",
+        auth_token="token",
+    )
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def fake_post_json(path: str, payload: dict[str, str]) -> list[dict[str, object]]:
+        calls.append((path, payload))
+        assert path == "/weather/v1/getAvgTemAndPre"
+        if "farmId" in payload:
+            raise ValueError("Weather API /weather/v1/getAvgTemAndPre returned HTTP 400: missing farmID")
+        assert payload == {
+            "farmID": "84911829811210",
+            "startDate": "2026-04-10",
+            "endDate": "2026-04-10",
+        }
+        return [{"dt": "04-10", "temAvg": 20, "preAvg": 0.0}]
+
+    provider._post_json = fake_post_json  # type: ignore[method-assign]
+
+    weather_data = provider.get_daily_weather(
+        _make_plan(),
+        date(2026, 4, 10),
+        date(2026, 4, 10),
+        as_of_date=date(2026, 4, 11),
+    )
+
+    assert weather_data == [
+        {
+            "date": "2026-04-10",
+            "avg_temp": 20.0,
+            "precipitation": 0.0,
+            "source_type": "observed",
+            "data_version": "weather-observed:2026-04-10:2026-04-10",
+        },
+    ]
+    assert calls == [
+        (
+            "/weather/v1/getAvgTemAndPre",
+            {
+                "farmId": "84911829811210",
+                "startDate": "2026-04-10",
+                "endDate": "2026-04-10",
+            },
+        ),
+        (
+            "/weather/v1/getAvgTemAndPre",
+            {
+                "farmID": "84911829811210",
+                "startDate": "2026-04-10",
+                "endDate": "2026-04-10",
+            },
+        ),
+    ]

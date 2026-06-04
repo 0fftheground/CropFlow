@@ -510,13 +510,21 @@ class StageRefreshHandler:
                 source_event_payload=dict(event_record.payload or {}),
             )
         elif event_record.event_type == EVENT_TYPE_ACTUAL_STAGE_RECORDED:
-            actual_result = self.stage_management_service.apply_actual_stage_recorded(
-                event_record.planting_plan_id,
-                stage_code=str(_get_payload_value(event_record.payload, "stageCode", "stage_code")),
-                stage_name=_get_payload_value(event_record.payload, "stageName", "stage_name", required=False),
-                effective_date=_parse_payload_date(event_record.payload, "effectiveDate"),
-                source_event_id=event_record.id,
-            )
+            raw_stage_dates = _parse_stage_dates_payload(event_record.payload)
+            if raw_stage_dates:
+                actual_result = self.stage_management_service.apply_actual_stage_records(
+                    event_record.planting_plan_id,
+                    stage_dates=raw_stage_dates,
+                    source_event_id=event_record.id,
+                )
+            else:
+                actual_result = self.stage_management_service.apply_actual_stage_recorded(
+                    event_record.planting_plan_id,
+                    stage_code=str(_get_payload_value(event_record.payload, "stageCode", "stage_code")),
+                    stage_name=_get_payload_value(event_record.payload, "stageName", "stage_name", required=False),
+                    effective_date=_parse_payload_date(event_record.payload, "effectiveDate"),
+                    source_event_id=event_record.id,
+                )
             self._record_stage_changed_event(
                 event_record=event_record,
                 previous_stage_code=actual_result.previous_stage_code,
@@ -1780,6 +1788,23 @@ def _parse_payload_date(payload: dict[str, Any], key: str) -> date:
     if isinstance(raw_value, str) and "-" in raw_value:
         return date.fromisoformat(raw_value)
     return datetime.strptime(str(raw_value), "%Y%m%d").date()
+
+
+def _parse_stage_dates_payload(payload: dict[str, Any]) -> dict[str, date]:
+    raw_stage_dates = payload.get("stageDates") or payload.get("stage_dates")
+    if not isinstance(raw_stage_dates, dict):
+        return {}
+    parsed_stage_dates: dict[str, date] = {}
+    for stage_code, raw_date in raw_stage_dates.items():
+        normalized_stage_code = str(stage_code).strip()
+        if not normalized_stage_code:
+            continue
+        parsed_stage_dates[normalized_stage_code] = (
+            raw_date
+            if isinstance(raw_date, date)
+            else (date.fromisoformat(raw_date) if isinstance(raw_date, str) and "-" in raw_date else datetime.strptime(str(raw_date), "%Y%m%d").date())
+        )
+    return parsed_stage_dates
 
 
 def _resolve_theory_control_operation_window(theory_result) -> tuple[date, date]:

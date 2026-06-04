@@ -22,31 +22,48 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
   - `docs/planning/team-work-division/frontend-plant-protection-handoff.md`
   - `docs/api/frontend-plant-protection-api-contract.md`
 - 新文档已补病虫调查 / 病虫防治的页面说明、payload 示例、对象字段对照表和前端组装建议。
+- 前端联调 contract 继续细化：
+  - 病虫调查第一版固定为完整 5 类对象 schema，`survey_method` 只读回填，零值字段显式回传
+  - `task_detail` 已明确要展示已完成任务的执行结果
+  - 新增 `PATCH /api/tasks/{taskId}/execution-records/latest`，支持只编辑最近一次执行记录并生成 `ExecutionRecordUpdated`
+- 计划运行态和执行链路补了几项关键能力：
+  - `PATCH /planting-plans/{id}` 现在记录 `PlanUpdated` 审计事件
+  - `draft -> active` 会自动补发 `TaskDueCheckTriggered`
+  - `/planting-plans/{id}/tasks` 已改为返回全量任务，不再过滤 completed
+  - `resolved_by` 兼容 `user id / username / display_name`
+- 生育期 / 气象 MVP 规则已固定并落成 ADR：`docs/decisions/007-stage-weather-runtime-mvp-rules.md`
+- 创建计划和运行期联调口径已放宽 / 收紧到当前版本：
+  - 创建计划允许先不传地块
+  - 生育期人工录入只接受 raw stage code，禁止未来日期，同批多条录入会做顺序冲突校验
+- 开发环境脚本已固定使用项目 `.venv`：`scripts/start-dev.ps1`
 - 新增 `scripts/replay_pest_disease_daily_update.py`，可基于真实计划回放 `daily-update-survey` 并复现 `merged_into_regular`。
 
 ## Remaining
 
 - 继续做前端真实联调验收，优先 `plan_detail / task_detail / survey_entry / review_request / execution_feedback`。
-- 病虫调查表单仍只有第一版字段建议；如前端需要更多病虫对象或更细字段，还要继续补 contract。
 - 病虫日更虽然已能回放 `merged_into_regular`，但 `new_emergency` 的稳定复现方式还值得继续收口。
-- 气象运行期管理仍未完全产品化：`observed / forecast / climatology` 的缓存、历史修正和更细审计仍待补齐。
-- 生育期运行期策略仍需继续收口，尤其是人工录入后的影响边界、raw stage code 消费范围和历史天气回刷口径。
+- 生育期与气象运行期 MVP 口径已收口：
+  - 天气输入优先级固定为 `observed > forecast > climatology`
+  - `forecast` 只刷新预测层，不直接触发 `StageChanged`
+  - 历史 `observed` 修正从“修正日期”和最近人工 raw stage 锚点两者中更晚者开始重算
+  - 人工录入只接受 raw stage code，且只能录入当天或过去日期
+- 气象运行期管理仍未完全产品化：更细缓存、版本审计、异常展示和前端状态细化仍待补齐。
 - DeviceCommand、InventoryItem / InventoryTransaction 仍按 deferred 处理。
 
 ## Blockers
 
 - 外部天气接口契约仍有漂移：平均接口使用 `farmId`，逐日预报接口使用 `farmID`，小时级接口 `/algBaseDataApi/v1/getForecast10DaysBeforeAndAfter` 仍可能返回 `Api not exists`，目前依赖 fallback。
 - 本地真实联调仍依赖 `Farm.external_farm_id`；缺失时天气链路直接不可用。
-- 前端虽然已开始调试，但页面级验收和字段最终定稿还没有完全收口。
+- 前端虽然已开始调试，但页面级真实验收还没跑完，尤其是执行结果展示 / 编辑和病虫调查提交流程。
 
 ## Next Step
 
 下个 session 优先做三件事：
 
-1. 继续和前端一起把植保页面联调跑完，重点验 `survey-results` / `execution-completions` / `review resolve` 的页面流转。
+1. 继续和前端一起把植保页面联调跑完，重点验 `survey-results` / `execution-completions` / `execution-record update` / `review resolve` 的页面流转。
 2. 继续补病虫调查 / 防治的调试支撑，必要时把 `daily-update-survey` 的 replay 固化成更明确的 `merged / emergency` 模式。
-3. 继续收口生育期和气象运行期策略，把历史回刷、raw stage code 和人工录入影响范围说清楚。
+3. 按已冻结的生育期 / 气象 MVP 规则继续联调，重点补天气异常展示、前端状态表达和历史修正验证。
 
 ## Last Updated
 
-`2026-06-03`
+`2026-06-04`

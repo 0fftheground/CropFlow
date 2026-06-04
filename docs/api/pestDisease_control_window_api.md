@@ -2,7 +2,7 @@
 
 ## 1. 文档说明
 
-本文档描述防治窗口相关生产接口，接口只负责算法计算并直接返回结果。
+本文档描述防治窗口相关生产接口，接口接收业务入参并返回计算结果。
 
 接口约束：
 
@@ -38,6 +38,74 @@
 | `level1_window` | array | 条件必填 | 一级理论防治日期，格式 `[MMDD, MMDD]`。`control_type=regular` 时必填。 |
 | `herb_control_date` | array | 否 | 除草剂使用日期窗口，格式 `[YYYYMMDD, YYYYMMDD]`。 |
 | `harvest_date` | string | 否 | 计划收割日期，格式 `YYYYMMDD`。 |
+
+#### `plant_info`
+
+`plant_info` 只需要传算法使用的种植信息，不需要传完整种植计划，也不会通过 `plant_id` 查询数据库。
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `year` | string/integer | 是 | 种植年份，用于查询防治方案库。 |
+| `cultivation_system` | string | 是 | 稻作类型，例如 `早稻`、`中稻`、`一季晚稻`、`晚稻`、`再生稻`。 |
+| `cultivation_pattern` | string | 是 | 栽培方式，例如 `直播`、`抛秧`、`插秧`。 |
+| `growth_stage` | object | 是 | 基础生育期节点，字段见下表。 |
+
+`growth_stage` 字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `tillering_date` | string | 是 | 分蘖期日期，格式 `YYYY-MM-DD`。 |
+| `pokou_date` | string | 是 | 破口期日期，格式 `YYYY-MM-DD`。 |
+| `heading_date` | string | 是 | 齐穗期日期，格式 `YYYY-MM-DD`。 |
+
+#### `survey_data`
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `survey_date` | string | 是 | 调查日期，格式 `YYYYMMDD`。 |
+| `survey_method` | string | 否 | 调查方法。仅常规防治且 `spray_info.stage="破口药"` 时建议传入；不传默认按 `一级理论防治日期`。 |
+| `bbch_stage` | integer | 是 | 当前 BBCH 生育期编码。 |
+| `ErHuaMing` | object | 是 | 二化螟调查数据，字段见“病虫调查字段”。 |
+| `DaoFeiShi` | object | 是 | 稻飞虱调查数据，字段见“病虫调查字段”。 |
+| `DaoWenBing` | object | 是 | 稻瘟病调查数据，字段见“病虫调查字段”。 |
+| `WenKuBing` | object | 是 | 纹枯病调查数据，字段见“病虫调查字段”。 |
+| `DaoZongJuanYeMing` | object | 是 | 稻纵卷叶螟调查数据，字段见“病虫调查字段”。 |
+
+`survey_method` 仅支持 `一级理论防治日期`、`生育期`。非破口药场景可不传。
+
+病虫调查字段：
+
+| 对象 | 字段 | 类型 | 取值/单位 | 说明 |
+| --- | --- | --- | --- | --- |
+| `ErHuaMing` | `dead_sheath_rate` | number | `0~1` | 枯鞘比例。 |
+| `ErHuaMing` | `dead_heart_rate` | number | `0~1` | 枯心比例。 |
+| `ErHuaMing` | `main_larval_instars` | integer | `0~6` | 主要虫龄，`0` 表示未发现或无主要虫龄。 |
+| `ErHuaMing` | `damaged_plant_rate` | number | `0~1` | 虫伤株比例。 |
+| `DaoFeiShi` | `insects_per_100_hills` | number | `>=0` | 每百丛虫量。 |
+| `DaoWenBing` | `acute_lesion` | boolean | `true/false` | 是否发现急性病斑。 |
+| `DaoWenBing` | `diseased_leaf_rate` | number | `0~1` | 病叶比例。 |
+| `WenKuBing` | `lesion_on_upper_leaf_sheath` | boolean | `true/false` | 倒 2 叶鞘及以上是否发现病斑。 |
+| `WenKuBing` | `diseased_hill_rate` | number | `0~1` | 病丛比例。 |
+| `DaoZongJuanYeMing` | `rolled_leaf_tips_per_100_hills` | number | `>=0` | 每百丛束尖数。 |
+| `DaoZongJuanYeMing` | `larvae_count` | number | `>=0` | 幼虫数量。 |
+| `DaoZongJuanYeMing` | `moths_per_square_meter` | number | `>=0` | 每平方米蛾量。 |
+
+病虫调查字段缺失或为空时按 `0` 或 `false` 处理；为保证诊断准确性，建议完整传入实际调查数据。
+
+#### `spray_info`
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `stage` | string | 是 | 当前打药阶段，例如 `封行药`、`破口药`、`齐穗药`、`常规病虫预防`、`突发病虫防治`。 |
+| `round` | integer | 否 | 当前打药轮次。算法不依赖该字段，调用方可用于业务追溯。 |
+
+#### `spray_info_list[]`
+
+`spray_info_list` 仅 `control_type=emergency` 时必填，每项至少包含：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `stage` | string | 是 | 历史打药阶段。 |
 
 ### 2.3 请求示例
 
@@ -99,7 +167,7 @@
 | --- | --- | --- |
 | `control_type` | string | 推荐类型，取值同请求入参。 |
 | `control_mode` | string | 理论推荐模式，例如 `单次防治`、`连续防治`、`需要防治`。 |
-| `status` | string/null | 理论推荐状态，例如 `0~2d`、`3~5d`、`normal`。 |
+| `status` | string/null | 理论推荐状态，例如 `0~2d`、`1~3d`、`normal`。 |
 | `rounds` | array | 理论防治轮次列表。无需防治时为空数组。 |
 | `spray_suitability_required_range` | array | 下一步需要获取的打药适宜度总日期范围，格式 `[YYYYMMDD, YYYYMMDD]`；无需防治时为 `[]`。 |
 | `flags` | object | 辅助标记。 |
@@ -113,11 +181,6 @@
 | `targets` | object | 当前轮次防治对象。 |
 | `prescription` | object | 当前轮次防治方案。 |
 
-`spray_suitability_required_range` 规则：
-
-- 常规防治：每个理论窗口 `[start, end]` 按 `start - 3 天` 到 `end + 15 天` 计算，再合并为总范围。
-- 突发防治：理论窗口 `[start, end]` 按 `start` 到 `end + 10 天` 计算；若防治对象包含 `纹枯病` 则不晚于 `灌浆期`，否则不晚于 `齐穗期`。
-
 ### 2.5 响应示例
 
 ```json
@@ -127,7 +190,7 @@
   "data": {
     "control_type": "regular",
     "control_mode": "单次防治",
-    "status": "3~5d",
+    "status": "1~3d",
     "rounds": [
       {
         "round": 1,
@@ -171,7 +234,22 @@
 | `control_type` | string | 是 | 推荐类型。`regular` 表示常规防治，`emergency` 表示突发病虫防治。 |
 | `theory_plan` | object | 是 | `/pestDisease/control/generate-theory-control-plan` 返回的理论防治结果，传 `data` 部分即可；接口也兼容传完整 `code/msg/data` 响应对象。 |
 | `spray_suitability_data` | array | 是 | 打药适宜度逐日数据，元素包含 `date` 和 `dy_ws`，应覆盖 `theory_plan.spray_suitability_required_range`。 |
-| `plant_info` | object | 否 | 种植信息。`control_type=emergency` 时建议传入，用于齐穗期/灌浆期截止判断。 |
+| `plant_info` | object | 否 | 种植信息。`control_type=emergency` 时建议传入，用于计算突发防治相关日期。 |
+
+#### `theory_plan`
+
+`theory_plan` 可直接传理论防治接口返回的 `data`，也兼容传完整 `code/msg/data` 响应对象；如果传完整响应对象，接口会读取其中的 `data`。
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `control_type` | string | 是 | 推荐类型，取值同请求入参。 |
+| `control_mode` | string | 是 | 理论推荐模式，例如 `单次防治`、`连续防治`、`需要防治`。 |
+| `status` | string/null | 否 | 理论推荐状态。 |
+| `rounds` | array | 是 | 理论防治轮次列表，字段同本章 `rounds[]`。 |
+| `spray_suitability_required_range` | array | 是 | 打药适宜度取数范围，格式 `[YYYYMMDD, YYYYMMDD]`。 |
+| `flags` | object | 否 | 辅助标记。 |
+
+`plant_info` 结构同理论防治接口中的 `plant_info`。
 
 ### 3.3 请求示例
 
@@ -181,7 +259,7 @@
   "theory_plan": {
     "control_type": "regular",
     "control_mode": "单次防治",
-    "status": "3~5d",
+    "status": "1~3d",
     "rounds": [
       {
         "round": 1,
@@ -255,12 +333,6 @@
 | `reason` | string/null | 总体调整说明。 |
 | `round_reasons` | array | 各轮次调整说明。 |
 
-气象调整规则：
-
-- 常规防治：优先理论窗口内；不适宜则向前 3 天；再不适宜则向后 15 天；仍无适宜日则取消防治。
-- 突发防治：优先理论窗口内；不适宜则向后最多 10 天；传入 `plant_info` 时，非纹枯病不晚于齐穗期，包含纹枯病不晚于灌浆期。
-- `spray_suitability_data` 缺少调整所需日期时返回参数错误，例如 `spray_suitability_data 缺少日期: 20260704`。
-
 ### 3.5 响应示例
 
 ```json
@@ -270,7 +342,7 @@
   "data": {
     "control_type": "regular",
     "control_mode": "单次防治",
-    "status": "3~5d",
+    "status": "1~3d",
     "rounds": [
       {
         "round": 1,
@@ -310,23 +382,27 @@
 - 接口用途：在常规理论防治和突发理论防治同时存在时，计算调用合并接口前需要获取的打药适宜度数据总日期范围。
 
 该接口不接收 `spray_suitability_data`，不做合并、不做气象筛选，只返回取数范围。单类型防治不调用该接口，直接使用理论接口返回的 `spray_suitability_required_range`。
-
+[..](..%2F..%2F..)
 ### 4.2 请求参数
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `regular_theory` | object | 是 | 常规理论防治结果，使用 `rounds[].theory_window` 和 `rounds[].targets`。`rounds` 至少 1 条。 |
 | `emergency_theory` | object | 是 | 突发理论防治结果，使用 `rounds[].theory_window` 和 `rounds[].targets`。`rounds` 必须且只能 1 条。 |
-| `extend_days` | integer | 否 | 合并接口顺延常规防治时的最大扩展天数，默认 `10`。 |
-| `plant_info` | object | 否 | 种植信息。传入后，突发范围按齐穗期/灌浆期做上限裁剪。 |
+| `extend_days` | integer | 否 | 合并接口使用的扩展参数，默认 `10`。 |
+| `plant_info` | object | 否 | 种植信息。传入后用于计算突发防治相关日期范围。 |
 
-取数范围规则：
+`regular_theory` 和 `emergency_theory` 均为理论防治结果对象，至少包含 `rounds` 字段；`rounds[]` 使用理论防治窗口 `theory_window`，不是气象适宜度调整后的 `final_window`。
 
-- 常规每个理论窗口 `[start, end]`：取 `start - 3 天` 到 `end + 2 * extend_days + 30 天`。
-- 默认 `extend_days=10` 时，常规为 `start - 3 天` 到 `end + 50 天`。
-- 突发理论窗口 `[start, end]`：取 `start` 到 `end + 25 天`。
-- 若传入 `plant_info`，突发对象包含 `纹枯病` 时不晚于灌浆期，否则不晚于齐穗期；裁剪后不会早于突发理论窗口结束日期。
-- 总范围取所有常规范围和突发范围的最小开始日期、最大结束日期。
+`rounds[]` 字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `round` | integer | 是 | 防治轮次。 |
+| `theory_window` | array | 是 | 理论防治窗口，格式 `[start_date, end_date]`，日期为 `YYYYMMDD`。 |
+| `targets` | object | 是 | 防治对象，key 为病虫名称，value 为 `防治` 或 `兼防`。 |
+
+`plant_info` 结构同理论防治接口中的 `plant_info`。
 
 ### 4.3 请求示例
 
@@ -395,7 +471,7 @@
 
 - 请求方法：`POST`
 - 接口路径：`/pestDisease/control/merge-control-plan`
-- 接口用途：基于常规和突发理论防治窗口，合并相邻防治事件，处理最小打药间隔，并筛选最终适宜打药日期。
+- 接口用途：接收常规和突发理论防治事件及打药适宜度数据，返回合并后的最终打药安排。
 
 ### 5.2 请求参数
 
@@ -406,18 +482,26 @@
 | `emergency_theory` | object | 是 | 突发理论防治事件。`rounds` 最多只能包含 1 条。 |
 | `min_gap_days` | integer | 否 | 两次打药最小间隔天数，默认 `7`。 |
 | `merge_gap_days` | integer | 否 | 常规与突发窗口相邻多少天内合并，默认 `3`。 |
-| `extend_days` | integer | 否 | 因间隔不足顺延时，最多向后扩展天数，默认 `10`。 |
-| `plant_info` | object | 条件必填 | 突发防治需要按生育期限制向后搜索范围时必填，结构同理论接口的 `plant_info`。 |
+| `extend_days` | integer | 否 | 合并接口使用的扩展参数，默认 `10`。 |
+| `plant_info` | object | 条件必填 | 突发防治相关日期计算所需的种植信息，结构同理论接口的 `plant_info`。 |
 
-`regular_theory.rounds[]` 和 `emergency_theory.rounds[]` 均使用理论防治窗口 `theory_window`，不是已经经过气象适宜度调整的 `final_window`。接口内部会先合并和处理间隔，再基于 `spray_suitability_data` 筛选最终日期；适宜度调整后会再次合并和处理间隔。
+`regular_theory.rounds[]` 和 `emergency_theory.rounds[]` 均使用理论防治窗口 `theory_window`，不是已经经过气象适宜度调整的 `final_window`。接口根据传入的理论事件和打药适宜度数据返回合并后的最终打药安排。
 
 `rounds[]` 字段：
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `round` | integer | 是 | 防治轮次。 |
-| `theory_window` | array | 是 | 理论防治窗口，格式 `[start_date, end_date]`。 |
-| `targets` | object | 是 | 防治对象，例如 `{"二化螟": "防治"}`。 |
+| `theory_window` | array | 是 | 理论防治窗口，格式 `[start_date, end_date]`，日期为 `YYYYMMDD`。 |
+| `targets` | object | 是 | 防治对象，key 为病虫名称，value 为 `防治` 或 `兼防`，例如 `{"二化螟": "防治", "稻飞虱": "兼防"}`。 |
+
+`regular_theory` 和 `emergency_theory` 的顶层结构均为：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `rounds` | array | 是 | 理论防治事件列表；`regular_theory.rounds` 可多条，`emergency_theory.rounds` 最多 1 条。 |
+
+`plant_info` 结构同理论防治接口中的 `plant_info`。
 
 ### 5.3 请求示例
 
@@ -522,4 +606,4 @@
 - `/pestDisease/control/adjust-control-window` 使用理论接口返回的 `spray_suitability_required_range` 对应日期数据做最终防治时间调整。
 - `/pestDisease/control/get-merge-spray-suitability-range` 用于常规和突发同时存在时，提前计算合并接口所需的打药适宜度取数范围。
 
-接口内部只做规则计算、窗口换算、适宜日期筛选、对象合并和结果格式化。
+接口按业务规则完成结果计算和格式化。

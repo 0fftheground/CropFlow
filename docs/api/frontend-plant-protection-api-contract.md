@@ -62,6 +62,7 @@ Content-Type: application/json
 | 任务详情 | `GET` | `/tasks/{taskId}` |
 | 调查结果录入 | `POST` | `/tasks/{taskId}/survey-results` |
 | 执行结果录入 | `POST` | `/tasks/{taskId}/execution-completions` |
+| 编辑最近一次执行记录 | `PATCH` | `/tasks/{taskId}/execution-records/latest` |
 | 复核详情 | `GET` | `/review-requests/{reviewRequestId}` |
 | 复核处理 | `POST` | `/review-requests/{reviewRequestId}/resolve` |
 
@@ -440,6 +441,7 @@ Query 参数：
   {
     "id": 1,
     "name": "黄广农占",
+    "approve_region": "长江中下游",
     "culti_type_code": 5,
     "sub_type_code": 9
   }
@@ -452,6 +454,7 @@ Query 参数：
 |---|---|---|
 | `id` | `int` | 实际提交的 `variety_id` |
 | `name` | `string` | 品种名称 |
+| `approve_region` | `string \| null` | 审定区域 |
 | `culti_type_code` | `int \| null` | 对应稻作类型编码 |
 | `sub_type_code` | `int \| null` | 品种子类型编码 |
 
@@ -576,7 +579,7 @@ Query 参数：
 
 | field | type | required | notes |
 |---|---|---|---|
-| `stages` | `object` | yes | `stageCode -> date`；至少 1 条 |
+| `stages` | `object` | yes | `rawStageCode -> date`；至少 1 条 |
 | `source_record_id` | `string \| null` | no | 幂等来源记录 |
 | `operator_id` | `string \| null` | no | 操作人 |
 | `note` | `string \| null` | no | 备注 |
@@ -600,10 +603,15 @@ Query 参数：
 14. `Z_BBCH58`
 15. `Z_BBCH89`
 
-后端同时兼容：
+请求约束：
 
-1. 内部业务阶段名，如 `heading`
-2. 旧数字 code，如 `21 / 50 / 58 / 89`
+1. 只接受完整 raw stage code，不再接受业务阶段码如 `heading`
+2. 不再接受旧数字 code，如 `21 / 50 / 58 / 89`
+3. 日期只能录入当天或过去日期，不能录入未来日期
+4. 同一次请求可同时提交多个 raw stage code，后端会按一批人工锚点一起应用，而不是逐条独立重算
+5. 如同次请求中多个 raw stage 的日期顺序与 raw stage 顺序冲突，后端直接返回 `400`
+6. 录入后后端会以这些 raw stage code 作为人工锚点重算预测；锚点之间已存在的中间 raw stage 日期默认保留，不强制改写
+7. 如当前阶段发生变化，后端会继续触发 `StageChanged` 并刷新受影响的 `CalendarItem / FarmingTask`
 
 成功响应：
 
@@ -695,6 +703,18 @@ Query 参数：
 | `created_at` | `datetime \| null` |
 | `updated_at` | `datetime \| null` |
 
+前端展示建议：
+
+1. `execution_records` 已包含已完成任务的执行结果，不要因为任务状态为 `completed` 就隐藏这块
+2. 建议优先展示最近一条记录的：
+   `actual_start_at`
+   `actual_end_at`
+   `actual_area`
+   `actual_amount`
+   `amount_unit`
+   `result_payload`
+3. 当前 `execution_records` 按最近记录优先返回，前端可直接把 `execution_records[0]` 当作“最近一次执行结果”
+
 ### 4.2 调查结果录入
 
 `POST /api/tasks/{taskId}/survey-results`
@@ -766,15 +786,34 @@ Query 参数：
 
 ##### `plant_protection.regular_disease_pest_survey`
 
-最小示例：
+推荐示例：
 
 ```json
 {
   "survey_date": "20260603",
   "survey_method": "一级理论防治日期",
   "bbch_stage": 23,
+  "ErHuaMing": {
+    "dead_sheath_rate": 0,
+    "dead_heart_rate": 0,
+    "main_larval_instars": 0,
+    "damaged_plant_rate": 0
+  },
+  "DaoZongJuanYeMing": {
+    "rolled_leaf_tips_per_100_hills": 0,
+    "larvae_count": 0,
+    "moths_per_square_meter": 0
+  },
   "DaoFeiShi": {
     "insects_per_100_hills": 12
+  },
+  "DaoWenBing": {
+    "acute_lesion": false,
+    "diseased_leaf_rate": 0
+  },
+  "WenKuBing": {
+    "lesion_on_upper_leaf_sheath": false,
+    "diseased_hill_rate": 0
   }
 }
 ```
@@ -782,9 +821,10 @@ Query 参数：
 字段说明：
 
 1. `survey_date` 必填，格式建议用 `YYYYMMDD`
-2. `survey_method` 建议直接回传任务上下文中的调查日期来源，如 `一级理论防治日期`
+2. `survey_method` 仅支持 `一级理论防治日期 / 生育期`；建议直接回传任务上下文中的调查日期来源；第一版按只读回填处理
 3. `bbch_stage` 为当前调查时的 BBCH 阶段数值
-4. 其他病虫字段按实际调查对象动态传入，例如 `DaoFeiShi`、`DaoWenBing`
+4. 第一版对象范围包含 `DaoFeiShi`、`DaoWenBing`、`ErHuaMing`、`DaoZongJuanYeMing`、`WenKuBing`
+5. 按新版算法文档，第一版建议把 5 类对象字段组都回传；未发现病虫时显式传 `0 / false`
 
 行为：
 
@@ -794,15 +834,33 @@ Query 参数：
 
 ##### `plant_protection.sudden_disease_pest_survey`
 
-最小示例：
+推荐示例：
 
 ```json
 {
   "survey_date": "20260629",
   "bbch_stage": 45,
+  "ErHuaMing": {
+    "dead_sheath_rate": 0,
+    "dead_heart_rate": 0,
+    "main_larval_instars": 0,
+    "damaged_plant_rate": 0
+  },
+  "DaoZongJuanYeMing": {
+    "rolled_leaf_tips_per_100_hills": 0,
+    "larvae_count": 0,
+    "moths_per_square_meter": 0
+  },
+  "DaoFeiShi": {
+    "insects_per_100_hills": 0
+  },
   "DaoWenBing": {
     "acute_lesion": true,
     "diseased_leaf_rate": 5
+  },
+  "WenKuBing": {
+    "lesion_on_upper_leaf_sheath": false,
+    "diseased_hill_rate": 0
   }
 }
 ```
@@ -811,7 +869,7 @@ Query 参数：
 
 1. `survey_date` 必填
 2. `bbch_stage` 建议按实际调查阶段传入
-3. 具体病害 / 虫害对象字段按任务调查对象动态传入
+3. 第一版仍建议按统一完整 schema 组装 5 类对象字段组；当前重点对象可在 UI 上优先展示，其余对象默认回传零值
 
 行为：
 
@@ -821,20 +879,30 @@ Query 参数：
 
 病虫对象字段对照表：
 
-| 对象 key | 中文建议 | 当前字段 | 当前来源 |
-|---|---|---|---|
-| `DaoFeiShi` | 稻飞虱 | `insects_per_100_hills` | 已在后端测试和本地真实联调中使用 |
-| `DaoWenBing` | 稻瘟病 | `acute_lesion`、`diseased_leaf_rate` | 已在后端测试和合并防治分支验证中使用 |
-| `ErHuaMing` | 二化螟 | `dead_sheath_rate`、`dead_heart_rate`、`main_larval_instars`、`damaged_plant_rate` | 当前按上游算法接口文档预留 |
-| `DaoZongJuanYeMing` | 稻纵卷叶螟 | `rolled_leaf_tips_per_100_hills`、`larvae_count`、`moths_per_square_meter` | 当前按上游算法接口文档预留 |
-| `WenKuBing` | 纹枯病 | `lesion_on_upper_leaf_sheath`、`diseased_hill_rate` | 当前按上游算法接口文档预留 |
+| 对象 key | 中文建议 | 字段 | type | 取值/单位 | 说明 |
+|---|---|---|---|---|---|
+| `ErHuaMing` | 二化螟 | `dead_sheath_rate` | `number` | `0~1` | 枯鞘比例 |
+| `ErHuaMing` | 二化螟 | `dead_heart_rate` | `number` | `0~1` | 枯心比例 |
+| `ErHuaMing` | 二化螟 | `main_larval_instars` | `int` | `0~6` | 主要虫龄，`0` 表示未发现或无主要虫龄 |
+| `ErHuaMing` | 二化螟 | `damaged_plant_rate` | `number` | `0~1` | 虫伤株比例 |
+| `DaoFeiShi` | 稻飞虱 | `insects_per_100_hills` | `number` | `>=0` | 每百丛虫量 |
+| `DaoWenBing` | 稻瘟病 | `acute_lesion` | `bool` | `true/false` | 是否发现急性病斑 |
+| `DaoWenBing` | 稻瘟病 | `diseased_leaf_rate` | `number` | `0~1` | 病叶比例 |
+| `WenKuBing` | 纹枯病 | `lesion_on_upper_leaf_sheath` | `bool` | `true/false` | 倒 2 叶鞘及以上是否发现病斑 |
+| `WenKuBing` | 纹枯病 | `diseased_hill_rate` | `number` | `0~1` | 病丛比例 |
+| `DaoZongJuanYeMing` | 稻纵卷叶螟 | `rolled_leaf_tips_per_100_hills` | `number` | `>=0` | 每百丛束尖数 |
+| `DaoZongJuanYeMing` | 稻纵卷叶螟 | `larvae_count` | `number` | `>=0` | 幼虫数量 |
+| `DaoZongJuanYeMing` | 稻纵卷叶螟 | `moths_per_square_meter` | `number` | `>=0` | 每平方米蛾量 |
 
 组装建议：
 
-1. 只提交当前任务调查对象实际出现的对象字段组，未调查的对象可以不传
+1. 第一版病虫对象范围按完整 5 类实现：`DaoFeiShi`、`DaoWenBing`、`ErHuaMing`、`DaoZongJuanYeMing`、`WenKuBing`
 2. 每个对象字段组都作为 `result_payload` 下的一个子对象，不要拍平成顶层字段
 3. `survey_date`、`survey_method`、`bbch_stage` 仍保持在 `result_payload` 顶层
-4. 第一版可以先按数字输入框 / 布尔开关实现，不必等待完整农艺字段组件
+4. `survey_method` 只在常规病虫调查页展示，并按只读字段回填；突发病虫调查默认不展示
+5. 前端建议统一使用数字输入框 / 布尔开关；`main_larval_instars` 用整数输入
+6. 第一版提交口径建议直接按完整 5 类对象 schema 回传；重点对象可优先展示，非重点对象可折叠但仍需带默认零值
+7. 对于未发现病虫或调查值为零，字段组仍应保留并显式传 `0 / false`，不要依赖“省略字段组”表达零值
 
 ##### `plant_protection.service_effect_evaluation`
 
@@ -917,6 +985,78 @@ Query 参数：
 1. 当前会生成执行记录和 `ExecutionCompleted` 事件
 2. 当前病虫正式防治完成后，默认不会像杂草那样继续自动生成药后调查 `CalendarItem`
 3. 成功响应仍使用通用格式；病虫任务下 `calendar_item_ids` 可能为空，前端不要假设一定会生成下游事项
+
+### 4.4 编辑最近一次执行记录
+
+`PATCH /api/tasks/{taskId}/execution-records/latest`
+
+用途：
+
+1. 仅修正该任务最近一次 `ExecutionRecord`
+2. 当前不支持编辑任意历史执行记录
+3. 当前不支持修改执行、任务、方案之间的关联关系
+
+请求体：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `result_payload` | `object \| null` | no | 执行结果补充信息；整体替换 |
+| `actual_start_at` | `datetime \| null` | no | 实际开始时间 |
+| `actual_end_at` | `datetime \| null` | no | 实际结束时间；如变更会同步更新 `Execution.completed_at` |
+| `actual_area` | `decimal \| null` | no | 实际面积 |
+| `actual_amount` | `decimal \| null` | no | 实际药量/肥量 |
+| `amount_unit` | `string \| null` | no | 单位 |
+
+请求约束：
+
+1. 至少传 1 个可编辑字段
+2. 只更新最后一条执行记录
+3. 如果任务没有执行记录，返回 `400`
+4. 如果传入值与当前记录完全一致，返回 `400`
+5. 更新后后端会新增 `ExecutionRecordUpdated` 事件，前端不需要自己补审计逻辑
+
+成功响应：
+
+| field | type | notes |
+|---|---|---|
+| `execution_id` | `int` | 执行 id |
+| `execution_record_id` | `int` | 被更新的执行记录 id |
+| `event_record_id` | `int` | 新建审计事件 id |
+| `updated_fields` | `string[]` | 本次实际发生变化的字段 |
+
+最小示例：
+
+```json
+{
+  "actual_end_at": "2026-05-11T09:30:00",
+  "actual_amount": 10.5,
+  "result_payload": {
+    "note": "corrected"
+  }
+}
+```
+
+成功响应示例：
+
+```json
+{
+  "execution_id": 21,
+  "execution_record_id": 22,
+  "event_record_id": 24,
+  "updated_fields": [
+    "actual_end_at",
+    "actual_amount",
+    "result_payload",
+    "record_time"
+  ]
+}
+```
+
+前端使用建议：
+
+1. `task_detail` 若存在 `execution_records[0]`，可以显示“编辑执行结果”
+2. 编辑成功后直接重新请求 `GET /api/tasks/{taskId}` 刷新详情
+3. 不要在前端尝试维护历史 diff，直接使用 `updated_fields` 和事件时间线即可
 
 ---
 

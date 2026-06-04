@@ -27,6 +27,7 @@ class FakeStageManagementService:
     def __init__(self) -> None:
         self.weather_update_payloads: list[dict[str, Any]] = []
         self.actual_stage_calls: list[dict[str, Any]] = []
+        self.actual_stage_batch_calls: list[dict[str, Any]] = []
 
     def refresh_for_weather_update(
         self,
@@ -108,6 +109,49 @@ class FakeStageManagementService:
             stage_changed=True,
         )
 
+    def apply_actual_stage_records(
+        self,
+        planting_plan_id: int,
+        *,
+        stage_dates: dict[str, date],
+        stage_names: dict[str, str | None] | None = None,
+        source_event_id: int | None = None,
+    ) -> ActualStageRecordResult:
+        latest_stage_code, latest_effective_date = max(stage_dates.items(), key=lambda item: (item[1], item[0]))
+        self.actual_stage_batch_calls.append(
+            {
+                "stage_dates": dict(stage_dates),
+                "stage_names": dict(stage_names or {}),
+                "source_event_id": source_event_id,
+            },
+        )
+        return ActualStageRecordResult(
+            snapshot=StagePredictionSnapshot(
+                id=12,
+                planting_plan_id=planting_plan_id,
+                prediction_version=4,
+                prediction_source="manual_adjustment",
+                algorithm_code="stage_prediction_algorithm",
+                input_payload={},
+                stage_timeline={"stages": [], "raw_stage_points": []},
+                thermal_thresholds={},
+            ),
+            crop_stage_state=CropStageState(
+                planting_plan_id=planting_plan_id,
+                current_stage_code=latest_stage_code,
+                current_stage_name=latest_stage_code,
+                stage_source="manual",
+                effective_date=latest_effective_date,
+                version=4,
+            ),
+            crop_thermal_time_state=CropThermalTimeState(
+                planting_plan_id=planting_plan_id,
+                accumulated_thermal_time=Decimal("950"),
+            ),
+            previous_stage_code="tillering",
+            stage_changed=True,
+        )
+
 
 def test_weather_update_records_stage_changed_event() -> None:
     event_repository = FakeEventRecordRepository()
@@ -179,3 +223,35 @@ def test_actual_stage_recorded_updates_stage_and_records_stage_changed_event() -
     assert event_repository.records[0].payload["previousStageCode"] == "tillering"
     assert event_repository.records[0].payload["currentStageCode"] == "heading"
     assert event_repository.records[0].payload["sourceSnapshotId"] == 11
+
+
+def test_actual_stage_recorded_batch_updates_stage_once_and_records_stage_changed_event() -> None:
+    event_repository = FakeEventRecordRepository()
+    stage_service = FakeStageManagementService()
+    handler = StageRefreshHandler(stage_service, event_repository)  # type: ignore[arg-type]
+    event_record = EventRecord(
+        id=8,
+        planting_plan_id=1,
+        event_type=EVENT_TYPE_ACTUAL_STAGE_RECORDED,
+        event_category="runtime",
+        event_source="api",
+        payload={
+            "stageCode": "BBCH58",
+            "effectiveDate": "2026-06-24",
+            "stageDates": {"BBCH45": "2026-06-10", "BBCH58": "2026-06-24"},
+        },
+        occurred_at=datetime(2026, 6, 24),
+        idempotency_key="actual-stage-batch-event",
+    )
+
+    result = handler.handle(event_record)
+
+    assert result.crop_stage_states[0].current_stage_code == "BBCH58"
+    assert stage_service.actual_stage_batch_calls[0]["stage_dates"] == {
+        "BBCH45": date(2026, 6, 10),
+        "BBCH58": date(2026, 6, 24),
+    }
+    assert stage_service.actual_stage_calls == []
+    assert event_repository.records[0].event_type == EVENT_TYPE_STAGE_CHANGED
+    assert event_repository.records[0].payload["currentStageCode"] == "BBCH58"
+    assert event_repository.records[0].payload["sourceSnapshotId"] == 12

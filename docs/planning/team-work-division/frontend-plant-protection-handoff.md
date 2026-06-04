@@ -209,7 +209,7 @@ service_effect_survey
    `plant_protection.stem_leaf_weed_control`
    `plant_protection.injury_mitigation`
    `plant_protection.disease_pest_control`
-   重点看 `operation_plans`、执行记录、来源 `TaskIntent`、下游 `CalendarItem`
+   重点看 `operation_plans`、最近执行记录、来源 `TaskIntent`、下游 `CalendarItem`
 
 3. 服务评价尾链路任务
    适用 subtype：
@@ -229,6 +229,8 @@ service_effect_survey
 
 1. 按 `task_subtype` 决定按钮和表单，不要统一展示所有操作
 2. 任务详情里要能看出它是从哪张 `CalendarItem`、`TaskIntent` 或执行记录来的
+3. 如果任务已有 `execution_records`，页面应直接展示最近一次执行结果；不要只展示“completed”状态
+4. 如果任务已有 `execution_records`，正式作业任务可提供“编辑执行结果”入口，进入对最近一条执行记录的修正流程
 
 ### 3.5 `survey_entry`
 
@@ -267,6 +269,8 @@ service_effect_survey
 1. `plant_protection.regular_disease_pest_survey`
    建议固定区先展示：
    `survey_date`、`survey_method`、`bbch_stage`
+   其中 `survey_method` 第一版按任务上下文只读回填，不允许用户手改
+   `survey_method` 当前只支持 `一级理论防治日期 / 生育期`
    动态区按任务上下文里的调查对象展开，例如：
    `DaoFeiShi.insects_per_100_hills`
    `DaoWenBing.acute_lesion`
@@ -275,11 +279,163 @@ service_effect_survey
 2. `plant_protection.sudden_disease_pest_survey`
    建议固定区先展示：
    `survey_date`、`bbch_stage`
-   动态区同样按调查对象展开，不强制展示 `survey_method`
+   动态区同样按调查对象展开，不展示 `survey_method`
 
 3. 病虫调查对象字段建议按“对象卡片”组织，而不是平铺成一个超长表单
 4. 前端不要硬编码只支持某一种病虫对象，应允许按任务上下文动态拼 `result_payload`
-5. 若当前页面暂时没有完整病虫 schema，可先支持最小字段提交，再逐步扩展对象卡片
+5. 第一版病虫对象范围直接覆盖完整 5 类：`DaoFeiShi`、`DaoWenBing`、`ErHuaMing`、`DaoZongJuanYeMing`、`WenKuBing`
+6. 虽然页面可以按任务上下文突出重点对象，但第一版提交口径建议直接回传完整 5 类对象 schema；非重点对象可折叠显示
+7. 若当前页面暂时没有完整病虫 schema，可先支持最小字段提交，再逐步扩展对象卡片
+
+病虫对象卡片字段建议：
+
+| 对象 key | 中文建议 | 字段 | 建议控件 | 取值范围 | 说明 |
+|---|---|---|---|---|---|
+| `ErHuaMing` | 二化螟 | `dead_sheath_rate` | number input | `0~1` | 枯鞘比例 |
+| `ErHuaMing` | 二化螟 | `dead_heart_rate` | number input | `0~1` | 枯心比例 |
+| `ErHuaMing` | 二化螟 | `main_larval_instars` | integer input | `0~6` | 主要虫龄；`0` 表示未发现或无主要虫龄 |
+| `ErHuaMing` | 二化螟 | `damaged_plant_rate` | number input | `0~1` | 虫伤株比例 |
+| `DaoFeiShi` | 稻飞虱 | `insects_per_100_hills` | number input | `>=0` | 每百丛虫量 |
+| `DaoWenBing` | 稻瘟病 | `acute_lesion` | boolean switch | `true/false` | 是否发现急性病斑 |
+| `DaoWenBing` | 稻瘟病 | `diseased_leaf_rate` | number input | `0~1` | 病叶比例 |
+| `WenKuBing` | 纹枯病 | `lesion_on_upper_leaf_sheath` | boolean switch | `true/false` | 倒 2 叶鞘及以上是否发现病斑 |
+| `WenKuBing` | 纹枯病 | `diseased_hill_rate` | number input | `0~1` | 病丛比例 |
+| `DaoZongJuanYeMing` | 稻纵卷叶螟 | `rolled_leaf_tips_per_100_hills` | number input | `>=0` | 每百丛束尖数 |
+| `DaoZongJuanYeMing` | 稻纵卷叶螟 | `larvae_count` | number input | `>=0` | 幼虫数量 |
+| `DaoZongJuanYeMing` | 稻纵卷叶螟 | `moths_per_square_meter` | number input | `>=0` | 每平方米蛾量 |
+
+病虫调查表单 schema 草案：
+
+1. `plant_protection.regular_disease_pest_survey`
+   固定字段：
+   - `survey_date`
+     - required: `yes`
+     - widget: `date`
+     - submit format: `YYYYMMDD`
+   - `survey_method`
+     - required: `yes`
+     - widget: `readonly text / readonly select`
+     - allowed values: `一级理论防治日期 / 生育期`
+     - source: 任务上下文或 `CalendarItem.generation_condition.surveyMethod`
+   - `bbch_stage`
+     - required: `yes`
+     - widget: `number`
+     - submit type: `int`
+   对象卡片：
+   - `ErHuaMing`
+   - `DaoFeiShi`
+   - `DaoWenBing`
+   - `WenKuBing`
+   - `DaoZongJuanYeMing`
+   交互规则：
+   - 5 类对象卡片都建议存在；任务上下文里的重点对象默认展开，非重点对象默认折叠
+   - 所有 number 字段默认值设为 `0`
+   - 所有 boolean 字段默认值设为 `false`
+   - `main_larval_instars` 默认值 `0`
+
+2. `plant_protection.sudden_disease_pest_survey`
+   固定字段：
+   - `survey_date`
+     - required: `yes`
+     - widget: `date`
+     - submit format: `YYYYMMDD`
+   - `bbch_stage`
+     - required: `yes`
+     - widget: `number`
+     - submit type: `int`
+   对象卡片：
+   - `ErHuaMing`
+   - `DaoFeiShi`
+   - `DaoWenBing`
+   - `WenKuBing`
+   - `DaoZongJuanYeMing`
+   交互规则：
+   - 不展示 `survey_method`
+   - 5 类对象卡片都建议存在；重点对象默认展开，非重点对象默认折叠
+   - 所有 number 字段默认值设为 `0`
+   - 所有 boolean 字段默认值设为 `false`
+   - `main_larval_instars` 默认值 `0`
+
+推荐前端字段配置骨架：
+
+```json
+{
+  "task_subtype": "plant_protection.regular_disease_pest_survey",
+  "fixed_fields": [
+    {
+      "key": "survey_date",
+      "label": "调查日期",
+      "widget": "date",
+      "required": true,
+      "submit_format": "YYYYMMDD"
+    },
+    {
+      "key": "survey_method",
+      "label": "调查方式",
+      "widget": "readonly_text",
+      "required": true,
+      "readonly": true
+    },
+    {
+      "key": "bbch_stage",
+      "label": "BBCH阶段",
+      "widget": "number",
+      "required": true
+    }
+  ],
+  "object_cards": [
+    {
+      "key": "DaoFeiShi",
+      "label": "稻飞虱",
+      "collapsed_by_default": false,
+      "fields": [
+        {
+          "key": "insects_per_100_hills",
+          "label": "每百丛虫量",
+          "widget": "number",
+          "default": 0
+        }
+      ]
+    }
+  ]
+}
+```
+
+推荐提交 payload 骨架：
+
+```json
+{
+  "result_payload": {
+    "survey_date": "20260628",
+    "survey_method": "一级理论防治日期",
+    "bbch_stage": 23,
+    "ErHuaMing": {
+      "dead_sheath_rate": 0,
+      "dead_heart_rate": 0,
+      "main_larval_instars": 0,
+      "damaged_plant_rate": 0
+    },
+    "DaoFeiShi": {
+      "insects_per_100_hills": 12
+    },
+    "DaoWenBing": {
+      "acute_lesion": false,
+      "diseased_leaf_rate": 0
+    },
+    "WenKuBing": {
+      "lesion_on_upper_leaf_sheath": false,
+      "diseased_hill_rate": 0
+    },
+    "DaoZongJuanYeMing": {
+      "rolled_leaf_tips_per_100_hills": 0,
+      "larvae_count": 0,
+      "moths_per_square_meter": 0
+    }
+  },
+  "actual_start_at": "2026-06-28T09:00:00",
+  "actual_end_at": "2026-06-28T09:20:00"
+}
+```
 
 ### 3.6 `review_request`
 
@@ -420,7 +576,12 @@ service_effect_survey
 2. 点击 `FarmingTask` 卡片跳转 `task_detail`
 3. 点击 `ReviewRequest` 卡片跳转 `review_request`
 4. 对具备权限的人员开放“人工录入真实生育期”入口，提交 `POST /actual-stages`
-5. `debug-snapshot` 可作为开发或排障入口，不作为第一版业务页面必做项
+5. 人工录入只接受 raw stage code，且日期只能是当天或过去日期
+6. 支持同一次提交录入多个 raw stage code；后端会把这些点作为一批人工锚点一起应用
+7. 如多条 raw stage 的日期顺序与 raw stage 顺序冲突，后端会直接拒绝录入
+8. 提交后后端会以这些 raw stage code 作为锚点重算后续预测日期；锚点之间已存在的中间阶段日期默认保留
+9. 如当前阶段变化，后端会刷新受影响的 `CalendarItem / FarmingTask`
+10. `debug-snapshot` 可作为开发或排障入口，不作为第一版业务页面必做项
 
 ### 4.3 `calendar_list`
 
@@ -568,6 +729,7 @@ service_effect_survey
 |---|---|---|---|
 | 查看任务上下文 | `GET` | `/api/tasks/{taskId}` | 读取任务和当前方案 |
 | 提交执行结果 | `POST` | `/api/tasks/{taskId}/execution-completions` | 录入正式作业执行结果 |
+| 编辑最近一次执行记录 | `PATCH` | `/api/tasks/{taskId}/execution-records/latest` | 修正最近一次执行结果 |
 
 请求格式：
 
@@ -595,6 +757,41 @@ service_effect_survey
   "calendar_item_ids": [24, 25]
 }
 ```
+
+编辑最近一次执行记录请求格式：
+
+```json
+{
+  "actual_end_at": "2026-05-11T09:30:00",
+  "actual_amount": 10.5,
+  "result_payload": {
+    "note": "corrected"
+  }
+}
+```
+
+编辑成功响应格式：
+
+```json
+{
+  "execution_id": 21,
+  "execution_record_id": 22,
+  "event_record_id": 24,
+  "updated_fields": [
+    "actual_end_at",
+    "actual_amount",
+    "result_payload",
+    "record_time"
+  ]
+}
+```
+
+前端交互建议：
+
+1. 第一次执行反馈仍走 `POST /execution-completions`
+2. 任务已有执行记录后，在 `task_detail` 或 `execution_feedback` 提供“编辑执行结果”
+3. 编辑只针对最近一条执行记录，不做历史记录列表内逐条编辑
+4. 编辑成功后，重新请求 `GET /api/tasks/{taskId}`，刷新执行记录和事件时间线
 
 ### 4.8 `evaluation_entry`
 
@@ -731,13 +928,18 @@ service_effect_survey
 7. `operation_plans[].parameters`
 8. `operation_plans[].basis`
 9. `execution_records[].record_type`
-10. `execution_records[].result_payload`
-11. `event_records[].event_type`
-12. `source_calendar_item`
-13. `source_task_intent`
-14. `review_request`
-15. `downstream_calendar_items`
-16. `source_execution_record`
+10. `execution_records[].actual_start_at`
+11. `execution_records[].actual_end_at`
+12. `execution_records[].actual_area`
+13. `execution_records[].actual_amount`
+14. `execution_records[].amount_unit`
+15. `execution_records[].result_payload`
+16. `event_records[].event_type`
+17. `source_calendar_item`
+18. `source_task_intent`
+19. `review_request`
+20. `downstream_calendar_items`
+21. `source_execution_record`
 
 按 subtype 的按钮建议：
 
@@ -746,6 +948,7 @@ service_effect_survey
 3. 服务评价任务显示“录入服务评价”
 4. 现场确认任务显示“录入现场确认”
 5. 若存在 `review_request`，显示“查看审核上下文”
+6. 若存在 `execution_records[0]`，正式作业类任务显示“编辑执行结果”
 
 ### 5.4 `survey_entry`
 
@@ -785,10 +988,11 @@ service_effect_survey
 
 前端组装建议：
 
-1. 只提交当前任务调查对象实际出现的对象字段组，未调查的对象可以不传
+1. 第一版建议直接提交完整 5 类对象字段组；页面可按任务上下文突出重点对象，但非重点对象也建议带默认零值一起回传
 2. 每个对象字段组都作为 `result_payload` 下的一个子对象，不要拍平成顶层字段
 3. `survey_date`、`survey_method`、`bbch_stage` 仍保持在 `result_payload` 顶层
 4. 第一版可以先按数字输入框 / 布尔开关实现，不必等待完整农艺字段组件
+5. 对于调查结果为未发现或零值的对象，字段组仍应显式回传 `0 / false`，不要省略
 
 ### 5.5 `evaluation_entry`
 

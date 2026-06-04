@@ -18,6 +18,8 @@ from app.services import (
     SurveyResultService,
     TaskExecutionCompleteInput,
     TaskExecutionCompleteResult,
+    TaskExecutionRecordUpdateInput,
+    TaskExecutionRecordUpdateResult,
     TaskExecutionService,
 )
 
@@ -53,6 +55,22 @@ class TaskExecutionCompleteResponse(BaseModel):
     execution_record_id: int
     event_record_id: int
     calendar_item_ids: list[int]
+
+
+class TaskExecutionRecordUpdateRequest(BaseModel):
+    result_payload: dict[str, Any] | None = None
+    actual_start_at: datetime | None = None
+    actual_end_at: datetime | None = None
+    actual_area: Decimal | None = None
+    actual_amount: Decimal | None = None
+    amount_unit: str | None = None
+
+
+class TaskExecutionRecordUpdateResponse(BaseModel):
+    execution_id: int
+    execution_record_id: int
+    event_record_id: int
+    updated_fields: list[str]
 
 
 class FarmingTaskResponse(BaseModel):
@@ -262,6 +280,36 @@ def complete_task_execution(
     return _serialize_task_execution_response(result)
 
 
+@router.patch("/{task_id}/execution-records/latest", response_model=TaskExecutionRecordUpdateResponse)
+def update_latest_execution_record(
+    task_id: int,
+    payload: TaskExecutionRecordUpdateRequest,
+    service: TaskExecutionService = Depends(get_task_execution_service),
+    db: Session = Depends(get_db),
+) -> TaskExecutionRecordUpdateResponse:
+    try:
+        result = service.update_latest_execution_record(
+            task_id,
+            TaskExecutionRecordUpdateInput(
+                result_payload=payload.result_payload,
+                actual_start_at=payload.actual_start_at,
+                actual_end_at=payload.actual_end_at,
+                actual_area=payload.actual_area,
+                actual_amount=payload.actual_amount,
+                amount_unit=payload.amount_unit,
+            ),
+        )
+    except LookupError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    db.commit()
+    return _serialize_task_execution_record_update_response(result)
+
+
 def _serialize_survey_result_response(result: SurveyResultProcessingResult) -> SurveyResultCreateResponse:
     return SurveyResultCreateResponse(
         execution_record_id=result.execution_record.id,
@@ -278,6 +326,17 @@ def _serialize_task_execution_response(result: TaskExecutionCompleteResult) -> T
         execution_record_id=result.execution_record.id,
         event_record_id=result.event_record.id,
         calendar_item_ids=[item.id for item in result.calendar_items],
+    )
+
+
+def _serialize_task_execution_record_update_response(
+    result: TaskExecutionRecordUpdateResult,
+) -> TaskExecutionRecordUpdateResponse:
+    return TaskExecutionRecordUpdateResponse(
+        execution_id=result.execution.id,
+        execution_record_id=result.execution_record.id,
+        event_record_id=result.event_record.id,
+        updated_fields=result.updated_fields,
     )
 
 

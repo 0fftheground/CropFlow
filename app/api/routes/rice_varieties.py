@@ -12,6 +12,7 @@ router = APIRouter(prefix="/rice-varieties")
 class RiceVarietyOptionResponse(BaseModel):
     id: int
     name: str
+    approve_region: str | None
     culti_type_code: int | None
     sub_type_code: int | None
 
@@ -33,6 +34,7 @@ def _serialize_variety(variety: RiceVarietyOption) -> RiceVarietyOptionResponse:
     return RiceVarietyOptionResponse(
         id=variety.id,
         name=variety.name,
+        approve_region=variety.approve_region,
         culti_type_code=variety.culti_type_code,
         sub_type_code=variety.sub_type_code,
     )

@@ -948,6 +948,7 @@ class HttpWeatherProvider:
     FORECAST_HOURLY_PATH = "/algBaseDataApi/v1/getForecast10DaysBeforeAndAfter"
     FORECAST_DAILY_PATH = "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter"
     AVERAGE_TEMP_PRECIPITATION_PATH = "/weather/v1/getAvgTemAndPre"
+    FARM_ID_PAYLOAD_CANDIDATES = ("farmId", "farmID")
     FORECAST_DAILY_LOOKAHEAD_DAYS = 14
     DEFAULT_SUITABILITY_WINDS = 2.0
     DEFAULT_SUITABILITY_RH = 70.0
@@ -1133,11 +1134,10 @@ class HttpWeatherProvider:
         external_farm_id = self._resolve_external_farm_id(farm)
         effective_as_of = _floor_to_hour(as_of_datetime or _utcnow())
         try:
-            response_data = self._post_json(
+            response_data = self._post_weather_json_with_farm_id_compatibility(
                 self.FORECAST_HOURLY_PATH,
-                {
-                    "farmId": external_farm_id,
-                },
+                {"farmId": external_farm_id},
+                preferred_farm_id_keys=("farmId", "farmID"),
             )
             return self._build_hourly_weather_from_hourly_rows(response_data, effective_as_of=effective_as_of)
         except (RuntimeError, ValueError):
@@ -1210,13 +1210,14 @@ class HttpWeatherProvider:
         chunk_start = start_date
         while chunk_start <= end_date:
             chunk_end = min(end_date, chunk_start + timedelta(days=364))
-            response_data = self._post_json(
+            response_data = self._post_weather_json_with_farm_id_compatibility(
                 self.AVERAGE_TEMP_PRECIPITATION_PATH,
                 {
                     "farmId": external_farm_id,
                     "startDate": chunk_start.isoformat(),
                     "endDate": chunk_end.isoformat(),
                 },
+                preferred_farm_id_keys=("farmId", "farmID"),
             )
             expected_dates = _build_closed_date_range(chunk_start, chunk_end)
             if len(response_data) != len(expected_dates):
@@ -1275,11 +1276,12 @@ class HttpWeatherProvider:
         return weather_data
 
     def _load_forecast_daily_response_data(self, external_farm_id: str) -> list[dict[str, Any]]:
-        return self._post_json(
+        return self._post_weather_json_with_farm_id_compatibility(
             self.FORECAST_DAILY_PATH,
             {
                 "farmID": external_farm_id,
             },
+            preferred_farm_id_keys=("farmID", "farmId"),
         )
 
     def _load_climatology_daily_weather(
@@ -1291,13 +1293,14 @@ class HttpWeatherProvider:
     ) -> list[dict[str, Any]]:
         request_start_date = _shift_years(start_date, -self.climatology_reference_years)
         request_end_date = _shift_years(end_date, -1)
-        response_data = self._post_json(
+        response_data = self._post_weather_json_with_farm_id_compatibility(
             self.AVERAGE_TEMP_PRECIPITATION_PATH,
             {
                 "farmId": external_farm_id,
                 "startDate": request_start_date.isoformat(),
                 "endDate": request_end_date.isoformat(),
             },
+            preferred_farm_id_keys=("farmId", "farmID"),
         )
         row_by_month_day: dict[str, dict[str, Any]] = {}
         for row in response_data:
@@ -1468,6 +1471,46 @@ class HttpWeatherProvider:
         if len(normalized_data) != len(data):
             raise ValueError(f"Weather API {path} returned invalid row objects.")
         return normalized_data
+
+    def _post_weather_json_with_farm_id_compatibility(
+        self,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        preferred_farm_id_keys: tuple[str, ...],
+    ) -> list[dict[str, Any]]:
+        farm_id_value = None
+        remaining_payload = dict(payload)
+        for candidate_key in self.FARM_ID_PAYLOAD_CANDIDATES:
+            if candidate_key in remaining_payload:
+                farm_id_value = remaining_payload.pop(candidate_key)
+                break
+        if farm_id_value is None:
+            return self._post_json(path, payload)
+
+        errors: list[ValueError] = []
+        attempted_payloads: set[str] = set()
+        candidate_keys = preferred_farm_id_keys + tuple(
+            key for key in self.FARM_ID_PAYLOAD_CANDIDATES if key not in preferred_farm_id_keys
+        )
+        for farm_id_key in candidate_keys:
+            candidate_payload = {farm_id_key: farm_id_value, **remaining_payload}
+            candidate_signature = json.dumps(
+                candidate_payload,
+                sort_keys=True,
+                ensure_ascii=False,
+                default=str,
+                separators=(",", ":"),
+            )
+            if candidate_signature in attempted_payloads:
+                continue
+            attempted_payloads.add(candidate_signature)
+            try:
+                return self._post_json(path, candidate_payload)
+            except ValueError as exc:
+                errors.append(exc)
+
+        raise errors[-1]
 
     def _get_json(
         self,

@@ -326,6 +326,31 @@ def test_create_and_list_planting_plans_routes() -> None:
     app.dependency_overrides.clear()
 
 
+def test_create_planting_plan_route_allows_missing_field_ids() -> None:
+    fake_service = FakePlantingPlanService()
+    app.dependency_overrides[get_planting_plan_service] = lambda: fake_service
+    app.dependency_overrides[get_db] = lambda: DummySession()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/planting-plans",
+        json={
+            "plan_name": "早稻计划",
+            "farm_id": 1,
+            "culti_type_code": 5,
+            "planting_method_code": 1,
+            "crop_name": "水稻",
+            "variety_id": 3,
+            "sowing_date": "2026-04-10",
+        },
+    )
+
+    assert response.status_code == 201
+    assert fake_service.created_payload.field_ids == []
+
+    app.dependency_overrides.clear()
+
+
 def test_get_and_patch_planting_plan_routes() -> None:
     fake_service = FakePlantingPlanService()
     app.dependency_overrides[get_planting_plan_service] = lambda: fake_service
@@ -352,7 +377,7 @@ def test_record_actual_stages_route_accepts_code_date_map() -> None:
     response = client.post(
         "/api/planting-plans/1/actual-stages",
         json={
-            "stages": {"58": "2026-06-18"},
+            "stages": {"BBCH58": "2026-06-18"},
             "source_record_id": "manual-1",
             "operator_id": "user-7",
             "note": "田间观测齐穗",
@@ -361,8 +386,8 @@ def test_record_actual_stages_route_accepts_code_date_map() -> None:
 
     assert response.status_code == 201
     assert response.json()[0]["event_type"] == "ActualStageRecorded"
-    assert response.json()[0]["payload"]["stageCode"] == "58"
-    assert fake_service.actual_stage_payload.stage_dates == {"58": date(2026, 6, 18)}
+    assert response.json()[0]["payload"]["stageCode"] == "BBCH58"
+    assert fake_service.actual_stage_payload.stage_dates == {"BBCH58": date(2026, 6, 18)}
 
     app.dependency_overrides.clear()
 

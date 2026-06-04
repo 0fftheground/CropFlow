@@ -29,6 +29,32 @@ from app.services.stage_management import extract_pest_disease_growth_stage
 logger = logging.getLogger(__name__)
 
 
+PEST_DISEASE_SURVEY_DEFAULTS: dict[str, dict[str, Any]] = {
+    "ErHuaMing": {
+        "dead_sheath_rate": 0,
+        "dead_heart_rate": 0,
+        "main_larval_instars": 0,
+        "damaged_plant_rate": 0,
+    },
+    "DaoFeiShi": {
+        "insects_per_100_hills": 0,
+    },
+    "DaoWenBing": {
+        "acute_lesion": False,
+        "diseased_leaf_rate": 0,
+    },
+    "WenKuBing": {
+        "lesion_on_upper_leaf_sheath": False,
+        "diseased_hill_rate": 0,
+    },
+    "DaoZongJuanYeMing": {
+        "rolled_leaf_tips_per_100_hills": 0,
+        "larvae_count": 0,
+        "moths_per_square_meter": 0,
+    },
+}
+
+
 class PestDiseaseControlClient(Protocol):
     def generate_theory_control_plan(
         self,
@@ -911,6 +937,7 @@ class PestDiseaseControlPlanningService:
             window = _serialize_datetime_window(operation_plan.operation_window_start, operation_plan.operation_window_end)
             spray_info_list.append(
                 {
+                    "stage": self._resolve_historical_spray_stage(parameters),
                     "control_type": control_type,
                     "plan_type": operation_plan.plan_type,
                     "operation_window": window,
@@ -918,6 +945,35 @@ class PestDiseaseControlPlanningService:
                 },
             )
         return spray_info_list
+
+    def _resolve_historical_spray_stage(self, parameters: dict[str, Any]) -> str:
+        request_payload = dict(parameters.get("requestPayload") or {})
+        spray_info = dict(request_payload.get("spray_info") or {})
+        stage = str(spray_info.get("stage") or "").strip()
+        if stage:
+            return stage
+
+        spray_info_list = request_payload.get("spray_info_list")
+        if isinstance(spray_info_list, list):
+            for item in spray_info_list:
+                if not isinstance(item, dict):
+                    continue
+                stage = str(item.get("stage") or "").strip()
+                if stage:
+                    return stage
+
+        explicit_stage = str(parameters.get("sprayStage") or parameters.get("spray_stage") or "").strip()
+        if explicit_stage:
+            return explicit_stage
+
+        control_type = str(parameters.get("controlType") or "").strip()
+        if control_type == "regular":
+            return "常规病虫预防"
+        if control_type == "emergency":
+            return "突发病虫防治"
+        if control_type == "merged":
+            return "常规+突发合并防治"
+        return "历史病虫防治"
 
     def _resolve_herb_control_date(self, planting_plan: PlantingPlan) -> list[str] | None:
         metadata_payload = planting_plan.metadata_payload or {}
@@ -1118,10 +1174,26 @@ def _extract_mock_targets(survey_data: dict[str, Any], control_type: str) -> dic
         for key, value in survey_data.items()
         if key not in {"survey_date", "surveyDate", "bbch_stage", "bbchStage", "survey_method", "surveyMethod", "mock_mode"}
         and isinstance(value, dict)
+        and _survey_object_has_signal(value)
     }
     if targets:
         return targets
     return {"纹枯病" if control_type == "emergency" else "二化螟": "防治"}
+
+
+def _survey_object_has_signal(payload: dict[str, Any]) -> bool:
+    for value in payload.values():
+        if isinstance(value, bool):
+            if value:
+                return True
+            continue
+        if isinstance(value, (int, float)):
+            if value != 0:
+                return True
+            continue
+        if value not in {None, ""}:
+            return True
+    return False
 
 
 def _build_mock_merged_event(
@@ -1172,6 +1244,16 @@ def _normalize_survey_data_payload(survey_data: dict[str, Any]) -> dict[str, Any
         payload["survey_method"] = str(payload["surveyMethod"])
     if "bbch_stage" not in payload and "bbchStage" in payload:
         payload["bbch_stage"] = payload["bbchStage"]
+    for object_key, default_fields in PEST_DISEASE_SURVEY_DEFAULTS.items():
+        raw_value = payload.get(object_key)
+        if raw_value is None:
+            payload[object_key] = dict(default_fields)
+            continue
+        if not isinstance(raw_value, dict):
+            raise ValueError(f"{object_key} must be an object.")
+        normalized_fields = dict(default_fields)
+        normalized_fields.update(raw_value)
+        payload[object_key] = normalized_fields
     return payload
 
 

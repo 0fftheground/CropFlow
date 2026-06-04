@@ -9,6 +9,7 @@ from app.repositories import RiceVarietyRepository
 class RiceVarietyOption:
     id: int
     name: str
+    approve_region: str | None
     culti_type_code: int | None
     sub_type_code: int | None
 
@@ -24,6 +25,7 @@ class RiceVarietyQueryService:
             RiceVarietyOption(
                 id=item.id,
                 name=item.name,
+                approve_region=item.approve_region,
                 culti_type_code=item.culti_type_code,
                 sub_type_code=item.sub_type_code,
             )

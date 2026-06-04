@@ -90,7 +90,7 @@ class PlantingPlanQueryService:
 
     def list_farming_tasks(self, planting_plan_id: int) -> list[FarmingTask]:
         self._get_plan(planting_plan_id)
-        return self.farming_task_repository.list_current_by_plan(planting_plan_id)
+        return self.farming_task_repository.list_by_plan(planting_plan_id)
 
     def list_task_intents(self, planting_plan_id: int) -> list[TaskIntent]:
         self._get_plan(planting_plan_id)
@@ -121,7 +121,7 @@ class PlantingPlanQueryService:
         return PlantingPlanM2Snapshot(
             planting_plan=planting_plan,
             calendar_items=self.calendar_item_repository.list_current_by_plan(planting_plan_id),
-            farming_tasks=self.farming_task_repository.list_current_by_plan(planting_plan_id),
+            farming_tasks=self.farming_task_repository.list_by_plan(planting_plan_id),
             task_intents=self.task_intent_repository.list_current_by_plan(planting_plan_id),
             review_requests=self.review_request_repository.list_current_by_plan(planting_plan_id),
             event_records=self.event_record_repository.list_by_plan(planting_plan_id),
@@ -136,7 +136,7 @@ class PlantingPlanQueryService:
             planting_plan=planting_plan,
             field_ids=self.planting_plan_field_relation_repository.list_field_ids_by_plan(planting_plan_id),
             calendar_items=self.calendar_item_repository.list_current_by_plan(planting_plan_id),
-            farming_tasks=self.farming_task_repository.list_current_by_plan(planting_plan_id),
+            farming_tasks=self.farming_task_repository.list_by_plan(planting_plan_id),
             task_intents=self.task_intent_repository.list_current_by_plan(planting_plan_id),
             review_requests=self.review_request_repository.list_current_by_plan(planting_plan_id),
             operation_plans=self.operation_plan_repository.list_by_plan(planting_plan_id),

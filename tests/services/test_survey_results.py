@@ -745,6 +745,16 @@ def test_regular_disease_pest_survey_creates_control_task_intent_and_review_requ
     assert task_intent_repo.items[0].rule_result["proposedPlan"]["controlType"] == "regular"
     assert task_intent_repo.items[0].rule_result["proposedPlan"]["requestPayload"]["spray_info"]["stage"] == "封行药"
     assert task_intent_repo.items[0].rule_result["proposedPlan"]["requestPayload"]["level1_window"] == ["0702", "0706"]
+    assert task_intent_repo.items[0].rule_result["proposedPlan"]["requestPayload"]["survey_data"]["ErHuaMing"] == {
+        "dead_sheath_rate": 0,
+        "dead_heart_rate": 0,
+        "main_larval_instars": 0,
+        "damaged_plant_rate": 0,
+    }
+    assert task_intent_repo.items[0].rule_result["proposedPlan"]["requestPayload"]["survey_data"]["WenKuBing"] == {
+        "lesion_on_upper_leaf_sheath": False,
+        "diseased_hill_rate": 0,
+    }
     assert task_intent_repo.items[0].rule_result["proposedTask"]["recommendedControlDate"] == ["2026-06-29", "2026-06-29"]
     assert task_intent_repo.items[0].rule_result["proposedPlan"]["operationWindow"] == ["2026-06-29", "2026-06-29"]
     assert task_intent_repo.items[0].rule_result["proposedPlan"]["spraySuitabilityRequiredRange"] == ["2026-06-29", "2026-07-10"]

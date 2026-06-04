@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -92,9 +92,11 @@ class FakeEventRecordRepository:
 class FakePlanOrchestrator:
     def __init__(self) -> None:
         self.triggered_plan_ids: list[int] = []
+        self.handled_events: list[EventRecord] = []
 
     def handle(self, event_record: EventRecord):
         self.triggered_plan_ids.append(event_record.planting_plan_id)
+        self.handled_events.append(event_record)
 
 
 def test_create_plan_derives_variety_name_and_field_relations() -> None:
@@ -131,6 +133,38 @@ def test_create_plan_derives_variety_name_and_field_relations() -> None:
     assert result.planting_plan.plan_code == "PLAN-AUTO-001"
     assert result.planting_plan.variety_name == "黄广农占"
     assert result.field_ids == [10, 11]
+    assert plan_orchestrator.triggered_plan_ids == [result.planting_plan.id]
+
+
+def test_create_plan_allows_empty_field_relations() -> None:
+    relation_repository = FakePlanFieldRelationRepository()
+    plan_orchestrator = FakePlanOrchestrator()
+    service = PlantingPlanService(
+        planting_plan_repository=FakePlantingPlanRepository(),
+        field_repository=FakeFieldRepository({}),
+        planting_plan_field_relation_repository=relation_repository,
+        rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        event_record_repository=FakeEventRecordRepository(),
+        plan_orchestrator=plan_orchestrator,
+        plan_code_factory=lambda: "PLAN-AUTO-EMPTY",
+    )
+
+    result = service.create(
+        PlantingPlanCreateInput(
+            plan_name="早稻计划",
+            farm_id=1,
+            field_ids=[],
+            culti_type_code=5,
+            planting_method_code=1,
+            crop_name="水稻",
+            variety_id=3,
+            sowing_date=date(2026, 4, 10),
+        ),
+    )
+
+    assert result.planting_plan.plan_code == "PLAN-AUTO-EMPTY"
+    assert result.field_ids == []
+    assert relation_repository.mapping[result.planting_plan.id] == []
     assert plan_orchestrator.triggered_plan_ids == [result.planting_plan.id]
 
 
@@ -179,7 +213,113 @@ def test_update_plan_replaces_field_relations_and_refreshes_calendar_on_key_chan
     assert result.planting_plan.plan_name == "新计划"
     assert result.planting_plan.variety_name == "新优品种"
     assert result.field_ids == [12]
-    assert plan_orchestrator.triggered_plan_ids == [1]
+    assert plan_orchestrator.triggered_plan_ids == [1, 1]
+    assert plan_orchestrator.handled_events[0].event_type == "PlanUpdated"
+    assert plan_orchestrator.handled_events[0].payload["changedFields"] == [
+        "plan_name",
+        "field_ids",
+        "variety_id",
+        "variety_name",
+        "sowing_date",
+        "transplant_leaf_age",
+    ]
+    assert plan_orchestrator.handled_events[1].event_type == "PlanKeyInfoChanged"
+
+
+def test_update_plan_to_active_triggers_task_due_check_event() -> None:
+    repository = FakePlantingPlanRepository(
+        {
+            1: PlantingPlan(
+                id=1,
+                plan_code="PLAN-001",
+                plan_name="原计划",
+                farm_id=1,
+                culti_type_code=5,
+                planting_method_code=1,
+                crop_name="水稻",
+                variety_id=3,
+                variety_name="黄广农占",
+                sowing_date=date(2026, 4, 10),
+                status="draft",
+                task_generation_window_days=14,
+                metadata_payload={},
+            ),
+        },
+    )
+    event_repository = FakeEventRecordRepository()
+    plan_orchestrator = FakePlanOrchestrator()
+    service = PlantingPlanService(
+        planting_plan_repository=repository,
+        field_repository=FakeFieldRepository({}),
+        planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
+        rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        event_record_repository=event_repository,
+        plan_orchestrator=plan_orchestrator,
+    )
+
+    result = service.update(
+        1,
+        PlantingPlanUpdateInput(
+            status="active",
+        ),
+    )
+
+    assert result.planting_plan.status == "active"
+    assert [item.event_type for item in event_repository.items] == [
+        "PlanUpdated",
+        "TaskDueCheckTriggered",
+    ]
+    assert event_repository.items[0].payload["changedFields"] == ["status"]
+    assert event_repository.items[0].payload["before"] == {"status": "draft"}
+    assert event_repository.items[0].payload["after"] == {"status": "active"}
+    assert event_repository.items[-1].payload["jobKey"] == "TaskDueCheckJob"
+    assert [item.event_type for item in plan_orchestrator.handled_events] == [
+        "PlanUpdated",
+        "TaskDueCheckTriggered",
+    ]
+
+
+def test_update_plan_without_effective_changes_does_not_record_plan_updated_event() -> None:
+    repository = FakePlantingPlanRepository(
+        {
+            1: PlantingPlan(
+                id=1,
+                plan_code="PLAN-001",
+                plan_name="原计划",
+                farm_id=1,
+                culti_type_code=5,
+                planting_method_code=1,
+                crop_name="水稻",
+                variety_id=3,
+                variety_name="黄广农占",
+                sowing_date=date(2026, 4, 10),
+                status="draft",
+                task_generation_window_days=14,
+                metadata_payload={},
+            ),
+        },
+    )
+    event_repository = FakeEventRecordRepository()
+    plan_orchestrator = FakePlanOrchestrator()
+    service = PlantingPlanService(
+        planting_plan_repository=repository,
+        field_repository=FakeFieldRepository({}),
+        planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
+        rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        event_record_repository=event_repository,
+        plan_orchestrator=plan_orchestrator,
+    )
+
+    result = service.update(
+        1,
+        PlantingPlanUpdateInput(
+            plan_name="原计划",
+        ),
+    )
+
+    assert result.planting_plan.plan_name == "原计划"
+    assert event_repository.items == []
+    assert plan_orchestrator.handled_events == []
 
 
 def test_list_by_statuses_filters_plans() -> None:
@@ -265,6 +405,8 @@ def test_create_plan_records_plan_created_event_before_orchestration() -> None:
 
 
 def test_record_actual_stages_creates_events_in_effective_date_order() -> None:
+    earlier_date = date.today() - timedelta(days=30)
+    later_date = date.today() - timedelta(days=1)
     event_repository = FakeEventRecordRepository()
     plan_orchestrator = FakePlanOrchestrator()
     service = PlantingPlanService(
@@ -298,17 +440,144 @@ def test_record_actual_stages_creates_events_in_effective_date_order() -> None:
         1,
         ActualStageRecordedInput(
             stage_dates={
-                "58": date(2026, 6, 18),
-                "21": date(2026, 5, 12),
+                "BBCH58": later_date,
+                "BBCH21": earlier_date,
             },
             source_record_id="manual-1",
             operator_id="user-7",
         ),
     )
 
-    assert [event.payload["stageCode"] for event in result] == ["21", "58"]
-    assert [event.payload["effectiveDate"] for event in event_repository.items] == ["2026-05-12", "2026-06-18"]
+    assert len(result) == 1
+    assert result[0].payload["stageCode"] == "BBCH58"
+    assert result[0].payload["effectiveDate"] == later_date.isoformat()
+    assert result[0].payload["stageDates"] == {
+        "BBCH21": earlier_date.isoformat(),
+        "BBCH58": later_date.isoformat(),
+    }
     assert event_repository.items[0].event_type == "ActualStageRecorded"
     assert event_repository.items[0].event_category == "runtime"
     assert event_repository.items[0].source_record_id == "manual-1"
-    assert plan_orchestrator.triggered_plan_ids == [1, 1]
+    assert plan_orchestrator.triggered_plan_ids == [1]
+
+
+def test_record_actual_stages_rejects_non_raw_stage_code() -> None:
+    service = PlantingPlanService(
+        planting_plan_repository=FakePlantingPlanRepository(
+            {
+                1: PlantingPlan(
+                    id=1,
+                    plan_code="PLAN-001",
+                    plan_name="早稻计划",
+                    farm_id=1,
+                    culti_type_code=5,
+                    planting_method_code=1,
+                    crop_name="水稻",
+                    variety_id=3,
+                    variety_name="黄广农占",
+                    sowing_date=date(2026, 4, 10),
+                    status="active",
+                    task_generation_window_days=14,
+                    metadata_payload={},
+                ),
+            },
+        ),
+        field_repository=FakeFieldRepository({}),
+        planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
+        rice_variety_repository=FakeRiceVarietyRepository({}),
+        event_record_repository=FakeEventRecordRepository(),
+        plan_orchestrator=FakePlanOrchestrator(),
+    )
+
+    with pytest.raises(ValueError, match="raw stage code"):
+        service.record_actual_stages(
+            1,
+            ActualStageRecordedInput(
+                stage_dates={"heading": date(2026, 6, 18)},
+                source_record_id="manual-1",
+                operator_id="user-7",
+            ),
+        )
+
+
+def test_record_actual_stages_rejects_future_effective_date() -> None:
+    service = PlantingPlanService(
+        planting_plan_repository=FakePlantingPlanRepository(
+            {
+                1: PlantingPlan(
+                    id=1,
+                    plan_code="PLAN-001",
+                    plan_name="早稻计划",
+                    farm_id=1,
+                    culti_type_code=5,
+                    planting_method_code=1,
+                    crop_name="水稻",
+                    variety_id=3,
+                    variety_name="黄广农占",
+                    sowing_date=date(2026, 4, 10),
+                    status="active",
+                    task_generation_window_days=14,
+                    metadata_payload={},
+                ),
+            },
+        ),
+        field_repository=FakeFieldRepository({}),
+        planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
+        rice_variety_repository=FakeRiceVarietyRepository({}),
+        event_record_repository=FakeEventRecordRepository(),
+        plan_orchestrator=FakePlanOrchestrator(),
+    )
+
+    with pytest.raises(ValueError, match="cannot be in the future"):
+        service.record_actual_stages(
+            1,
+            ActualStageRecordedInput(
+                stage_dates={"BBCH58": date.today() + timedelta(days=1)},
+                source_record_id="manual-1",
+                operator_id="user-7",
+            ),
+        )
+
+
+def test_record_actual_stages_rejects_conflicting_raw_stage_date_order() -> None:
+    later_stage_date = date.today() - timedelta(days=1)
+    earlier_stage_date = date.today() - timedelta(days=3)
+    service = PlantingPlanService(
+        planting_plan_repository=FakePlantingPlanRepository(
+            {
+                1: PlantingPlan(
+                    id=1,
+                    plan_code="PLAN-001",
+                    plan_name="早稻计划",
+                    farm_id=1,
+                    culti_type_code=5,
+                    planting_method_code=1,
+                    crop_name="水稻",
+                    variety_id=3,
+                    variety_name="黄广农占",
+                    sowing_date=date(2026, 4, 10),
+                    status="active",
+                    task_generation_window_days=14,
+                    metadata_payload={},
+                ),
+            },
+        ),
+        field_repository=FakeFieldRepository({}),
+        planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
+        rice_variety_repository=FakeRiceVarietyRepository({}),
+        event_record_repository=FakeEventRecordRepository(),
+        plan_orchestrator=FakePlanOrchestrator(),
+    )
+
+    with pytest.raises(ValueError, match="conflict with raw stage order"):
+        service.record_actual_stages(
+            1,
+            ActualStageRecordedInput(
+                stage_dates={
+                    "BBCH45": later_stage_date,
+                    "BBCH58": earlier_stage_date,
+                },
+                source_record_id="manual-1",
+                operator_id="user-7",
+            ),
+        )

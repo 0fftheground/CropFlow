@@ -30,8 +30,8 @@ class FakeRiceVarietyQueryService:
         self.last_query = query
         self.last_limit = limit
         return [
-            RiceVarietyOption(id=1, name="黄广农占", culti_type_code=5, sub_type_code=9),
-            RiceVarietyOption(id=2, name="黄华占", culti_type_code=5, sub_type_code=9),
+            RiceVarietyOption(id=1, name="黄广农占", approve_region="长江中下游", culti_type_code=5, sub_type_code=9),
+            RiceVarietyOption(id=2, name="黄华占", approve_region="湖南", culti_type_code=5, sub_type_code=9),
         ]
 
 
@@ -61,8 +61,8 @@ def test_search_rice_varieties_route() -> None:
 
     assert response.status_code == 200
     assert response.json() == [
-        {"id": 1, "name": "黄广农占", "culti_type_code": 5, "sub_type_code": 9},
-        {"id": 2, "name": "黄华占", "culti_type_code": 5, "sub_type_code": 9},
+        {"id": 1, "name": "黄广农占", "approve_region": "长江中下游", "culti_type_code": 5, "sub_type_code": 9},
+        {"id": 2, "name": "黄华占", "approve_region": "湖南", "culti_type_code": 5, "sub_type_code": 9},
     ]
     assert fake_service.last_query == "黄广"
     assert fake_service.last_limit == 10

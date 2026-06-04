@@ -14,7 +14,10 @@ from app.services import ReviewRequestDetail, ReviewRequestQueryService, ReviewR
 
 @dataclass
 class FakeReviewRequestService:
+    last_payload: ReviewRequestResolveInput | None = None
+
     def resolve(self, review_request_id: int, payload: ReviewRequestResolveInput) -> ReviewRequestResolveResult:
+        self.last_payload = payload
         if review_request_id == 404:
             raise LookupError("missing")
         if payload.decision == "invalid":
@@ -158,8 +161,20 @@ class FakeReviewRequestQueryService:
 class DummySession:
     def get(self, model, key):
         if model is User and key == "agronomist-1":
-            return User(id="agronomist-1", username="agronomist-1")
+            return User(id="agronomist-1", username="agronomist-name", display_name="测试员")
         return None
+
+    def execute(self, statement):
+        values = set(statement.compile().params.values())
+
+        class DummyResult:
+            @staticmethod
+            def scalar_one_or_none():
+                if "agronomist-name" in values or "测试员" in values:
+                    return User(id="agronomist-1", username="agronomist-name", display_name="测试员")
+                return None
+
+        return DummyResult()
 
     def commit(self) -> None:
         return None
@@ -169,7 +184,8 @@ class DummySession:
 
 
 def test_resolve_review_request_route_returns_created_task_and_plan_ids() -> None:
-    app.dependency_overrides[get_review_request_service] = lambda: FakeReviewRequestService()
+    fake_service = FakeReviewRequestService()
+    app.dependency_overrides[get_review_request_service] = lambda: fake_service
     app.dependency_overrides[get_db] = lambda: DummySession()
     client = TestClient(app)
 
@@ -194,6 +210,29 @@ def test_resolve_review_request_route_returns_created_task_and_plan_ids() -> Non
         "operation_plan_ids": [50],
         "resolved_at": "2026-05-22T11:00:00",
     }
+    assert fake_service.last_payload is not None
+    assert fake_service.last_payload.resolved_by == "agronomist-1"
+
+    app.dependency_overrides.clear()
+
+
+def test_resolve_review_request_route_accepts_display_name_and_normalizes_to_user_id() -> None:
+    fake_service = FakeReviewRequestService()
+    app.dependency_overrides[get_review_request_service] = lambda: fake_service
+    app.dependency_overrides[get_db] = lambda: DummySession()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/review-requests/20/resolve",
+        json={
+            "decision": "approve",
+            "resolved_by": "测试员",
+        },
+    )
+
+    assert response.status_code == 200
+    assert fake_service.last_payload is not None
+    assert fake_service.last_payload.resolved_by == "agronomist-1"
 
     app.dependency_overrides.clear()
 

@@ -8,6 +8,7 @@ from typing import Any
 from app.core.constants import (
     EVENT_PROCESSING_STATUS_RECEIVED,
     EVENT_TYPE_EXECUTION_COMPLETED,
+    EVENT_TYPE_EXECUTION_RECORD_UPDATED,
     EXECUTION_MODE_MANUAL,
     EXECUTION_RECORD_TYPE_OPERATION_RESULT,
     EXECUTION_STATUS_COMPLETED,
@@ -45,6 +46,24 @@ class TaskExecutionCompleteResult:
     execution_record: ExecutionRecord
     event_record: EventRecord
     calendar_items: list[CalendarItem]
+
+
+@dataclass(slots=True)
+class TaskExecutionRecordUpdateInput:
+    result_payload: dict[str, Any] | None = None
+    actual_start_at: datetime | None = None
+    actual_end_at: datetime | None = None
+    actual_area: Decimal | None = None
+    actual_amount: Decimal | None = None
+    amount_unit: str | None = None
+
+
+@dataclass(slots=True)
+class TaskExecutionRecordUpdateResult:
+    execution: Execution
+    execution_record: ExecutionRecord
+    event_record: EventRecord
+    updated_fields: list[str]
 
 
 class TaskExecutionService:
@@ -113,6 +132,70 @@ class TaskExecutionService:
             calendar_items=orchestrator_result.calendar_items,
         )
 
+    def update_latest_execution_record(
+        self,
+        farming_task_id: int,
+        payload: TaskExecutionRecordUpdateInput,
+    ) -> TaskExecutionRecordUpdateResult:
+        farming_task = self.farming_task_repository.get(farming_task_id)
+        if farming_task is None:
+            raise LookupError(f"Farming task {farming_task_id} does not exist.")
+
+        latest_records = self.execution_record_repository.list_by_task(farming_task_id)
+        if not latest_records:
+            raise ValueError(f"Farming task {farming_task_id} does not have any execution records.")
+
+        latest_record = latest_records[0]
+        execution = self.execution_repository.get(latest_record.execution_id)
+        if execution is None:
+            raise LookupError(f"Execution {latest_record.execution_id} does not exist.")
+
+        proposed_values = {
+            "result_payload": payload.result_payload,
+            "actual_start_at": payload.actual_start_at,
+            "actual_end_at": payload.actual_end_at,
+            "actual_area": payload.actual_area,
+            "actual_amount": payload.actual_amount,
+            "amount_unit": payload.amount_unit,
+        }
+        provided_fields = [field_name for field_name, value in proposed_values.items() if value is not None]
+        if not provided_fields:
+            raise ValueError("At least one execution record field must be provided for update.")
+
+        before_snapshot = self._build_execution_record_snapshot(latest_record)
+        for field_name in provided_fields:
+            setattr(latest_record, field_name, proposed_values[field_name])
+        if payload.actual_end_at is not None:
+            latest_record.record_time = payload.actual_end_at
+            execution.completed_at = payload.actual_end_at
+        latest_record.updated_at = _utcnow()
+
+        after_snapshot = self._build_execution_record_snapshot(latest_record)
+        updated_fields = [
+            field_name
+            for field_name in after_snapshot
+            if before_snapshot[field_name] != after_snapshot[field_name]
+        ]
+        if not updated_fields:
+            raise ValueError("No execution record changes detected.")
+
+        event_record = self._record_execution_record_updated_event(
+            planting_plan_id=farming_task.planting_plan_id,
+            task_id=farming_task.id,
+            execution_id=execution.id,
+            execution_record_id=latest_record.id,
+            updated_fields=updated_fields,
+            before=before_snapshot,
+            after=after_snapshot,
+        )
+        self.plan_orchestrator.handle(event_record)
+        return TaskExecutionRecordUpdateResult(
+            execution=execution,
+            execution_record=latest_record,
+            event_record=event_record,
+            updated_fields=updated_fields,
+        )
+
     def _get_or_create_execution(self, farming_task) -> Execution:
         active_operation_plan = (
             self.operation_plan_repository.get_active_by_task(farming_task.id)
@@ -176,6 +259,61 @@ class TaskExecutionService:
         self.event_record_repository.flush()
         return event_record
 
+    def _record_execution_record_updated_event(
+        self,
+        *,
+        planting_plan_id: int,
+        task_id: int,
+        execution_id: int,
+        execution_record_id: int,
+        updated_fields: list[str],
+        before: dict[str, Any],
+        after: dict[str, Any],
+    ) -> EventRecord:
+        event_record = EventRecord(
+            planting_plan_id=planting_plan_id,
+            event_type=EVENT_TYPE_EXECUTION_RECORD_UPDATED,
+            event_category="execution",
+            event_source="api",
+            source_system="cropflow",
+            source_record_id=str(execution_record_id),
+            payload={
+                "taskId": task_id,
+                "executionId": execution_id,
+                "executionRecordId": execution_record_id,
+                "updatedFields": updated_fields,
+                "before": {field_name: before[field_name] for field_name in updated_fields},
+                "after": {field_name: after[field_name] for field_name in updated_fields},
+            },
+            occurred_at=_utcnow(),
+            processing_status=EVENT_PROCESSING_STATUS_RECEIVED,
+            idempotency_key=f"execution-record-updated:{execution_record_id}:{_utcnow().isoformat()}",
+            created_by_type="user",
+            created_by_id="api",
+        )
+        self.event_record_repository.add(event_record)
+        self.event_record_repository.flush()
+        return event_record
+
+    def _build_execution_record_snapshot(self, execution_record: ExecutionRecord) -> dict[str, Any]:
+        return {
+            "result_payload": dict(execution_record.result_payload or {}),
+            "actual_start_at": _serialize_execution_value(execution_record.actual_start_at),
+            "actual_end_at": _serialize_execution_value(execution_record.actual_end_at),
+            "actual_area": _serialize_execution_value(execution_record.actual_area),
+            "actual_amount": _serialize_execution_value(execution_record.actual_amount),
+            "amount_unit": execution_record.amount_unit,
+            "record_time": _serialize_execution_value(execution_record.record_time),
+        }
+
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _serialize_execution_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    return value

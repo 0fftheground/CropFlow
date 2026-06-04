@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_review_request_query_service, get_review_request_service
@@ -136,14 +137,14 @@ def resolve_review_request(
     db: Session = Depends(get_db),
 ) -> ReviewRequestResolveResponse:
     try:
-        _validate_resolved_by_user(db, payload.resolved_by)
+        resolved_by_user_id = _resolve_resolved_by_user_id(db, payload.resolved_by)
         result = service.resolve(
             review_request_id,
             ReviewRequestResolveInput(
                 decision=payload.decision,
                 decision_payload=payload.decision_payload,
                 decision_note=payload.decision_note,
-                resolved_by=payload.resolved_by,
+                resolved_by=resolved_by_user_id,
             ),
         )
     except LookupError as exc:
@@ -157,11 +158,22 @@ def resolve_review_request(
     return _serialize_resolve_response(result)
 
 
-def _validate_resolved_by_user(db: Session, resolved_by: str | None) -> None:
+def _resolve_resolved_by_user_id(db: Session, resolved_by: str | None) -> str | None:
     if resolved_by is None:
-        return
-    if db.get(User, resolved_by) is not None:
-        return
+        return None
+    user = db.get(User, resolved_by)
+    if user is not None:
+        return user.id
+    user = db.execute(
+        select(User).where(
+            or_(
+                User.username == resolved_by,
+                User.display_name == resolved_by,
+            ),
+        ),
+    ).scalar_one_or_none()
+    if user is not None:
+        return user.id
     raise ValueError(f"Resolved user {resolved_by} does not exist.")
 
 

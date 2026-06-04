@@ -500,6 +500,14 @@ class FarmingTaskRepository(Repository):
     def get(self, farming_task_id: int) -> FarmingTask | None:
         return self.session.get(FarmingTask, farming_task_id)
 
+    def list_by_plan(self, planting_plan_id: int) -> list[FarmingTask]:
+        stmt = (
+            select(FarmingTask)
+            .where(FarmingTask.planting_plan_id == planting_plan_id)
+            .order_by(FarmingTask.created_at.desc(), FarmingTask.id.desc())
+        )
+        return list(self.session.scalars(stmt))
+
     def list_current_by_plan(self, planting_plan_id: int) -> list[FarmingTask]:
         stmt = (
             select(FarmingTask)

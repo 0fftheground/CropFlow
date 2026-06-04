@@ -78,6 +78,8 @@ from app.services.stage_management import (
 from app.services.task_executions import (
     TaskExecutionCompleteInput,
     TaskExecutionCompleteResult,
+    TaskExecutionRecordUpdateInput,
+    TaskExecutionRecordUpdateResult,
     TaskExecutionService,
 )
 from app.services.task_queries import FarmingTaskDetail, FarmingTaskQueryService
@@ -146,6 +148,8 @@ __all__ = [
     "MockStagePredictionClient",
     "TaskExecutionCompleteInput",
     "TaskExecutionCompleteResult",
+    "TaskExecutionRecordUpdateInput",
+    "TaskExecutionRecordUpdateResult",
     "TaskExecutionService",
     "FarmingTaskDetail",
     "FarmingTaskQueryService",

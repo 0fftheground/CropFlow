@@ -80,7 +80,8 @@ DailyWeatherCheckJob 当前按天刷新即可；如外部气象接口获取失�
 同一 Farm / 年 / 日期 / sourceType 下只保留一个 active WeatherSnapshot，旧快照保留审计链路并标记 superseded。
 WeatherUpdated.payload 记录 weatherSnapshotId、previousWeatherSnapshotId 和 weatherChangeType，用于区分 new_snapshot / reused_snapshot / changed_snapshot / restored_snapshot。
 `forecast` 当前只影响生育期预测层：允许刷新 StagePredictionSnapshot / CropThermalTimeState，但不触发 CalendarItem 刷新，也不产生 StageChanged。
-历史 `observed` 修正按“修正日期 -> 当前 as_of_date”重算；第一版通过 StagePredictionSnapshot 审计摘要保留关键日逐日积温，不单独建表。
+历史 `observed` 修正按“修正日期 -> 当前 as_of_date”重算；如存在人工录入真实生育期形成的 raw stage code 锚点，则按“修正日期”和最近锚点日期两者中更晚者开始重算。第一版通过 StagePredictionSnapshot 审计摘要保留关键日逐日积温，不单独建表。
+`climatology` 只用于 forecast 覆盖范围之外的远期预测兜底，不直接触发当前阶段变化。
 ```
 
 ## 4.4 到期任务生成
