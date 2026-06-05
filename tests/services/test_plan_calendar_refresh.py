@@ -3,12 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
-from app.core.constants import EVENT_TYPE_PLAN_CREATED, EVENT_TYPE_WEATHER_UPDATED
+from app.core.constants import EVENT_TYPE_PLAN_CREATED, EVENT_TYPE_STAGE_CHANGED, EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED, EVENT_TYPE_WEATHER_UPDATED
 from app.models import CalendarItem, CodeDict, EventRecord, Farm, PlantingPlan, RiceControlWindowLevel1, ReviewRequest, RiceVariety, TaskIntent
-from app.orchestrator.core import PlanCalendarRefreshHandler
+from app.orchestrator.core import PlanCalendarRefreshHandler, TaskDueCheckTriggeredHandler
 from app.services.calendar_tasks import (
     MockWeatherProvider,
     MockWeedDiagnosisClient,
+    PestDiseaseDailyUpdateResult,
+    PestDiseaseRegularSurveyInitResult,
+    PestDiseaseRegularSurveyPlan,
     PlantProtectionPlanContextResolver,
     SurveyDateRecommendationService,
 )
@@ -75,6 +78,26 @@ class FakeCalendarItemRepository:
         self.items.append(item)
         return item
 
+    def get_by_idempotency_key(self, idempotency_key: str) -> CalendarItem | None:
+        return next((item for item in self.items if item.idempotency_key == idempotency_key), None)
+
+    def list_by_plan_and_subtype(
+        self,
+        planting_plan_id: int,
+        task_subtype: str,
+        *,
+        parent_task_id: int | None = None,
+        source_execution_record_id: int | None = None,
+    ) -> list[CalendarItem]:
+        return [
+            item
+            for item in self.items
+            if item.planting_plan_id == planting_plan_id
+            and item.task_subtype == task_subtype
+            and item.parent_task_id == parent_task_id
+            and item.source_execution_record_id == source_execution_record_id
+        ]
+
     def list_active_by_plan_and_subtype(
         self,
         planting_plan_id: int,
@@ -93,11 +116,31 @@ class FakeCalendarItemRepository:
             and item.source_execution_record_id == source_execution_record_id
         ]
 
+    def list_due_for_generation(
+        self,
+        planting_plan_id: int,
+        *,
+        check_date: date,
+        window_days: int,
+    ) -> list[CalendarItem]:
+        latest_start_date = check_date.fromordinal(check_date.toordinal() + window_days)
+        return [
+            item
+            for item in self.items
+            if item.planting_plan_id == planting_plan_id
+            and item.status == "active"
+            and item.generated_task_id is None
+            and item.suggested_start_date <= latest_start_date
+        ]
+
 
 @dataclass
 class FakeEventRecordRepository:
     items: list[EventRecord] = field(default_factory=list)
     next_id: int = 1
+
+    def get_by_idempotency_key(self, idempotency_key: str) -> EventRecord | None:
+        return next((item for item in self.items if item.idempotency_key == idempotency_key), None)
 
     def add(self, event_record: EventRecord) -> EventRecord:
         if event_record.id is None:
@@ -159,6 +202,22 @@ class FakeReviewRequestRepository:
         ]
 
 
+@dataclass
+class FakeFarmingTaskRepository:
+    items: list = field(default_factory=list)
+    next_id: int = 1
+
+    def add(self, task):
+        self.items.append(task)
+        return task
+
+    def flush(self) -> None:
+        for task in self.items:
+            if task.id is None:
+                task.id = self.next_id
+                self.next_id += 1
+
+
 def _make_plan(*, metadata_payload: dict | None = None) -> PlantingPlan:
     return PlantingPlan(
         id=1,
@@ -208,6 +267,53 @@ def _make_control_window() -> RiceControlWindowLevel1:
         data_year=2026,
         detail={"1": ["0509", "0513"]},
     )
+
+
+class ActiveStageChangedPestDiseaseClient:
+    def init_regular_surveys(
+        self,
+        *,
+        cultivation_type: str,
+        growth_stage: dict[str, str],
+        level1_of_year: dict[str, list[str]],
+    ) -> PestDiseaseRegularSurveyInitResult:
+        return PestDiseaseRegularSurveyInitResult(
+            regular_plans=[
+                PestDiseaseRegularSurveyPlan(
+                    survey_window=(date(2026, 5, 2), date(2026, 5, 4)),
+                    targets=["稻瘟病"],
+                    exclude_reasons={},
+                    status="need_survey",
+                    message="当前处于可防治周期，建议按调查日期开展调查",
+                    spray_stage="封行药",
+                    survey_method="生育期",
+                    adjusted=False,
+                    raw_plan={},
+                ),
+            ],
+            raw_response={"code": 200},
+        )
+
+    def daily_update_surveys(
+        self,
+        *,
+        growth_stage: dict[str, str],
+        regular_plans: list[dict[str, object]],
+        weather_data: list[dict[str, object]],
+        typhoon_data: dict[str, object],
+        actual_control_date: date | None = None,
+    ) -> PestDiseaseDailyUpdateResult:
+        return PestDiseaseDailyUpdateResult(
+            status="no_new_event",
+            message="",
+            survey_window=None,
+            spray_stage=None,
+            targets=[],
+            exclude_reasons={},
+            source="regular",
+            raw_result={},
+            raw_response={"code": 200},
+        )
 
 
 def test_plan_refresh_creates_soil_treatment_review_and_pre_survey_calendar_item() -> None:
@@ -419,3 +525,81 @@ def test_plan_refresh_skips_reopening_converted_soil_treatment_recommendation() 
     assert [item.id for item in result.task_intents] == [10]
     assert result.review_requests == []
     assert len(task_intent_repo.items) == 1
+
+
+def test_stage_changed_immediately_generates_due_tasks_for_active_plan() -> None:
+    calendar_repo = FakeCalendarItemRepository()
+    event_repo = FakeEventRecordRepository()
+    task_intent_repo = FakeTaskIntentRepository()
+    review_repo = FakeReviewRequestRepository()
+    farming_task_repo = FakeFarmingTaskRepository()
+    plan = _make_plan(
+        metadata_payload={
+            "province": "湖南省",
+            "pestDisease": {
+                "growth_stage": {
+                    "tillering_date": "2026-04-20",
+                    "pokou_date": "2026-06-10",
+                    "heading_date": "2026-06-18",
+                    "maturity_date": "2026-07-20",
+                },
+            },
+        },
+    )
+    plan.status = "active"
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(plan),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(_make_variety()),
+        code_dict_repository=FakeCodeDictRepository(_make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(_make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=MockWeatherProvider(),
+        diagnosis_client=MockWeedDiagnosisClient(),
+        pest_disease_client=ActiveStageChangedPestDiseaseClient(),
+    )
+    due_check_handler = TaskDueCheckTriggeredHandler(
+        planting_plan_repository=FakePlantingPlanRepository(plan),
+        calendar_item_repository=calendar_repo,
+        farming_task_repository=farming_task_repo,
+        event_record_repository=event_repo,
+    )
+    handler = PlanCalendarRefreshHandler(
+        survey_date_recommendation_service=service,
+        event_record_repository=event_repo,
+        task_intent_repository=task_intent_repo,
+        review_request_repository=review_repo,
+        task_due_check_handler=due_check_handler,
+    )
+
+    result = handler.handle(
+        EventRecord(
+            id=99,
+            planting_plan_id=1,
+            event_type=EVENT_TYPE_STAGE_CHANGED,
+            event_category="runtime",
+            event_source="orchestrator",
+            source_system="cropflow",
+            payload={"currentStageCode": "BBCH13"},
+            occurred_at=datetime(2026, 6, 5),
+            processing_status="received",
+            idempotency_key="stage-changed:1",
+            created_by_type="system",
+            created_by_id="StageRefreshHandler",
+        ),
+    )
+
+    generated_task_subtypes = {item.task_subtype for item in result.farming_tasks}
+    assert "plant_protection.stem_leaf_weed_pre_survey" in generated_task_subtypes
+    assert "plant_protection.regular_disease_pest_survey" in generated_task_subtypes
+    regular_item = next(
+        item for item in result.calendar_items if item.task_subtype == "plant_protection.regular_disease_pest_survey"
+    )
+    regular_task = next(
+        item for item in result.farming_tasks if item.task_subtype == "plant_protection.regular_disease_pest_survey"
+    )
+    assert regular_item.status == "generated"
+    assert regular_item.generated_task_id == regular_task.id
+    assert regular_task.calendar_item_id == regular_item.id
+    assert any(item.event_type == EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED for item in event_repo.items)

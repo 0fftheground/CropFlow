@@ -15,8 +15,14 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 - 杂草主链路已跑通：药前调查 -> 审核 -> 正式除草任务 -> 作业反馈 -> 安全性 / 防效调查 -> 服务评价 / 现场确认。
 - 病虫主链路已跑通：常规调查 -> 审核 -> 正式防治任务 -> 作业反馈；`service_effect_evaluation` / `service_effect_survey` 也已接入正式任务链路。
 - 病虫 `daily-update-survey` 已完成 `CalendarItem` 映射，`new_emergency / merged_into_regular / no_new_event` 三种状态的本地语义已接通；其中 `merged_into_regular` 已用真实 `plan 19` + 合成天气真实打通。
-- 真实联调中修复了几类关键问题：杂草天气入参归一化、病虫 `level1_window` payload 形状、soil-treatment 幂等性复用、病虫打药适宜度天气拼装、72h 小时天气 fallback、任务完成状态更新、执行记录挂接 active `OperationPlan`、`resolved_by` 前置校验。
-- 当前最近一次后端测试结果为 `105 passed, 1 skipped`。
+- 本轮联调继续收口了几类运行期问题：
+  - `CalendarItem` upsert 现在先按全表 `idempotency_key` 复用；同键 `generated` 项不会重复插入，`invalidated` 项可恢复。
+  - 常规病虫调查改成按 `sprayStage + survey_window` 生成稳定 identity，不再依赖 `regular:{index}`；生育期变更后重算不会把同一轮调查重新塞回预备农事项。
+  - `StageChanged` 刷新完预备农事项后，会立即补跑一次 `TaskDueCheckTriggered`；已到期的新农事会当场转正式任务。
+  - 杂草药前调查天气窗口对 `直播 / 插秧 / 抛秧` 都已统一为“栽培日期前一天开始”，避免 `weed_survey_date_diagnosis` 缺首日。
+  - 病虫防治 `level1_window` 现在按本次 `survey_date` 选择最近的 `pp_rice_control_window_level_1.detail` 日期范围，而不是按轮次索引取值。
+  - 早稻且非直播场景下，如果移栽日期晚于阈值推导的 `BBCH13`，会把移栽日期作为实际三叶一心锚点并重算后续生育期。
+- 当前这批改动已跑过定向测试：`test_calendar_tasks`、`test_pest_disease_daily_update`、`test_plan_calendar_refresh`、`test_stage_management`、`test_survey_results`、`test_stage_refresh_events`、`test_task_executions` 全部通过。
 - 前端已开始真实调试；`plan 19` 上已补 `service_effect_evaluation` / `service_effect_survey` 调试任务，便于页面联调。
 - 前端联调文档已从 weed 命名收口为 plant protection 命名：
   - `docs/planning/team-work-division/frontend-plant-protection-handoff.md`
@@ -48,6 +54,7 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
   - 历史 `observed` 修正从“修正日期”和最近人工 raw stage 锚点两者中更晚者开始重算
   - 人工录入只接受 raw stage code，且只能录入当天或过去日期
 - 气象运行期管理仍未完全产品化：更细缓存、版本审计、异常展示和前端状态细化仍待补齐。
+- 本地联调库里 `plan 32` 仍带历史重复数据；如果继续拿它做真实回放，最好先清理重复 `CalendarItem / FarmingTask`，避免误判新逻辑。
 - DeviceCommand、InventoryItem / InventoryTransaction 仍按 deferred 处理。
 
 ## Blockers
@@ -55,6 +62,7 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 - 外部天气接口契约仍有漂移：平均接口使用 `farmId`，逐日预报接口使用 `farmID`，小时级接口 `/algBaseDataApi/v1/getForecast10DaysBeforeAndAfter` 仍可能返回 `Api not exists`，目前依赖 fallback。
 - 本地真实联调仍依赖 `Farm.external_farm_id`；缺失时天气链路直接不可用。
 - 前端虽然已开始调试，但页面级真实验收还没跑完，尤其是执行结果展示 / 编辑和病虫调查提交流程。
+- 本地真实计划存在历史脏数据时，回放 `StageChanged` / `daily-update-survey` 可能放大旧重复项，联调前需要先确认计划数据是否干净。
 
 ## Next Step
 
@@ -62,8 +70,8 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 
 1. 继续和前端一起把植保页面联调跑完，重点验 `survey-results` / `execution-completions` / `execution-record update` / `review resolve` 的页面流转。
 2. 继续补病虫调查 / 防治的调试支撑，必要时把 `daily-update-survey` 的 replay 固化成更明确的 `merged / emergency` 模式。
-3. 按已冻结的生育期 / 气象 MVP 规则继续联调，重点补天气异常展示、前端状态表达和历史修正验证。
+3. 继续按已冻结的生育期 / 气象 MVP 规则联调，重点补天气异常展示、前端状态表达、历史修正验证，以及真实计划脏数据清理策略。
 
 ## Last Updated
 
-`2026-06-04`
+`2026-06-05`

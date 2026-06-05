@@ -95,6 +95,26 @@ class FakeCalendarItemRepository:
         self.items.append(item)
         return item
 
+    def get_by_idempotency_key(self, idempotency_key: str) -> CalendarItem | None:
+        return next((item for item in self.items if item.idempotency_key == idempotency_key), None)
+
+    def list_by_plan_and_subtype(
+        self,
+        planting_plan_id: int,
+        task_subtype: str,
+        *,
+        parent_task_id: int | None = None,
+        source_execution_record_id: int | None = None,
+    ) -> list[CalendarItem]:
+        return [
+            item
+            for item in self.items
+            if item.planting_plan_id == planting_plan_id
+            and item.task_subtype == task_subtype
+            and item.parent_task_id == parent_task_id
+            and item.source_execution_record_id == source_execution_record_id
+        ]
+
     def list_active_by_plan_and_subtype(
         self,
         planting_plan_id: int,
@@ -309,7 +329,11 @@ class FakePestDiseaseSurveyWindowClient:
         )
 
 
-def make_plan() -> PlantingPlan:
+def make_plan(
+    *,
+    planting_method_code: int = 1,
+    transplant_date: date | None = None,
+) -> PlantingPlan:
     return PlantingPlan(
         id=1,
         plan_code="PLAN-001",
@@ -317,11 +341,12 @@ def make_plan() -> PlantingPlan:
         farm_id=1,
         year=2026,
         culti_type_code=5,
-        planting_method_code=1,
+        planting_method_code=planting_method_code,
         crop_name="水稻",
         variety_id=1,
         variety_name="黄广农占",
         sowing_date=date(2026, 4, 10),
+        transplant_date=transplant_date,
         task_generation_window_days=14,
     )
 
@@ -384,6 +409,8 @@ def make_variety() -> RiceVariety:
 def make_code_dicts() -> dict[int, CodeDict]:
     return {
         1: CodeDict(id=1, code=1, code_name="直播", category="sowingmtd"),
+        3: CodeDict(id=3, code=3, code_name="插秧", category="sowingmtd"),
+        4: CodeDict(id=4, code=4, code_name="抛秧", category="sowingmtd"),
         5: CodeDict(id=5, code=5, code_name="早稻", category="culti_type"),
         9: CodeDict(id=9, code=9, code_name="籼", category="sub_type"),
     }
@@ -412,6 +439,157 @@ def test_recommend_pre_treatment_survey_creates_calendar_item_and_event() -> Non
     assert item.title == "茎叶除草药前调查"
     assert event_repo.items[-1].event_type == EVENT_TYPE_CALENDAR_ITEM_UPDATED
     assert weather_provider.requests == [(date(2026, 4, 9), date(2026, 5, 24))]
+
+
+class PatternAwareDiagnosisClient(FakeDiagnosisClient):
+    def __init__(self, expected_pattern: str, expected_cultivation_date: date) -> None:
+        self.expected_pattern = expected_pattern
+        self.expected_cultivation_date = expected_cultivation_date
+
+    def recommend_pre_treatment_survey_date(
+        self,
+        *,
+        weather_data: list[dict[str, Any]],
+        rice_type: str,
+        cultivation_system: str,
+        cultivation_pattern: str,
+        cultivation_date: date,
+    ) -> PreTreatmentSurveyRecommendation:
+        assert weather_data
+        assert rice_type == "籼稻"
+        assert cultivation_system == "早稻"
+        assert cultivation_pattern == self.expected_pattern
+        assert cultivation_date == self.expected_cultivation_date
+        return PreTreatmentSurveyRecommendation(
+            recommendation_date=date(2026, 4, 26),
+            raw_response={"code": 200, "data": {"pre_stem_leaf_herbicide_survey_date": "20260426"}},
+        )
+
+
+def test_recommend_pre_treatment_survey_for_transplanting_includes_previous_day_weather() -> None:
+    calendar_repo = FakeCalendarItemRepository()
+    event_repo = FakeEventRecordRepository()
+    weather_provider = FakeWeatherProvider()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(
+            make_plan(planting_method_code=3, transplant_date=date(2026, 4, 18)),
+        ),
+        farm_repository=None,
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=None,
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=weather_provider,
+        diagnosis_client=PatternAwareDiagnosisClient("插秧", date(2026, 4, 18)),
+    )
+
+    service.recommend_pre_treatment_survey(1, check_date=date(2026, 4, 18))
+
+    assert weather_provider.requests == [(date(2026, 4, 17), date(2026, 6, 1))]
+
+
+def test_recommend_pre_treatment_survey_for_throw_transplanting_includes_previous_day_weather() -> None:
+    calendar_repo = FakeCalendarItemRepository()
+    event_repo = FakeEventRecordRepository()
+    weather_provider = FakeWeatherProvider()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(
+            make_plan(planting_method_code=4, transplant_date=date(2026, 4, 18)),
+        ),
+        farm_repository=None,
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=None,
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=weather_provider,
+        diagnosis_client=PatternAwareDiagnosisClient("抛秧", date(2026, 4, 18)),
+    )
+
+    service.recommend_pre_treatment_survey(1, check_date=date(2026, 4, 18))
+
+    assert weather_provider.requests == [(date(2026, 4, 17), date(2026, 6, 1))]
+
+
+def test_recommend_pre_treatment_survey_reuses_generated_item_with_same_idempotency_key() -> None:
+    generated_item = CalendarItem(
+        id=10,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
+        title="旧标题",
+        description="旧描述",
+        suggested_start_date=date(2026, 4, 18),
+        suggested_end_date=date(2026, 4, 18),
+        status=CALENDAR_STATUS_GENERATED,
+        generation_condition={"stale": True},
+        idempotency_key="calendar-item:1:plant_protection.stem_leaf_weed_pre_survey:2026-04-18",
+        generated_task_id=88,
+    )
+    calendar_repo = FakeCalendarItemRepository(items=[generated_item], next_id=11)
+    event_repo = FakeEventRecordRepository()
+    weather_provider = FakeWeatherProvider()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(make_plan()),
+        farm_repository=None,
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=None,
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=weather_provider,
+        diagnosis_client=FakeDiagnosisClient(),
+    )
+
+    item = service.recommend_pre_treatment_survey(1, check_date=date(2026, 4, 10))
+
+    assert item is generated_item
+    assert item.status == CALENDAR_STATUS_GENERATED
+    assert item.generated_task_id == 88
+    assert item.title == "茎叶除草药前调查"
+    assert item.description == "由 weed_survey_date_diagnosis 推荐的茎叶除草药前调查日期。"
+    assert item.generation_condition["algorithmCode"] == "weed_survey_date_diagnosis"
+    assert len(calendar_repo.items) == 1
+
+
+def test_recommend_pre_treatment_survey_reactivates_invalidated_item_with_same_idempotency_key() -> None:
+    invalidated_item = CalendarItem(
+        id=11,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
+        title="旧标题",
+        description="旧描述",
+        suggested_start_date=date(2026, 4, 18),
+        suggested_end_date=date(2026, 4, 18),
+        status="invalidated",
+        generation_condition={"stale": True},
+        idempotency_key="calendar-item:1:plant_protection.stem_leaf_weed_pre_survey:2026-04-18",
+        invalidated_reason="recommendation_date_changed",
+    )
+    calendar_repo = FakeCalendarItemRepository(items=[invalidated_item], next_id=12)
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(make_plan()),
+        farm_repository=None,
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=None,
+        calendar_item_repository=calendar_repo,
+        event_record_repository=FakeEventRecordRepository(),
+        weather_provider=FakeWeatherProvider(),
+        diagnosis_client=FakeDiagnosisClient(),
+    )
+
+    item = service.recommend_pre_treatment_survey(1, check_date=date(2026, 4, 10))
+
+    assert item is invalidated_item
+    assert item.status == "active"
+    assert item.invalidated_reason is None
+    assert item.title == "茎叶除草药前调查"
+    assert item.generation_condition["algorithmCode"] == "weed_survey_date_diagnosis"
+    assert len(calendar_repo.items) == 1
+
 
 def test_recommend_post_treatment_surveys_creates_two_traceable_calendar_items() -> None:
     calendar_repo = FakeCalendarItemRepository()
@@ -470,7 +648,71 @@ def test_recommend_regular_disease_pest_surveys_creates_multiple_calendar_items(
     assert items[0].generation_condition["targets"] == ["二化螟", "稻飞虱"]
     assert items[0].generation_condition["sprayStage"] == "封行药"
     assert items[1].generation_condition["surveyMethod"] == "生育期"
+    assert "regular:1:" not in items[0].idempotency_key
+    assert "regular:2:" not in items[1].idempotency_key
     assert event_repo.items[-1].payload["algorithmCode"] == "pestDisease.init_regular_survey"
+
+
+def test_recommend_regular_disease_pest_surveys_reuses_legacy_generated_item_and_invalidates_duplicate_active_item() -> None:
+    generated_item = CalendarItem(
+        id=10,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        title="旧破口药调查",
+        description="旧描述",
+        suggested_start_date=date(2026, 6, 1),
+        suggested_end_date=date(2026, 6, 3),
+        status=CALENDAR_STATUS_GENERATED,
+        generation_condition={"sprayStage": "破口药"},
+        idempotency_key=(
+            "calendar-item:1:plant_protection.regular_disease_pest_survey:"
+            "regular:1:2026-06-01:2026-06-03"
+        ),
+        generated_task_id=67,
+    )
+    duplicate_active_item = CalendarItem(
+        id=11,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        title="重复破口药调查",
+        description="重复描述",
+        suggested_start_date=date(2026, 6, 1),
+        suggested_end_date=date(2026, 6, 3),
+        status="active",
+        generation_condition={"sprayStage": "破口药"},
+        idempotency_key=(
+            "calendar-item:1:plant_protection.regular_disease_pest_survey:"
+            "regular:2:2026-06-01:2026-06-03"
+        ),
+    )
+    calendar_repo = FakeCalendarItemRepository(items=[generated_item, duplicate_active_item], next_id=12)
+    event_repo = FakeEventRecordRepository()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(make_plan_with_pest_disease_metadata()),
+        farm_repository=FakeFarmRepository(make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=FakeWeatherProvider(),
+        diagnosis_client=FakeDiagnosisClient(),
+        pest_disease_client=FakePestDiseaseSurveyWindowClient(),
+    )
+
+    items = service.recommend_regular_disease_pest_surveys(1)
+
+    assert len(items) == 2
+    assert items[1] is generated_item
+    assert generated_item.status == CALENDAR_STATUS_GENERATED
+    assert generated_item.generated_task_id == 67
+    assert "regular:1:" not in generated_item.idempotency_key
+    assert "regular:2:" not in generated_item.idempotency_key
+    assert duplicate_active_item.status == "invalidated"
+    assert duplicate_active_item.invalidated_reason == "regular_disease_pest_survey_window_changed"
+    assert len(calendar_repo.items) == 3
 
 
 def test_recommend_regular_disease_pest_surveys_skips_plan_without_metadata() -> None:

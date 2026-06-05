@@ -230,6 +230,26 @@ class FakeCalendarItemRepository:
                 return item
         return None
 
+    def get_by_idempotency_key(self, idempotency_key: str) -> CalendarItem | None:
+        return next((item for item in self.items if item.idempotency_key == idempotency_key), None)
+
+    def list_by_plan_and_subtype(
+        self,
+        planting_plan_id: int,
+        task_subtype: str,
+        *,
+        parent_task_id: int | None = None,
+        source_execution_record_id: int | None = None,
+    ) -> list[CalendarItem]:
+        return [
+            item
+            for item in self.items
+            if item.planting_plan_id == planting_plan_id
+            and item.task_subtype == task_subtype
+            and item.parent_task_id == parent_task_id
+            and item.source_execution_record_id == source_execution_record_id
+        ]
+
     def list_active_by_plan_and_subtype(
         self,
         planting_plan_id: int,
@@ -300,6 +320,7 @@ def make_service(
     task_subtype: str,
     *,
     control_client: MockPestDiseaseControlClient | None = None,
+    control_window_detail: dict[str, list[str]] | None = None,
 ) -> tuple[SurveyResultService, FakeTaskIntentRepository, FakeReviewRequestRepository, FakeCalendarItemRepository]:
     plan = PlantingPlan(
         id=1,
@@ -383,7 +404,7 @@ def make_service(
             city="益阳市",
             county="桃江县",
             data_year=2026,
-            detail={"1": ["0702", "0706"], "2": ["0720", "0724"]},
+            detail=control_window_detail or {"1": ["0702", "0706"], "2": ["0720", "0724"]},
         ),
     )
     survey_date_service = SurveyDateRecommendationService(
@@ -769,6 +790,33 @@ def test_regular_disease_pest_survey_creates_control_task_intent_and_review_requ
         "water_volume": "3 L/亩",
     }
     assert review_repo.items[0].source_entity_id == task_intent_repo.items[0].id
+
+
+def test_regular_disease_pest_survey_uses_level1_window_closest_to_survey_date() -> None:
+    service, task_intent_repo, _, _ = make_service(
+        "plant_protection.regular_disease_pest_survey",
+        control_window_detail={
+            "1": ["0509", "0515"],
+            "2": ["0614", "0620"],
+            "3": ["0712", "0718"],
+            "4": ["0811", "0817"],
+            "5": ["0818", "0822"],
+            "6": ["0912", "0918"],
+            "7": ["0922", "0926"],
+        },
+    )
+
+    service.record_survey_result(
+        10,
+        {
+            "survey_date": "20260605",
+            "survey_method": "一级理论防治日期",
+            "bbch_stage": 23,
+            "DaoFeiShi": {"insects_per_100_hills": 12},
+        },
+    )
+
+    assert task_intent_repo.items[0].rule_result["proposedPlan"]["requestPayload"]["level1_window"] == ["0614", "0620"]
 
 
 def test_sudden_disease_pest_survey_theory_no_action_creates_no_action_intent() -> None:

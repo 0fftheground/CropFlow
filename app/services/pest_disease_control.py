@@ -4,7 +4,7 @@ import json
 import logging
 import socket
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Protocol
 from urllib import error, request
 from urllib.parse import urlsplit
@@ -676,10 +676,11 @@ class PestDiseaseControlPlanningService:
         if control_type == "regular":
             spray_info = self._build_regular_spray_info(planting_plan.id, farming_task)
             spray_info_list = None
+            survey_date = _parse_payload_date(normalized_survey_data, "survey_date", "surveyDate")
             level1_window = self._resolve_level1_window(
                 planting_plan,
                 farm,
-                round_number=int(spray_info["round"]),
+                survey_date=survey_date,
             )
         else:
             spray_info = None
@@ -857,7 +858,7 @@ class PestDiseaseControlPlanningService:
             raise ValueError(f"Pest disease control growth_stage is missing fields: {sorted(missing_fields)}.")
         return normalized
 
-    def _resolve_level1_window(self, planting_plan: PlantingPlan, farm: Farm, *, round_number: int) -> list[str]:
+    def _resolve_level1_window(self, planting_plan: PlantingPlan, farm: Farm, *, survey_date: date) -> list[str]:
         city = str(farm.city or "").strip()
         county = str(farm.district_county or "").strip()
         missing_fields = [
@@ -884,11 +885,11 @@ class PestDiseaseControlPlanningService:
         if not isinstance(detail, dict) or not detail:
             raise ValueError("Pest disease control window level1 detail must be a non-empty object.")
         normalized_detail = json.loads(json.dumps(detail, ensure_ascii=False))
-        round_key = str(round_number)
-        window = normalized_detail.get(round_key)
-        if not isinstance(window, list) or len(window) != 2:
-            raise ValueError(f"Pest disease control window level1 detail is missing round {round_key}.")
-        return [str(window[0]), str(window[1])]
+        return _select_closest_level1_window(
+            normalized_detail,
+            survey_date=survey_date,
+            data_year=int(control_window.data_year),
+        )
 
     def _build_regular_spray_info(self, planting_plan_id: int, farming_task: FarmingTask) -> dict[str, Any]:
         spray_stage = "常规病虫预防"
@@ -1273,6 +1274,39 @@ def _unwrap_theory_plan_payload(theory_plan: dict[str, Any]) -> dict[str, Any]:
     return dict(theory_plan)
 
 
+def _select_closest_level1_window(
+    detail: dict[str, Any],
+    *,
+    survey_date: date,
+    data_year: int,
+) -> list[str]:
+    closest_window: list[str] | None = None
+    closest_sort_key: tuple[int, int, date] | None = None
+    for sequence, raw_window in detail.items():
+        if not isinstance(raw_window, list) or len(raw_window) != 2:
+            raise ValueError(f"Pest disease control window level1 detail[{sequence!r}] must be a two-item MMDD list.")
+        start_text = _normalize_month_day_string(raw_window[0], f"level1_window[{sequence!r}][0]")
+        end_text = _normalize_month_day_string(raw_window[1], f"level1_window[{sequence!r}][1]")
+        start_date = _parse_month_day_for_year(data_year, start_text)
+        end_date = _parse_month_day_for_year(data_year, end_text)
+        if end_date < start_date:
+            raise ValueError(f"Pest disease control window level1 detail[{sequence!r}] has end before start.")
+        if survey_date < start_date:
+            distance = (start_date - survey_date).days
+        elif survey_date > end_date:
+            distance = (survey_date - end_date).days
+        else:
+            distance = 0
+        # Prefer upcoming or current windows when the date gap is tied.
+        sort_key = (distance, 0 if survey_date <= end_date else 1, start_date)
+        if closest_sort_key is None or sort_key < closest_sort_key:
+            closest_sort_key = sort_key
+            closest_window = [start_text, end_text]
+    if closest_window is None:
+        raise ValueError("Pest disease control window level1 detail must be a non-empty object.")
+    return closest_window
+
+
 def _build_closed_date_range(start_date: date, end_date: date) -> list[date]:
     if start_date > end_date:
         return []
@@ -1298,6 +1332,18 @@ def _parse_payload_date(payload: dict[str, Any], *keys: str) -> date:
                 f"{raw_value[:4]}-{raw_value[4:6]}-{raw_value[6:8]}",
             )
     raise ValueError(f"Missing required date payload field. expected one of {keys!r}.")
+
+
+def _normalize_month_day_string(raw_value: Any, field_name: str) -> str:
+    value = str(raw_value)
+    if len(value) != 4 or not value.isdigit():
+        raise ValueError(f"{field_name} must use MMDD format.")
+    _parse_month_day_for_year(2000, value)
+    return value
+
+
+def _parse_month_day_for_year(year: int, raw_value: str) -> date:
+    return datetime.strptime(f"{year}{raw_value}", "%Y%m%d").date()
 
 
 def _normalize_iso_date_string(raw_value: Any, field_name: str) -> str:

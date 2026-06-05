@@ -14,6 +14,7 @@ from urllib.parse import urlencode, urlsplit
 from app.core.logging import LogTimer, summarize_for_log
 from app.core.constants import (
     CALENDAR_STATUS_ACTIVE,
+    CALENDAR_STATUS_GENERATED,
     CALENDAR_STATUS_INVALIDATED,
     DAILY_WEATHER_CHECK_JOB,
     EVENT_TYPE_CALENDAR_ITEM_UPDATED,
@@ -1804,8 +1805,8 @@ class SurveyDateRecommendationService:
         )
 
     def _resolve_pre_treatment_weather_start_date(self, context: PlantProtectionPlanContext) -> date:
-        if context.cultivation_pattern == "直播":
-            # The live algorithm expects direct-seeded plans to include the day before sowing.
+        if context.cultivation_pattern in {"直播", "插秧", "抛秧"}:
+            # The upstream weed survey API expects the cultivation date and the previous calendar day.
             return context.cultivation_date - timedelta(days=1)
         return context.cultivation_date
 
@@ -1826,10 +1827,11 @@ class SurveyDateRecommendationService:
         )
         calendar_items: list[CalendarItem] = []
         active_idempotency_keys: set[str] = set()
-        for index, plan in enumerate(recommendation.regular_plans, start=1):
-            idempotency_scope = (
-                f"{TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY}:regular:{index}:"
-                f"{plan.survey_window[0].isoformat()}:{plan.survey_window[1].isoformat()}"
+        for plan in recommendation.regular_plans:
+            idempotency_scope = self._build_regular_disease_pest_survey_idempotency_scope(plan)
+            matched_item = self._find_existing_regular_disease_pest_survey_item(
+                planting_plan_id=planting_plan.id,
+                plan=plan,
             )
             calendar_item = self._upsert_calendar_item(
                 planting_plan=planting_plan,
@@ -1853,6 +1855,7 @@ class SurveyDateRecommendationService:
                     "rawResponse": recommendation.raw_response,
                 },
                 idempotency_scope=idempotency_scope,
+                matched_item=matched_item,
                 allow_multiple_active=True,
             )
             calendar_items.append(calendar_item)
@@ -2298,6 +2301,58 @@ class SurveyDateRecommendationService:
             item.invalidated_reason = "regular_disease_pest_survey_window_changed"
             item.last_generation_checked_at = _utcnow()
 
+    def _build_regular_disease_pest_survey_idempotency_scope(
+        self,
+        plan: PestDiseaseRegularSurveyPlan,
+    ) -> str:
+        identity = _build_regular_disease_pest_survey_identity(
+            suggested_start_date=plan.survey_window[0],
+            suggested_end_date=plan.survey_window[1],
+            spray_stage=plan.spray_stage,
+        )
+        identity_payload = {
+            "suggestedStartDate": identity[1],
+            "suggestedEndDate": identity[2],
+            "sprayStage": identity[0] or "",
+        }
+        identity_digest = hashlib.sha1(
+            json.dumps(identity_payload, ensure_ascii=False, sort_keys=True).encode("utf-8"),
+        ).hexdigest()[:12]
+        return (
+            f"{TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY}:regular:"
+            f"{identity[1]}:{identity[2]}:{identity_digest}"
+        )
+
+    def _find_existing_regular_disease_pest_survey_item(
+        self,
+        *,
+        planting_plan_id: int,
+        plan: PestDiseaseRegularSurveyPlan,
+    ) -> CalendarItem | None:
+        expected_identity = _build_regular_disease_pest_survey_identity(
+            suggested_start_date=plan.survey_window[0],
+            suggested_end_date=plan.survey_window[1],
+            spray_stage=plan.spray_stage,
+        )
+        candidates = self.calendar_item_repository.list_by_plan_and_subtype(
+            planting_plan_id,
+            TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        )
+        matched_items = [
+            item
+            for item in candidates
+            if _build_regular_disease_pest_survey_identity(
+                suggested_start_date=item.suggested_start_date,
+                suggested_end_date=item.suggested_end_date,
+                spray_stage=_get_calendar_item_regular_disease_pest_spray_stage(item),
+            )
+            == expected_identity
+        ]
+        if not matched_items:
+            return None
+        matched_items.sort(key=_regular_disease_pest_calendar_item_reuse_priority)
+        return matched_items[0]
+
     def _invalidate_stale_sudden_disease_pest_surveys(
         self,
         planting_plan_id: int,
@@ -2489,6 +2544,7 @@ class SurveyDateRecommendationService:
         suggested_end_date: date | None = None,
         generation_condition: dict[str, Any],
         idempotency_scope: str,
+        matched_item: CalendarItem | None = None,
         parent_task_id: int | None = None,
         source_execution_id: int | None = None,
         source_execution_record_id: int | None = None,
@@ -2496,14 +2552,18 @@ class SurveyDateRecommendationService:
     ) -> CalendarItem:
         suggested_end_date = suggested_end_date or suggested_start_date
         idempotency_key = f"calendar-item:{planting_plan.id}:{idempotency_scope}"
+        matched_by_key = self.calendar_item_repository.get_by_idempotency_key(idempotency_key)
+        if matched_by_key is not None:
+            matched_item = matched_by_key
         existing_items = self.calendar_item_repository.list_active_by_plan_and_subtype(
             planting_plan.id,
             task_subtype,
             parent_task_id=parent_task_id,
             source_execution_record_id=source_execution_record_id,
         )
-        matched_item = None
         for item in existing_items:
+            if matched_item is not None and item.id == matched_item.id:
+                continue
             if allow_multiple_active and item.idempotency_key == idempotency_key:
                 matched_item = item
             elif not allow_multiple_active and (
@@ -2541,11 +2601,13 @@ class SurveyDateRecommendationService:
             matched_item.suggested_start_date = suggested_start_date
             matched_item.suggested_end_date = suggested_end_date
             matched_item.generation_condition = generation_condition
-            matched_item.status = CALENDAR_STATUS_ACTIVE
+            matched_item.idempotency_key = idempotency_key
             matched_item.parent_task_id = parent_task_id
             matched_item.source_execution_id = source_execution_id
             matched_item.source_execution_record_id = source_execution_record_id
-            matched_item.invalidated_reason = None
+            if matched_item.status != CALENDAR_STATUS_GENERATED:
+                matched_item.status = CALENDAR_STATUS_ACTIVE
+                matched_item.invalidated_reason = None
 
         return matched_item
 
@@ -2909,6 +2971,42 @@ def _build_regular_disease_pest_survey_description(plan: PestDiseaseRegularSurve
     if plan.survey_method:
         parts.append(f"调查日期来源：{plan.survey_method}。")
     return "".join(parts)
+
+
+def _build_regular_disease_pest_survey_identity(
+    *,
+    suggested_start_date: date,
+    suggested_end_date: date,
+    spray_stage: str | None,
+) -> tuple[str | None, str, str]:
+    normalized_stage = spray_stage.strip() if isinstance(spray_stage, str) else None
+    return (
+        normalized_stage or None,
+        suggested_start_date.isoformat(),
+        suggested_end_date.isoformat(),
+    )
+
+
+def _get_calendar_item_regular_disease_pest_spray_stage(item: CalendarItem) -> str | None:
+    generation_condition = item.generation_condition or {}
+    if not isinstance(generation_condition, dict):
+        return None
+    raw_value = generation_condition.get("sprayStage")
+    if raw_value is None:
+        return None
+    return str(raw_value)
+
+
+def _regular_disease_pest_calendar_item_reuse_priority(item: CalendarItem) -> tuple[int, int]:
+    if item.status == CALENDAR_STATUS_GENERATED:
+        priority = 0
+    elif item.status == CALENDAR_STATUS_ACTIVE:
+        priority = 1
+    elif item.status == CALENDAR_STATUS_INVALIDATED:
+        priority = 2
+    else:
+        priority = 3
+    return priority, item.id or 0
 
 
 def _build_sudden_disease_pest_survey_description(result: PestDiseaseDailyUpdateResult) -> str:

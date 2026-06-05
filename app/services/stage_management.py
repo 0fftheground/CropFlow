@@ -91,6 +91,9 @@ _LOCAL_TO_STAGE_ALGORITHM_MATUR_TYPE = {
     16: 4,  # 迟熟
     17: 5,  # -
 }
+_EARLY_RICE_STAGE_ALGORITHM_CULTI_TYPE = 4
+_DIRECT_SEEDED_PLANTING_METHOD_CODE = 1
+_THREE_LEAF_ONE_HEART_STAGE_CODE = "BBCH13"
 
 
 def _rebuild_stage_registry(raw_stage_sequence: list[dict[str, str | None]]) -> None:
@@ -752,6 +755,25 @@ class StageManagementService:
             initial_stage_start_dates=initial_stage_start_dates,
             manual_raw_stage_dates=manual_raw_stage_dates,
         )
+        auto_three_leaf_override_date = _resolve_transplant_based_three_leaf_override_date(
+            planting_plan=planting_plan,
+            stage_timeline=derived_state.stage_timeline,
+            manual_raw_stage_dates=manual_raw_stage_dates,
+        )
+        if auto_three_leaf_override_date is not None:
+            effective_manual_raw_stage_dates = dict(manual_raw_stage_dates or {})
+            effective_manual_raw_stage_dates[_THREE_LEAF_ONE_HEART_STAGE_CODE] = auto_three_leaf_override_date
+            derived_state = _derive_stage_state(
+                sowing_date=planting_plan.sowing_date,
+                as_of_date=calculation_context.as_of_date,
+                weather_data=calculation_context.weather_data,
+                threshold_rule=normalized_rule,
+                initial_accumulated_thermal_time=initial_accumulated_thermal_time,
+                initial_last_calculated_date=initial_last_calculated_date,
+                initial_data_version=initial_data_version,
+                initial_stage_start_dates=initial_stage_start_dates,
+                manual_raw_stage_dates=effective_manual_raw_stage_dates,
+            )
         snapshot = StagePredictionSnapshot(
             planting_plan_id=planting_plan.id,
             prediction_version=(latest_snapshot.prediction_version if latest_snapshot is not None else 0) + 1,
@@ -1933,6 +1955,30 @@ def _extract_manual_raw_stage_dates(stage_timeline: dict[str, Any]) -> dict[str,
         for point in _iter_stage_timeline_raw_stage_points(stage_timeline)
         if point.get("source") == "manual"
     }
+
+
+def _resolve_transplant_based_three_leaf_override_date(
+    *,
+    planting_plan: PlantingPlan,
+    stage_timeline: dict[str, Any],
+    manual_raw_stage_dates: dict[str, date] | None,
+) -> date | None:
+    if planting_plan.transplant_date is None:
+        return None
+    if manual_raw_stage_dates and _THREE_LEAF_ONE_HEART_STAGE_CODE in manual_raw_stage_dates:
+        return None
+    culti_type = _resolve_stage_algorithm_culti_type(None, planting_plan.culti_type_code)
+    if culti_type != _EARLY_RICE_STAGE_ALGORITHM_CULTI_TYPE:
+        return None
+    if planting_plan.planting_method_code == _DIRECT_SEEDED_PLANTING_METHOD_CODE:
+        return None
+    predicted_raw_stage_dates = _extract_raw_stage_start_dates(stage_timeline)
+    predicted_three_leaf_date = predicted_raw_stage_dates.get(_THREE_LEAF_ONE_HEART_STAGE_CODE)
+    if predicted_three_leaf_date is None:
+        return None
+    if planting_plan.transplant_date <= predicted_three_leaf_date:
+        return None
+    return planting_plan.transplant_date
 
 
 def _iter_stage_timeline_raw_stage_points(stage_timeline: dict[str, Any]) -> list[dict[str, Any]]:

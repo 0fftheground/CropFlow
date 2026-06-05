@@ -341,6 +341,76 @@ def test_refresh_prediction_prefers_stage_names_from_crop_stage_dict() -> None:
     assert raw_points["BBCH21"]["stage_name"] == "分蘖始期（字典）"
 
 
+def test_refresh_prediction_for_early_rice_transplanting_uses_transplant_date_as_three_leaf_anchor() -> None:
+    snapshot_repo = FakeStagePredictionSnapshotRepository()
+    stage_repo = FakeCropStageStateRepository()
+    thermal_repo = FakeCropThermalTimeStateRepository()
+    weather_provider = FakeWeatherProvider()
+    plan = _make_plan()
+    plan.planting_method_code = 3
+    plan.transplant_date = date(2026, 4, 18)
+    service = StageManagementService(
+        planting_plan_repository=FakePlantingPlanRepository(plan),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(_make_rice_variety()),
+        stage_prediction_snapshot_repository=snapshot_repo,
+        crop_stage_state_repository=stage_repo,
+        crop_thermal_time_state_repository=thermal_repo,
+        stage_prediction_client=MockStagePredictionClient(),
+        weather_provider=weather_provider,
+    )
+
+    result = service.refresh_prediction(
+        1,
+        prediction_source="initial",
+        as_of_date=date(2026, 5, 27),
+    )
+
+    raw_points = {item["stage_code"]: item for item in result.snapshot.stage_timeline["raw_stage_points"]}
+    assert raw_points["BBCH13"]["start_date"] == "2026-04-18"
+    assert raw_points["BBCH13"]["source"] == "manual"
+    assert result.snapshot.stage_timeline["stages"][1]["start_date"] == "2026-04-26"
+    assert result.snapshot.stage_timeline["stages"][1]["raw_stage_code"] == "BBCH21"
+
+
+def test_refresh_for_weather_update_preserves_transplant_based_three_leaf_anchor() -> None:
+    snapshot_repo = FakeStagePredictionSnapshotRepository()
+    stage_repo = FakeCropStageStateRepository()
+    thermal_repo = FakeCropThermalTimeStateRepository()
+    weather_provider = FakeWeatherProvider()
+    plan = _make_plan()
+    plan.planting_method_code = 3
+    plan.transplant_date = date(2026, 4, 18)
+    service = StageManagementService(
+        planting_plan_repository=FakePlantingPlanRepository(plan),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(_make_rice_variety()),
+        stage_prediction_snapshot_repository=snapshot_repo,
+        crop_stage_state_repository=stage_repo,
+        crop_thermal_time_state_repository=thermal_repo,
+        stage_prediction_client=MockStagePredictionClient(),
+        weather_provider=weather_provider,
+    )
+    initial_result = service.refresh_prediction(
+        1,
+        prediction_source="initial",
+        as_of_date=date(2026, 5, 27),
+    )
+
+    result = service.refresh_for_weather_update(
+        1,
+        source_event_id=101,
+        as_of_date=date(2026, 6, 10),
+    )
+
+    initial_raw_points = {item["stage_code"]: item for item in initial_result.snapshot.stage_timeline["raw_stage_points"]}
+    refreshed_raw_points = {item["stage_code"]: item for item in result.snapshot.stage_timeline["raw_stage_points"]}
+    assert initial_raw_points["BBCH13"]["start_date"] == "2026-04-18"
+    assert refreshed_raw_points["BBCH13"]["start_date"] == "2026-04-18"
+    assert refreshed_raw_points["BBCH13"]["source"] == "manual"
+    assert result.snapshot.stage_timeline["stages"][1]["start_date"] == "2026-04-26"
+
+
 def test_refresh_prediction_maps_local_stage_codes_to_algorithm_codes() -> None:
     snapshot_repo = FakeStagePredictionSnapshotRepository()
     stage_repo = FakeCropStageStateRepository()

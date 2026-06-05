@@ -71,6 +71,26 @@ class FakeCalendarItemRepository:
         self.items.append(item)
         return item
 
+    def get_by_idempotency_key(self, idempotency_key: str) -> CalendarItem | None:
+        return next((item for item in self.items if item.idempotency_key == idempotency_key), None)
+
+    def list_by_plan_and_subtype(
+        self,
+        planting_plan_id: int,
+        task_subtype: str,
+        *,
+        parent_task_id: int | None = None,
+        source_execution_record_id: int | None = None,
+    ) -> list[CalendarItem]:
+        return [
+            item
+            for item in self.items
+            if item.planting_plan_id == planting_plan_id
+            and item.task_subtype == task_subtype
+            and item.parent_task_id == parent_task_id
+            and item.source_execution_record_id == source_execution_record_id
+        ]
+
     def list_active_by_plan_and_subtype(
         self,
         planting_plan_id: int,

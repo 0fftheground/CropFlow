@@ -8,3 +8,5 @@ __pycache__/
 output/
 project-context/session-log/
 logs/
+.codex-temp/
+.codegraph/

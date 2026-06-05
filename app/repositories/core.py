@@ -333,6 +333,34 @@ class CalendarItemRepository(Repository):
     def get(self, calendar_item_id: int) -> CalendarItem | None:
         return self.session.get(CalendarItem, calendar_item_id)
 
+    def get_by_idempotency_key(self, idempotency_key: str) -> CalendarItem | None:
+        stmt = select(CalendarItem).where(CalendarItem.idempotency_key == idempotency_key)
+        return self.session.scalar(stmt)
+
+    def list_by_plan_and_subtype(
+        self,
+        planting_plan_id: int,
+        task_subtype: str,
+        *,
+        parent_task_id: int | None = None,
+        source_execution_record_id: int | None = None,
+    ) -> list[CalendarItem]:
+        stmt = (
+            select(CalendarItem)
+            .where(CalendarItem.planting_plan_id == planting_plan_id)
+            .where(CalendarItem.task_subtype == task_subtype)
+        )
+        if parent_task_id is None:
+            stmt = stmt.where(CalendarItem.parent_task_id.is_(None))
+        else:
+            stmt = stmt.where(CalendarItem.parent_task_id == parent_task_id)
+        if source_execution_record_id is None:
+            stmt = stmt.where(CalendarItem.source_execution_record_id.is_(None))
+        else:
+            stmt = stmt.where(CalendarItem.source_execution_record_id == source_execution_record_id)
+        stmt = stmt.order_by(CalendarItem.id.asc())
+        return list(self.session.scalars(stmt))
+
     def list_current_by_plan(self, planting_plan_id: int) -> list[CalendarItem]:
         stmt = (
             select(CalendarItem)

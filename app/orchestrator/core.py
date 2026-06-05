@@ -11,6 +11,7 @@ from app.core.constants import (
     EVENT_PROCESSING_STATUS_FAILED,
     EVENT_PROCESSING_STATUS_PROCESSED,
     EVENT_PROCESSING_STATUS_PROCESSING,
+    EVENT_PROCESSING_STATUS_RECEIVED,
     EVENT_TYPE_ACTUAL_STAGE_RECORDED,
     EVENT_TYPE_CALENDAR_ITEM_REFRESH_FAILED,
     EVENT_TYPE_EXECUTION_COMPLETED,
@@ -163,11 +164,13 @@ class PlanCalendarRefreshHandler:
         event_record_repository: EventRecordRepository,
         task_intent_repository: TaskIntentRepository,
         review_request_repository: ReviewRequestRepository,
+        task_due_check_handler: TaskDueCheckTriggeredHandler | None = None,
     ) -> None:
         self.survey_date_recommendation_service = survey_date_recommendation_service
         self.event_record_repository = event_record_repository
         self.task_intent_repository = task_intent_repository
         self.review_request_repository = review_request_repository
+        self.task_due_check_handler = task_due_check_handler
 
     def handle(self, event_record: EventRecord) -> OrchestratorResult:
         if event_record.planting_plan_id is None:
@@ -179,6 +182,7 @@ class PlanCalendarRefreshHandler:
             return OrchestratorResult()
 
         calendar_items: list[CalendarItem] = []
+        farming_tasks: list[FarmingTask] = []
         task_intents: list[TaskIntent] = []
         review_requests: list[ReviewRequest] = []
 
@@ -260,11 +264,92 @@ class PlanCalendarRefreshHandler:
                 event_record.planting_plan_id,
                 exc_info=True,
             )
+        if event_record.event_type == EVENT_TYPE_STAGE_CHANGED:
+            try:
+                farming_tasks.extend(self._run_immediate_due_task_check(event_record))
+            except Exception:
+                logger.warning(
+                    "Failed to run immediate due-task check after stage change for planting plan %s.",
+                    event_record.planting_plan_id,
+                    exc_info=True,
+                )
         return OrchestratorResult(
             calendar_items=calendar_items,
+            farming_tasks=farming_tasks,
             task_intents=task_intents,
             review_requests=review_requests,
         )
+
+    def _run_immediate_due_task_check(self, event_record: EventRecord) -> list[FarmingTask]:
+        if event_record.planting_plan_id is None or self.task_due_check_handler is None:
+            return []
+        planting_plan = self.survey_date_recommendation_service.planting_plan_repository.get(
+            event_record.planting_plan_id,
+        )
+        if planting_plan is None or planting_plan.status != "active":
+            return []
+        check_date = event_record.occurred_at.date() if event_record.occurred_at is not None else _utcnow().date()
+        due_check_event = self._record_immediate_due_check_event(
+            planting_plan_id=event_record.planting_plan_id,
+            source_event=event_record,
+            check_date=check_date,
+        )
+        due_check_event.processing_status = EVENT_PROCESSING_STATUS_PROCESSING
+        try:
+            result = self.task_due_check_handler.handle(due_check_event)
+        except Exception as exc:
+            due_check_event.processing_status = EVENT_PROCESSING_STATUS_FAILED
+            due_check_event.processed_at = _utcnow()
+            due_check_event.error_message = str(exc)
+            raise
+        due_check_event.processing_status = EVENT_PROCESSING_STATUS_PROCESSED
+        due_check_event.processed_at = _utcnow()
+        due_check_event.error_message = None
+        return list(result.farming_tasks)
+
+    def _record_immediate_due_check_event(
+        self,
+        *,
+        planting_plan_id: int,
+        source_event: EventRecord,
+        check_date: date,
+    ) -> EventRecord:
+        idempotency_key = (
+            f"{TASK_DUE_CHECK_JOB}:{planting_plan_id}:{check_date.isoformat()}:"
+            f"source-event:{source_event.id}"
+        )
+        payload = {
+            "jobKey": TASK_DUE_CHECK_JOB,
+            "checkDate": check_date.isoformat(),
+            "sourceEventId": source_event.id,
+            "sourceEventType": source_event.event_type,
+            "triggerMode": "stage_change_immediate",
+        }
+        existing_event = None
+        if hasattr(self.event_record_repository, "get_by_idempotency_key"):
+            existing_event = self.event_record_repository.get_by_idempotency_key(idempotency_key)
+        if existing_event is not None:
+            existing_event.payload = payload
+            existing_event.processing_status = EVENT_PROCESSING_STATUS_RECEIVED
+            existing_event.processed_at = None
+            existing_event.error_message = None
+            return existing_event
+
+        due_check_event = EventRecord(
+            planting_plan_id=planting_plan_id,
+            event_type=EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED,
+            event_category="job",
+            event_source="orchestrator",
+            source_system="cropflow",
+            payload=payload,
+            occurred_at=_utcnow(),
+            processing_status=EVENT_PROCESSING_STATUS_RECEIVED,
+            idempotency_key=idempotency_key,
+            created_by_type="system",
+            created_by_id="PlanCalendarRefreshHandler",
+        )
+        self.event_record_repository.add(due_check_event)
+        return due_check_event
 
     def _upsert_soil_treatment_review(
         self,
@@ -1734,11 +1819,18 @@ def build_plan_orchestrator(
         stage_management_service=stage_management_service,
         event_record_repository=event_record_repository,
     )
+    task_due_check_handler = TaskDueCheckTriggeredHandler(
+        planting_plan_repository=planting_plan_repository,
+        calendar_item_repository=calendar_item_repository,
+        farming_task_repository=farming_task_repository,
+        event_record_repository=event_record_repository,
+    )
     plan_refresh_handler = PlanCalendarRefreshHandler(
         survey_date_recommendation_service=survey_date_recommendation_service,
         event_record_repository=event_record_repository,
         task_intent_repository=task_intent_repository,
         review_request_repository=review_request_repository,
+        task_due_check_handler=task_due_check_handler,
     )
     lifecycle_handler = CompositeHandler(stage_refresh_handler, plan_refresh_handler)
     return PlanOrchestrator(
@@ -1748,12 +1840,7 @@ def build_plan_orchestrator(
             EVENT_TYPE_WEATHER_UPDATED: lifecycle_handler,
             EVENT_TYPE_ACTUAL_STAGE_RECORDED: lifecycle_handler,
             EVENT_TYPE_STAGE_CHANGED: plan_refresh_handler,
-            EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED: TaskDueCheckTriggeredHandler(
-                planting_plan_repository=planting_plan_repository,
-                calendar_item_repository=calendar_item_repository,
-                farming_task_repository=farming_task_repository,
-                event_record_repository=event_record_repository,
-            ),
+            EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED: task_due_check_handler,
             EVENT_TYPE_SURVEY_RESULT_RECORDED: SurveyResultRecordedHandler(
                 planting_plan_repository=planting_plan_repository,
                 farming_task_repository=farming_task_repository,
