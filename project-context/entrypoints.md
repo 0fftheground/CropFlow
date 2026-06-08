@@ -199,7 +199,8 @@ docs/workflow/flows/
 docs/planning/development-roadmap.md
 docs/planning/team-work-division.md
 docs/planning/team-work-division/
-docs/planning/P1/
+docs/planning/directions/
+docs/planning/archive/P1/
 ```
 
 简要说明：
@@ -212,16 +213,25 @@ docs/planning/team-work-division.md
   适合看全局分工原则、统一提交模板和通用职责边界。
 
 docs/planning/team-work-division/
-  适合按具体角色或方向定向阅读，不必每次看完整总文档。
+  适合按具体角色定向阅读，不必每次看完整总文档。
   建议按当前任务直接进入对应子文档：
   - 范围冻结、规则拍板、跨方向收口：product-architecture-owner.md
   - 核心对象、API contract、编排骨架：core-backend.md
-  - 业务方向细节：calendar-stage.md / plant-protection.md / irrigation.md / fertilization.md / remote-sensing.md
   - 页面范围和联调：frontend.md / frontend-plant-protection-handoff.md
 
-docs/planning/P1/
-  适合回看杂草样板闭环的历史收口材料和业务语义。
-  建议先读 todo-list.md 了解已确认项和剩余事项；只有在需要逐项核对业务链路时，再读 植保清单.md。
+docs/planning/directions/
+  适合按业务方向定向阅读 FDE 沉淀的接入材料：
+  - calendar-stage/overview.md
+  - plant-protection/overview.md
+  - irrigation/overview.md
+  - fertilization/overview.md
+  - remote-sensing/overview.md
+
+docs/planning/directions/plant-protection/task-checklist.md
+  适合作为 FDE 主链路任务清单样板，或回看杂草样板闭环的业务语义。
+
+docs/planning/archive/P1/
+  适合需要历史证据时回看 P1 收口计划和 todo，不作为默认阅读入口。
 ```
 
 ### 算法接口 / 契约
@@ -252,8 +262,8 @@ docs/api/
 docs/api/
   适合查看外部算法接口原始契约和项目内整理后的 Markdown 契约。
   如果当前任务与植保杂草主线有关，优先看 docs/api/weed_diagnosis_api.md。
-  如果当前任务与生育期编排或 Stage Orchestrator 有关，优先看 docs/api/growth_stage_prediction_api.md。
-  如果当前任务与 P3 病虫害调查扩展有关，优先看 docs/api/pestDisease_survey_window_api.md 和 docs/api/weather_api.pdf。
+  如果当前任务与生育期编排或 Stage Orchestrator 有关，优先看 docs/api/growth_stage_gdd_api.md。
+  如果当前任务与 P3 病虫害调查扩展有关，优先看 docs/api/pestDisease_survey_window_api.md；需要原始天气资料时，再看 docs/api/raw/weather_api.pdf。
 ```
 
 ## 更新规则

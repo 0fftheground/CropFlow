@@ -176,6 +176,62 @@
 |---|---|---|---|---|---|---|---|
 ```
 
+## 按植保接入经验补齐的开发材料清单
+
+植保方向在实际接入开发时，真正推动后端、前端和编排并行工作的材料，不只是接口摘要，还包括主链路任务清单、冻结口径、字段草案和端到端场景。施肥方向如果希望尽快进入开发，建议同事至少补齐下面这套材料。
+
+### A. 主链路任务清单
+
+建议按“像 `docs/planning/directions/plant-protection/task-checklist.md` 一样可以直接驱动开发”的颗粒度整理：
+
+```text
+1. 基肥
+2. 分蘖肥
+3. 穗肥
+4. 发苗肥 / 返青肥
+5. 促芽肥（如再生稻保留）
+6. 穗肥前长势监测触发变量处方图
+7. 施肥后效果抽查 / 服务评价
+8. 异常反馈后的人工复核或后续施肥调整
+```
+
+每个任务项至少写清：
+
+```text
+1. 任务触发条件
+2. 接口依赖
+3. 接口调用时间
+4. 接口主要返回结果和分支
+5. 系统动作：新增/更新 CalendarItem、TaskIntent、FarmingTask、OperationPlan、ReviewRequest
+6. 作业方案：窗口、肥料类型、用量、处方图、验收标准
+7. 作业流程：人工/设备/第三方执行、结果回传、后续动作
+8. 任务后续操作：是否进入抽查、复核、再次施肥、结束
+```
+
+### B. 建议优先收集的 API 契约文档
+
+以下是建议落点，重点是把契约沉淀成可引用 markdown，而不是继续停留在口头说明或截图：
+
+| 建议文件 | 需要包含的内容 |
+|---|---|
+| `docs/api/fertilization_recommendation_api.md` | 常规施肥推荐接口；覆盖基肥、分蘖肥、穗肥等主链路的输入、输出、异常、字段映射 |
+| `docs/api/fertilization_prescription_map_api.md` | 变量处方图或分区处方接口；说明 `prescriptionMap` 的结构、区域粒度、单位、分区标识 |
+| `docs/api/fertilization_effect_evaluation_api.md` | 施肥后效果抽查/评价接口；说明抽查输入、评价结果、异常分支和是否触发复核 |
+| `docs/api/fertilization_inventory_mapping.md` | 不是算法接口也建议补；说明肥料品类、库存扣减、实际消耗、批次或单位换算关系 |
+| `docs/api/fertilization_payload_mapping.md` | 入参组装和返回结果对象构建说明；把算法字段如何落到 `TaskIntent / OperationPlan / ExecutionRecord` 写清 |
+
+### C. 进入开发前建议冻结的口径
+
+建议在施肥方向文档里单独列一段“当前冻结口径”，至少拍板这些问题：
+
+```text
+1. 哪些施肥链路直接生成正式任务，哪些先进入 ReviewRequest
+2. prescriptionMap 是第一版必选、可选，还是仅穗肥前长势联动时需要
+3. InventoryItem / InventoryTransaction 第一版要求做到什么粒度
+4. 效果抽查不合格时，是生成后续施肥任务、只生成复核，还是只记录反馈
+5. 人工调整施肥结论时，是否允许直接落 OperationPlan，还是必须回到编排器
+```
+
 ## 当前阶段完成标准
 
 ```text

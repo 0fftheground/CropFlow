@@ -21,6 +21,7 @@ from app.core.constants import (
     EVENT_PROCESSING_STATUS_RECEIVED,
     EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED,
     EVENT_TYPE_WEATHER_UPDATED,
+    FARMING_TASK_STATUS_PENDING,
     SURVEY_DATE_RECOMMENDATION_JOB,
     TASK_CATEGORY_PLANT_PROTECTION,
     TASK_DUE_CHECK_JOB,
@@ -47,6 +48,7 @@ from app.repositories import (
     CodeDictRepository,
     EventRecordRepository,
     FarmRepository,
+    FarmingTaskRepository,
     PlantingPlanRepository,
     RiceControlWindowLevel1Repository,
     RiceVarietyRepository,
@@ -1745,6 +1747,7 @@ class SurveyDateRecommendationService:
         diagnosis_client: WeedDiagnosisClient,
         pest_disease_client: PestDiseaseSurveyWindowClient | None = None,
         stage_prediction_snapshot_repository: StagePredictionSnapshotRepository | None = None,
+        farming_task_repository: FarmingTaskRepository | None = None,
     ) -> None:
         self.planting_plan_repository = planting_plan_repository
         self.farm_repository = farm_repository
@@ -1757,6 +1760,7 @@ class SurveyDateRecommendationService:
         self.diagnosis_client = diagnosis_client
         self.pest_disease_client = pest_disease_client or MockPestDiseaseSurveyWindowClient()
         self.stage_prediction_snapshot_repository = stage_prediction_snapshot_repository
+        self.farming_task_repository = farming_task_repository
         self.context_resolver = PlantProtectionPlanContextResolver(
             code_dict_repository=code_dict_repository,
             rice_variety_repository=rice_variety_repository,
@@ -1851,6 +1855,10 @@ class SurveyDateRecommendationService:
                 planting_plan_id=planting_plan.id,
                 plan=plan,
             )
+            if self._regular_survey_matches_non_pending_generated_task(matched_item):
+                calendar_items.append(matched_item)
+                active_idempotency_keys.add(matched_item.idempotency_key)
+                continue
             calendar_item = self._upsert_calendar_item(
                 planting_plan=planting_plan,
                 task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
@@ -1876,6 +1884,7 @@ class SurveyDateRecommendationService:
                 matched_item=matched_item,
                 allow_multiple_active=True,
             )
+            self._sync_pending_generated_regular_survey_task(calendar_item)
             calendar_items.append(calendar_item)
             active_idempotency_keys.add(calendar_item.idempotency_key)
 
@@ -2358,6 +2367,11 @@ class SurveyDateRecommendationService:
             planting_plan_id,
             TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
         )
+        candidates = [
+            item
+            for item in candidates
+            if item.status in {CALENDAR_STATUS_ACTIVE, CALENDAR_STATUS_GENERATED}
+        ]
         matched_items = [
             item
             for item in candidates
@@ -2369,9 +2383,46 @@ class SurveyDateRecommendationService:
             == expected_identity
         ]
         if not matched_items:
+            matched_items = [
+                item
+                for item in candidates
+                if item.suggested_start_date == plan.survey_window[0]
+                and item.suggested_end_date == plan.survey_window[1]
+            ]
+        expected_spray_stage = plan.spray_stage.strip() if isinstance(plan.spray_stage, str) else None
+        if not matched_items and expected_spray_stage:
+            matched_items = [
+                item
+                for item in candidates
+                if _get_calendar_item_regular_disease_pest_spray_stage(item) == expected_spray_stage
+            ]
+        if not matched_items:
             return None
         matched_items.sort(key=_regular_disease_pest_calendar_item_reuse_priority)
         return matched_items[0]
+
+    def _regular_survey_matches_non_pending_generated_task(self, item: CalendarItem | None) -> bool:
+        if item is None or item.status != CALENDAR_STATUS_GENERATED or item.generated_task_id is None:
+            return False
+        if self.farming_task_repository is None:
+            return False
+        generated_task = self.farming_task_repository.get(item.generated_task_id)
+        return generated_task is not None and generated_task.status != FARMING_TASK_STATUS_PENDING
+
+    def _sync_pending_generated_regular_survey_task(self, item: CalendarItem) -> None:
+        if item.status != CALENDAR_STATUS_GENERATED or item.generated_task_id is None:
+            return
+        if self.farming_task_repository is None:
+            return
+        generated_task = self.farming_task_repository.get(item.generated_task_id)
+        if generated_task is None or generated_task.status != FARMING_TASK_STATUS_PENDING:
+            return
+        generated_task.title = item.title
+        generated_task.description = item.description
+        generated_task.planned_start_at = datetime.combine(item.suggested_start_date, time.min)
+        generated_task.planned_end_at = datetime.combine(item.suggested_end_date, time.max)
+        generated_task.target_stage_code = item.stage_code
+        generated_task.updated_at = _utcnow()
 
     def _invalidate_stale_sudden_disease_pest_surveys(
         self,
@@ -2574,7 +2625,8 @@ class SurveyDateRecommendationService:
         idempotency_key = f"calendar-item:{planting_plan.id}:{idempotency_scope}"
         matched_by_key = self.calendar_item_repository.get_by_idempotency_key(idempotency_key)
         if matched_by_key is not None:
-            matched_item = matched_by_key
+            if matched_item is None or matched_item.status != CALENDAR_STATUS_GENERATED:
+                matched_item = matched_by_key
         existing_items = self.calendar_item_repository.list_active_by_plan_and_subtype(
             planting_plan.id,
             task_subtype,
@@ -2585,7 +2637,8 @@ class SurveyDateRecommendationService:
             if matched_item is not None and item.id == matched_item.id:
                 continue
             if allow_multiple_active and item.idempotency_key == idempotency_key:
-                matched_item = item
+                if matched_item is None or matched_item.status != CALENDAR_STATUS_GENERATED:
+                    matched_item = item
             elif not allow_multiple_active and (
                 item.suggested_start_date == suggested_start_date
                 and item.suggested_end_date == suggested_end_date
@@ -2621,6 +2674,10 @@ class SurveyDateRecommendationService:
             matched_item.suggested_start_date = suggested_start_date
             matched_item.suggested_end_date = suggested_end_date
             matched_item.generation_condition = generation_condition
+            if matched_by_key is not None and matched_by_key.id != matched_item.id:
+                _retire_calendar_item_idempotency_key(matched_by_key)
+                if hasattr(self.calendar_item_repository, "flush"):
+                    self.calendar_item_repository.flush()
             matched_item.idempotency_key = idempotency_key
             matched_item.parent_task_id = parent_task_id
             matched_item.source_execution_id = source_execution_id
@@ -3055,6 +3112,12 @@ def _regular_disease_pest_calendar_item_reuse_priority(item: CalendarItem) -> tu
     else:
         priority = 3
     return priority, item.id or 0
+
+
+def _retire_calendar_item_idempotency_key(item: CalendarItem) -> None:
+    current_key = item.idempotency_key or f"calendar-item:{item.id or 'unknown'}"
+    digest = hashlib.sha1(current_key.encode("utf-8")).hexdigest()[:12]
+    item.idempotency_key = f"retired-calendar-item:{item.id or 'unknown'}:{digest}"
 
 
 def _build_sudden_disease_pest_survey_description(result: PestDiseaseDailyUpdateResult) -> str:

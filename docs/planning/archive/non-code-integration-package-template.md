@@ -1,5 +1,8 @@
 # 非代码接入包模板
 
+> 归档说明：本文档是 FDE 模式引入前的历史模板，不再作为当前默认执行入口。
+> 当前接入新方向时，优先使用 `docs/planning/guides/fde-standard-workflow.md` 和 `docs/planning/guides/agri-task-integration-doc-requirements.md`。
+
 > 本模板用于当前阶段给各业务方向统一提交“未来接入包”。  
 > 适用方向：农事日历 / 生育期、植保、灌溉、施肥、遥感监测、前端。  
 > 当前阶段目标是补齐契约、字段和流程说明，不是直接提交正式代码。
@@ -246,6 +249,6 @@
 
 ```text
 1. 本模板是统一提交结构。
-2. 各方向具体交什么，以 docs/planning/team-work-division/ 下对应方向文档为准。
+2. 各方向具体交什么，以 docs/planning/directions/ 下对应方向文档为准。
 3. 当前主线排期里如果提到“提交非代码接入包”，默认就是按本模板组织。
 ```

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -11,6 +11,7 @@ import pytest
 
 from app.core.constants import (
     CALENDAR_STATUS_GENERATED,
+    CALENDAR_STATUS_INVALIDATED,
     EVENT_TYPE_CALENDAR_ITEM_UPDATED,
     EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED,
     TASK_SUBTYPE_CONTROL_EFFECT_SURVEY,
@@ -178,6 +179,9 @@ class FakeFarmingTaskRepository:
     def add(self, task: FarmingTask) -> FarmingTask:
         self.items.append(task)
         return task
+
+    def get(self, farming_task_id: int) -> FarmingTask | None:
+        return next((task for task in self.items if task.id == farming_task_id), None)
 
     def flush(self) -> None:
         for task in self.items:
@@ -719,6 +723,364 @@ def test_recommend_regular_disease_pest_surveys_reuses_legacy_generated_item_and
     assert duplicate_active_item.status == "invalidated"
     assert duplicate_active_item.invalidated_reason == "regular_disease_pest_survey_window_changed"
     assert len(calendar_repo.items) == 3
+
+
+def test_recommend_regular_disease_pest_surveys_reuses_generated_item_when_spray_stage_changes_for_same_window() -> None:
+    generated_item = CalendarItem(
+        id=10,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        title="旧常规病虫调查",
+        description="旧描述",
+        suggested_start_date=date(2026, 5, 2),
+        suggested_end_date=date(2026, 5, 4),
+        status=CALENDAR_STATUS_GENERATED,
+        generation_condition={"sprayStage": "常规病虫预防"},
+        idempotency_key=(
+            "calendar-item:1:plant_protection.regular_disease_pest_survey:"
+            "regular:2026-05-02:2026-05-04:legacy"
+        ),
+        generated_task_id=67,
+    )
+    calendar_repo = FakeCalendarItemRepository(items=[generated_item], next_id=11)
+    event_repo = FakeEventRecordRepository()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(make_plan_with_pest_disease_metadata()),
+        farm_repository=FakeFarmRepository(make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=FakeWeatherProvider(),
+        diagnosis_client=FakeDiagnosisClient(),
+        pest_disease_client=FakePestDiseaseSurveyWindowClient(),
+    )
+
+    items = service.recommend_regular_disease_pest_surveys(1)
+
+    assert len(items) == 2
+    assert items[0] is generated_item
+    assert generated_item.status == CALENDAR_STATUS_GENERATED
+    assert generated_item.generated_task_id == 67
+    assert generated_item.generation_condition["sprayStage"] == "封行药"
+    assert generated_item.generation_condition["rawPlan"]["spray_stage"] == "封行药"
+    assert len(calendar_repo.items) == 2
+
+
+def test_recommend_regular_disease_pest_surveys_does_not_reactivate_invalidated_duplicate() -> None:
+    generated_item = CalendarItem(
+        id=10,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        title="已生成封行药调查",
+        description="旧描述",
+        suggested_start_date=date(2026, 5, 2),
+        suggested_end_date=date(2026, 5, 4),
+        status=CALENDAR_STATUS_GENERATED,
+        generation_condition={"sprayStage": "封行药"},
+        idempotency_key=(
+            "calendar-item:1:plant_protection.regular_disease_pest_survey:"
+            "regular:2026-05-02:2026-05-04:legacy"
+        ),
+        generated_task_id=67,
+    )
+    invalidated_duplicate = CalendarItem(
+        id=11,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        title="已作废重复封行药调查",
+        description="旧重复描述",
+        suggested_start_date=date(2026, 5, 2),
+        suggested_end_date=date(2026, 5, 4),
+        status=CALENDAR_STATUS_INVALIDATED,
+        invalidated_reason="regular_disease_pest_survey_reused_generated_task",
+        generation_condition={"sprayStage": "封行药"},
+        idempotency_key="placeholder",
+    )
+    calendar_repo = FakeCalendarItemRepository(items=[generated_item, invalidated_duplicate], next_id=12)
+    event_repo = FakeEventRecordRepository()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(make_plan_with_pest_disease_metadata()),
+        farm_repository=FakeFarmRepository(make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=FakeWeatherProvider(),
+        diagnosis_client=FakeDiagnosisClient(),
+        pest_disease_client=FakePestDiseaseSurveyWindowClient(),
+    )
+    current_plan = PestDiseaseRegularSurveyPlan(
+        survey_window=(date(2026, 5, 2), date(2026, 5, 4)),
+        targets=["二化螟"],
+        exclude_reasons={},
+        status="need_survey",
+        message="当前处于可防治周期，建议按调查日期开展调查",
+        spray_stage="封行药",
+        survey_method="一级理论防治日期",
+        adjusted=False,
+        raw_plan={},
+    )
+    invalidated_duplicate.idempotency_key = (
+        f"calendar-item:1:{service._build_regular_disease_pest_survey_idempotency_scope(current_plan)}"
+    )
+
+    items = service.recommend_regular_disease_pest_surveys(1)
+
+    assert len(items) == 2
+    assert items[0] is generated_item
+    assert generated_item.status == CALENDAR_STATUS_GENERATED
+    assert generated_item.idempotency_key.startswith(
+        "calendar-item:1:plant_protection.regular_disease_pest_survey:regular:",
+    )
+    assert invalidated_duplicate.idempotency_key.startswith("retired-calendar-item:11:")
+    assert invalidated_duplicate.status == CALENDAR_STATUS_INVALIDATED
+    assert invalidated_duplicate.invalidated_reason == "regular_disease_pest_survey_reused_generated_task"
+    assert len(calendar_repo.items) == 3
+
+
+def test_recommend_regular_disease_pest_surveys_invalidates_active_duplicate_with_current_key() -> None:
+    generated_item = CalendarItem(
+        id=10,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        title="已生成封行药调查",
+        description="旧描述",
+        suggested_start_date=date(2026, 5, 2),
+        suggested_end_date=date(2026, 5, 4),
+        status=CALENDAR_STATUS_GENERATED,
+        generation_condition={"sprayStage": "封行药"},
+        idempotency_key=(
+            "calendar-item:1:plant_protection.regular_disease_pest_survey:"
+            "regular:2026-05-02:2026-05-04:legacy"
+        ),
+        generated_task_id=67,
+    )
+    active_duplicate = CalendarItem(
+        id=11,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        title="重复封行药调查",
+        description="旧重复描述",
+        suggested_start_date=date(2026, 5, 2),
+        suggested_end_date=date(2026, 5, 4),
+        status="active",
+        generation_condition={"sprayStage": "封行药"},
+        idempotency_key="placeholder",
+    )
+    calendar_repo = FakeCalendarItemRepository(items=[generated_item, active_duplicate], next_id=12)
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(make_plan_with_pest_disease_metadata()),
+        farm_repository=FakeFarmRepository(make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=FakeEventRecordRepository(),
+        weather_provider=FakeWeatherProvider(),
+        diagnosis_client=FakeDiagnosisClient(),
+        pest_disease_client=FakePestDiseaseSurveyWindowClient(),
+    )
+    current_plan = PestDiseaseRegularSurveyPlan(
+        survey_window=(date(2026, 5, 2), date(2026, 5, 4)),
+        targets=["二化螟"],
+        exclude_reasons={},
+        status="need_survey",
+        message="当前处于可防治周期，建议按调查日期开展调查",
+        spray_stage="封行药",
+        survey_method="一级理论防治日期",
+        adjusted=False,
+        raw_plan={},
+    )
+    active_duplicate.idempotency_key = (
+        f"calendar-item:1:{service._build_regular_disease_pest_survey_idempotency_scope(current_plan)}"
+    )
+
+    items = service.recommend_regular_disease_pest_surveys(1)
+
+    assert len(items) == 2
+    assert items[0] is generated_item
+    assert generated_item.status == CALENDAR_STATUS_GENERATED
+    assert active_duplicate.status == CALENDAR_STATUS_INVALIDATED
+    assert active_duplicate.invalidated_reason == "regular_disease_pest_survey_window_changed"
+    assert active_duplicate.idempotency_key.startswith("retired-calendar-item:11:")
+    assert len(calendar_repo.items) == 3
+
+
+def test_recommend_regular_disease_pest_surveys_reuses_generated_item_when_window_shifts_for_same_spray_stage() -> None:
+    generated_item = CalendarItem(
+        id=10,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        title="旧破口药调查",
+        description="旧描述",
+        suggested_start_date=date(2026, 6, 2),
+        suggested_end_date=date(2026, 6, 4),
+        status=CALENDAR_STATUS_GENERATED,
+        generation_condition={"sprayStage": "破口药"},
+        idempotency_key=(
+            "calendar-item:1:plant_protection.regular_disease_pest_survey:"
+            "regular:2026-06-02:2026-06-04:legacy"
+        ),
+        generated_task_id=67,
+    )
+    calendar_repo = FakeCalendarItemRepository(items=[generated_item], next_id=11)
+    event_repo = FakeEventRecordRepository()
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(make_plan_with_pest_disease_metadata()),
+        farm_repository=FakeFarmRepository(make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=event_repo,
+        weather_provider=FakeWeatherProvider(),
+        diagnosis_client=FakeDiagnosisClient(),
+        pest_disease_client=FakePestDiseaseSurveyWindowClient(),
+    )
+
+    items = service.recommend_regular_disease_pest_surveys(1)
+
+    assert len(items) == 2
+    assert items[1] is generated_item
+    assert generated_item.status == CALENDAR_STATUS_GENERATED
+    assert generated_item.generated_task_id == 67
+    assert generated_item.suggested_start_date == date(2026, 6, 1)
+    assert generated_item.suggested_end_date == date(2026, 6, 3)
+    assert generated_item.generation_condition["sprayStage"] == "破口药"
+    assert len(calendar_repo.items) == 2
+
+
+def test_recommend_regular_disease_pest_surveys_updates_pending_task_when_generated_window_changes() -> None:
+    generated_item = CalendarItem(
+        id=10,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        title="旧破口药调查",
+        description="旧描述",
+        suggested_start_date=date(2026, 6, 2),
+        suggested_end_date=date(2026, 6, 4),
+        status=CALENDAR_STATUS_GENERATED,
+        generation_condition={"sprayStage": "破口药"},
+        idempotency_key=(
+            "calendar-item:1:plant_protection.regular_disease_pest_survey:"
+            "regular:2026-06-02:2026-06-04:legacy"
+        ),
+        generated_task_id=67,
+    )
+    generated_task = FarmingTask(
+        id=67,
+        planting_plan_id=1,
+        calendar_item_id=10,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        title="旧破口药调查",
+        description="旧描述",
+        planned_start_at=datetime(2026, 6, 2),
+        planned_end_at=datetime(2026, 6, 4, 23, 59, 59),
+        status="pending",
+        priority="normal",
+        execution_mode="manual",
+        idempotency_key="farming-task:calendar-item:10",
+        created_by_type="system",
+        created_by_id="TaskDueCheckJob",
+    )
+    calendar_repo = FakeCalendarItemRepository(items=[generated_item], next_id=11)
+    farming_task_repo = FakeFarmingTaskRepository(items=[generated_task])
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(make_plan_with_pest_disease_metadata()),
+        farm_repository=FakeFarmRepository(make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=FakeEventRecordRepository(),
+        weather_provider=FakeWeatherProvider(),
+        diagnosis_client=FakeDiagnosisClient(),
+        pest_disease_client=FakePestDiseaseSurveyWindowClient(),
+        farming_task_repository=farming_task_repo,
+    )
+
+    items = service.recommend_regular_disease_pest_surveys(1)
+
+    assert items[1] is generated_item
+    assert generated_item.suggested_start_date == date(2026, 6, 1)
+    assert generated_item.suggested_end_date == date(2026, 6, 3)
+    assert generated_task.planned_start_at.date() == date(2026, 6, 1)
+    assert generated_task.planned_end_at.date() == date(2026, 6, 3)
+    assert generated_task.title == "病虫害常规调查"
+    assert "pestDisease init-regular-survey" in generated_task.description
+    assert len(calendar_repo.items) == 2
+
+
+def test_recommend_regular_disease_pest_surveys_keeps_completed_task_when_generated_window_changes() -> None:
+    generated_item = CalendarItem(
+        id=10,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        title="旧破口药调查",
+        description="旧描述",
+        suggested_start_date=date(2026, 6, 2),
+        suggested_end_date=date(2026, 6, 4),
+        status=CALENDAR_STATUS_GENERATED,
+        generation_condition={"sprayStage": "破口药"},
+        idempotency_key=(
+            "calendar-item:1:plant_protection.regular_disease_pest_survey:"
+            "regular:2026-06-02:2026-06-04:legacy"
+        ),
+        generated_task_id=67,
+    )
+    generated_task = FarmingTask(
+        id=67,
+        planting_plan_id=1,
+        calendar_item_id=10,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
+        title="已完成破口药调查",
+        description="已完成描述",
+        planned_start_at=datetime(2026, 6, 2),
+        planned_end_at=datetime(2026, 6, 4, 23, 59, 59),
+        status="completed",
+        priority="normal",
+        execution_mode="manual",
+        idempotency_key="farming-task:calendar-item:10",
+        created_by_type="system",
+        created_by_id="TaskDueCheckJob",
+    )
+    calendar_repo = FakeCalendarItemRepository(items=[generated_item], next_id=11)
+    farming_task_repo = FakeFarmingTaskRepository(items=[generated_task])
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(make_plan_with_pest_disease_metadata()),
+        farm_repository=FakeFarmRepository(make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=FakeRiceControlWindowLevel1Repository(make_control_window()),
+        calendar_item_repository=calendar_repo,
+        event_record_repository=FakeEventRecordRepository(),
+        weather_provider=FakeWeatherProvider(),
+        diagnosis_client=FakeDiagnosisClient(),
+        pest_disease_client=FakePestDiseaseSurveyWindowClient(),
+        farming_task_repository=farming_task_repo,
+    )
+
+    items = service.recommend_regular_disease_pest_surveys(1)
+
+    assert items[1] is generated_item
+    assert generated_item.suggested_start_date == date(2026, 6, 2)
+    assert generated_item.suggested_end_date == date(2026, 6, 4)
+    assert generated_task.planned_start_at.date() == date(2026, 6, 2)
+    assert generated_task.planned_end_at.date() == date(2026, 6, 4)
+    assert len(calendar_repo.items) == 2
 
 
 def test_recommend_regular_disease_pest_surveys_skips_plan_without_metadata() -> None:

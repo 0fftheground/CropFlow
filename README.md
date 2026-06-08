@@ -138,7 +138,7 @@ docs/model/glossary.md
 docs/api/                           外部算法接口文档
 docs/workflow/flows/                         关键流程拆解
 docs/decisions/                     设计决策记录
-docs/workflow/total-workflow.pdf             农事项总流程图来源
+docs/workflow/raw/total-workflow.pdf         农事项总流程图原始来源
 ```
 
 ## 团队协作规则

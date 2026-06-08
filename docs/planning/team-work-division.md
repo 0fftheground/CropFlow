@@ -3,7 +3,9 @@
 > 本文档用于说明 CropFlow MVP 的通用分工原则、统一提交模板和各方向子文档入口。  
 > 系统架构和核心流转见 `docs/overview/team-technical-briefing.md`，阶段推进见 `docs/planning/development-roadmap.md`。  
 > 使用 AI agent 分工开发时，任务模板和验收规则见 `docs/planning/guides/agent-development-guidelines.md`。
-> 当前阶段各方向统一提交“非代码接入包”时，建议使用 `docs/planning/guides/non-code-integration-package-template.md`。
+> FDE 标准工作流程见 `docs/planning/guides/fde-standard-workflow.md`。
+> FDE 访谈并沉淀新方向农事项接入材料时，工作指南见 `docs/planning/guides/agri-task-integration-doc-requirements.md`。
+> 文档整理、归档和合并建议见 `docs/planning/guides/docs-hygiene-plan.md`。
 
 ---
 
@@ -126,19 +128,17 @@
 3. 如果某个关键词在本方向有特殊含义，应在方向文档里单独补充，不要自行改写通用定义。
 ```
 
-## 2.1 业务方向负责什么
+## 2.1 业务方向与 FDE 如何协作
 
-植保、灌溉、施肥、遥感监测、农事日历 / 生育期方向都需要围绕统一对象补齐本方向的业务细节。
+植保、灌溉、施肥、遥感监测、农事日历 / 生育期方向仍然负责本方向的业务事实、农艺规则、算法语义和确认结论。FDE 负责访谈、追问并把这些信息沉淀到 `docs/planning/directions/<direction>/`。
 
 | 责任项 | 说明 |
 |---|---|
-| 农事项定义 | 明确本方向有哪些 `taskCategory / taskSubtype`、触发条件和前后依赖 |
-| 算法接口 | 提供接口文档、请求 / 响应样例、异常返回、字段含义 |
-| 任务生成 | 说明什么情况下生成 `CalendarItem / TaskIntent / FarmingTask` |
-| 作业方案 | 定义本方向 `OperationPlan.parameters / operationArea / prescriptionMap / acceptanceCriteria` |
-| 执行过程 | 定义执行方式、执行主体、执行结果、附件、轨迹或设备回调字段 |
-| 评价反馈 | 定义本方向如何形成 `Evaluation.metrics`、`Feedback.details`、是否需要人工复核 |
-| 测试样例 | 至少提供 1 个正常样例、1 个异常或需复核样例、1 个不生成任务或无需动作样例 |
+| 业务方向 | 提供并确认农事项、规则、算法接口、执行反馈、异常分支和业务样例 |
+| FDE | 组织访谈、追问缺口、整理方向文档、维护场景表和待决问题 |
+| 产品 / 架构负责人 | 确认范围、对象边界、取舍和冻结口径 |
+| 核心后端 | 确认 workflow、job、模型字段、接口拆解和幂等 |
+| 前端 | 确认页面字段、状态、操作入口和 mock 场景 |
 
 ### 2.1.1 `taskCategory / taskSubtype` 的组织规则
 
@@ -444,6 +444,34 @@ service_effect_evaluation
 | 方向补充说明、字段映射、JSON 样例 | 对应方向章节下补充，必要时新增 `docs/api/<direction>-*.md` |
 | 设计取舍 | `docs/decisions/` |
 
+### 2.1.9 按阶段补齐的方向材料包
+
+植保方向在实际接入开发中已经证明，只有“方向说明 + 接口摘要提纲”还不够。其他方向不需要一开始就提供最终前端 API contract，但需要按阶段补齐能推动后端、前端和编排并行开发的材料包。
+
+```text
+1. 主链路任务清单
+   要能回答：任务何时触发、依赖什么接口、系统创建什么对象、是否生成方案、执行流程是什么、是否有后续任务。
+2. 算法 / 外部接口资料包
+   P0 阶段先提供 markdown 摘要、已知输入输出和未知缺口；P1 阶段再补请求入参来源、返回字段语义、异常分支、字段映射目标。
+3. 运行期分支与冻结口径
+   要明确 no_action、need_more_info、人工复核、补充调查、回流重算等分支如何承接。
+4. 字段草案包
+   至少覆盖 OperationPlan、ExecutionRecord、Evaluation、Feedback、ReviewRequest；如有库存或处方图，也要单列。
+5. 端到端场景包
+   至少 1 个正常主链路、1 个异常/待确认链路、1 个不生成任务或 no_action 链路。
+6. 待决问题清单
+   把真正阻断开发的点单独列出来，不要散在正文里。
+```
+
+建议各方向按下面顺序补齐：
+
+```text
+1. P0 当前可提交：docs/planning/directions/<direction>/overview.md 内的任务定义、触发规则草案、字段草案、场景表、待决问题。
+2. P1 后端拆解前：docs/api/<direction>-*.md 契约文档、入参组装和返回映射、受影响的 workflow 和 job。
+3. P2 前端联调前：frontend-<direction>-api-contract.md、frontend-<direction>-handoff.md 和前端 mock 场景。
+4. 如存在关键设计取舍，再补 docs/decisions/*。
+```
+
 ## 2.2 核心后端负责什么
 
 核心后端不替各业务方向定义农艺规则，但负责把各方向收敛到统一模型和接口中。
@@ -488,25 +516,24 @@ service_effect_evaluation
 
 ---
 
-# 3. 角色与方向分文档
+# 3. 角色协作文档与方向材料
 
-为避免一个文件同时承载所有方向的职责和交付物，具体分工已拆到以下子文档：
+为避免一个文件同时承载角色职责和业务方向接入材料，当前按下面方式拆分：
 
 | 类型 | 文档 |
 |---|---|
 | 产品 / 架构负责人 | `docs/planning/team-work-division/product-architecture-owner.md` |
 | 核心后端方向 | `docs/planning/team-work-division/core-backend.md` |
-| 农事日历 / 生育期方向 | `docs/planning/team-work-division/calendar-stage.md` |
-| 植保方向 | `docs/planning/team-work-division/plant-protection.md` |
-| 灌溉方向 | `docs/planning/team-work-division/irrigation.md` |
-| 施肥方向 | `docs/planning/team-work-division/fertilization.md` |
-| 遥感监测方向 | `docs/planning/team-work-division/remote-sensing.md` |
 | 前端方向 | `docs/planning/team-work-division/frontend.md` |
+| 植保前端 handoff | `docs/planning/team-work-division/frontend-plant-protection-handoff.md` |
+| 业务方向接入材料 | `docs/planning/directions/<direction>/overview.md` |
+| 植保主链路任务清单样板 | `docs/planning/directions/plant-protection/task-checklist.md` |
 
 建议使用方式：
 
 ```text
 1. 先阅读本文件的分工原则、通用职责边界和提交模板。
-2. 再进入对应角色 / 方向子文档查看职责、近期交付物和代码交付物。
-3. 当新增某一方向的专属规则时，优先更新该方向子文档；如影响通用模板，再回写本文件。
+2. 角色职责进入 `team-work-division/`。
+3. 业务方向范围、任务链路、字段草案和场景表进入 `directions/`。
+4. 当前端进入联调阶段，再维护对应 frontend handoff 和 API contract。
 ```

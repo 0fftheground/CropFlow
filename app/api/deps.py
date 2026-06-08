@@ -103,6 +103,7 @@ def build_survey_date_recommendation_service(
         diagnosis_client=diagnosis_client,
         pest_disease_client=pest_disease_client,
         stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(db),
+        farming_task_repository=FarmingTaskRepository(db),
     )
 
 
@@ -171,6 +172,7 @@ def build_cropflow_plan_orchestrator(
         diagnosis_client=diagnosis_client,
         pest_disease_client=pest_disease_client,
         stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(db),
+        farming_task_repository=FarmingTaskRepository(db),
     )
     stage_management_service = build_stage_management_service(db, settings, weather_provider=weather_provider)
     pest_disease_control_planning_service = PestDiseaseControlPlanningService(

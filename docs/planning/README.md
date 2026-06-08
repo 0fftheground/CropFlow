@@ -7,8 +7,8 @@
 ```text
 1. 顶层只放长期稳定的总纲文档。
 2. 执行规范放到 guides/。
-3. 阶段性材料按 P1 / P2 归档。
-4. 方向拆分材料放到 team-work-division/。
+3. 业务方向接入材料放到 directions/。
+4. 阶段性材料按 P1 / P2 归档。
 ```
 
 ## 当前目录说明
@@ -17,17 +17,17 @@
 |---|---|
 | `docs/planning/development-roadmap.md` | 正式推进里程碑和阶段目标 |
 | `docs/planning/team-work-division.md` | 通用分工原则和统一提交模板 |
-| `docs/planning/guides/` | AI agent 规范和非代码交付模板 |
-| `docs/planning/P1/` | 杂草样板闭环的历史收口材料 |
-| `docs/planning/P2/` | 当前 P2 实现、runbook 和 migration 拆分材料 |
-| `docs/planning/team-work-division/` | 按角色和方向拆分的具体协作材料 |
+| `docs/planning/guides/` | AI agent 规范、FDE 标准流程、农事项接入访谈指南和文档整理计划 |
+| `docs/planning/directions/` | FDE 沉淀的业务方向接入材料 |
+| `docs/planning/archive/` | 已完成阶段的历史计划、runbook 和 migration 拆分材料 |
+| `docs/planning/team-work-division/` | 按角色拆分的协作边界和前端 handoff |
 
 ## 使用建议
 
 ```text
 1. 恢复上下文时，先看 project-context/entrypoints.md，不要从 planning/ 逐个扫起。
 2. 只需要阶段目标时，看 development-roadmap.md。
-3. 只需要统一协作规则时，看 team-work-division.md 和 guides/。
-4. 只需要当前 P2 落地细节时，进入 P2/。
-5. 只在需要回看杂草样板历史口径时，进入 P1/。
+3. 只需要统一协作规则时，看 team-work-division.md 和 guides/；了解 FDE 标准流程时，看 `docs/planning/guides/fde-standard-workflow.md`；FDE 访谈并沉淀新方向农事项接入材料时，看 `docs/planning/guides/agri-task-integration-doc-requirements.md`；整理文档体系时，看 `docs/planning/guides/docs-hygiene-plan.md`。
+4. 只需要回看业务方向材料或样板任务清单时，进入 directions/。
+5. 只需要历史阶段证据时，进入 archive/。
 ```

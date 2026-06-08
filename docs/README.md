@@ -36,7 +36,7 @@ Use $cropflow-wrap-up to summarize today, update memory, and prepare commit acti
 4. overview/team-technical-briefing.md
 5. planning/development-roadmap.md
 6. planning/team-work-division.md
-7. planning/agent-development-guidelines.md
+7. planning/guides/agent-development-guidelines.md
 8. model/data-model.md
 9. workflow/task-workflow-matrix.md
 10. workflow/background-job-matrix.md
@@ -47,7 +47,7 @@ Use $cropflow-wrap-up to summarize today, update memory, and prepare commit acti
 ```text
 1. 一次性会议议程、历史 session 记录和重复二级入口已经移除或并入稳定入口。
 2. 如果只是恢复当前工作，不要顺着 docs/ 目录逐个打开，先看 project-context/ 下的稳定入口。
-3. docs/planning/team-work-division/、docs/planning/P1/ 和 docs/planning/P2/ 仍然保留，但建议通过 project-context/entrypoints.md 按任务定向进入。
+3. docs/planning/directions/ 保存 FDE 沉淀的业务方向材料；docs/planning/team-work-division/ 只保留角色协作边界和前端 handoff；P1/P2 历史阶段材料已迁入 docs/planning/archive/。
 ```
 
 ## 目录结构
@@ -60,26 +60,27 @@ docs/
 │   └── team-technical-briefing.md
 ├── planning/
 │   ├── README.md
-│   ├── P1/
-│   │   └── plant-protection-closed-loop-schedule.md
-│   ├── P2/
-│   │   ├── p2-backend-runbook.md
-│   │   ├── p2-backend-weed-implementation-breakdown.md
-│   │   ├── p2-v1-migration-plan.md
-│   │   └── p2-v1-migration-scope.md
+│   ├── archive/
+│   │   ├── P1/
+│   │   └── P2/
 │   ├── development-roadmap.md
 │   ├── guides/
 │   │   ├── agent-development-guidelines.md
-│   │   └── non-code-integration-package-template.md
+│   │   ├── fde-standard-workflow.md
+│   │   ├── agri-task-integration-doc-requirements.md
+│   │   └── docs-hygiene-plan.md
+│   ├── directions/
+│   │   ├── calendar-stage/
+│   │   ├── plant-protection/
+│   │   │   ├── overview.md
+│   │   │   └── task-checklist.md
+│   │   ├── irrigation/
+│   │   ├── fertilization/
+│   │   └── remote-sensing/
 │   ├── team-work-division.md
 │   ├── team-work-division/
 │   │   ├── product-architecture-owner.md
 │   │   ├── core-backend.md
-│   │   ├── calendar-stage.md
-│   │   ├── plant-protection.md
-│   │   ├── irrigation.md
-│   │   ├── fertilization.md
-│   │   ├── remote-sensing.md
 │   │   ├── frontend.md
 │   │   └── frontend-plant-protection-handoff.md
 ├── architecture/
@@ -96,9 +97,13 @@ docs/
 ├── workflow/
 │   ├── task-workflow-matrix.md
 │   ├── background-job-matrix.md
-│   ├── total-workflow.pdf
+│   ├── raw/
+│   │   └── total-workflow.pdf
 │   └── flows/
 ├── api/
+│   └── raw/
+├── references/
+│   └── raw/
 └── decisions/
 ```
 
@@ -108,7 +113,7 @@ docs/
 |---|---|
 | `development/` | 仓库级本地启动、迁移、seed、联调环境说明 |
 | `overview/` | 给团队说明项目目标、系统架构、核心对象和关键流转 |
-| `planning/` | 推进节奏、团队分工、AI agent 开发规范 |
+| `planning/` | 推进节奏、团队角色分工、FDE 接入材料、AI agent 开发规范 |
 | `architecture/` | 系统架构、模块边界、事件、编排器设计 |
 | `model/` | 领域模型、数据模型、模型核对和术语表 |
 | `workflow/` | 农事项流程、后台任务、流程图来源和流程拆解 |
@@ -121,9 +126,9 @@ docs/
 |---|---|
 | `api/frontend-plant-protection-api-contract.md` | 植保链路前端联调 contract |
 | `api/weed_diagnosis_api.md` | 杂草诊断算法接口 |
-| `api/growth_stage_prediction_api.md` | 生育期预测算法接口，用于 Stage Orchestrator 初始化和阶段状态管理 |
+| `api/growth_stage_gdd_api.md` | 生育期 / GDD 算法接口，用于 Stage Orchestrator 初始化和阶段状态管理 |
 | `api/pestDisease_survey_window_api.md` | 病虫害调查窗口算法接口当前版，用于初始化常规调查计划和每日更新调查事件 |
-| `api/weather_api.pdf` | 气象数据接口原始文档，用于后续组装逐日天气、逐小时天气和预警数据 |
+| `api/raw/weather_api.pdf` | 气象数据接口原始文档；开发入口应优先使用 markdown contract |
 
 ## 本地开发入口
 
@@ -148,4 +153,5 @@ docs/
 4. 新增算法接口：放入 api/。
 5. 新增设计取舍：放入 decisions/。
 6. 新增面向团队协作或 agent 的执行规则：放入 planning/。
+7. 文档整理、归档和合并建议：先更新 planning/guides/docs-hygiene-plan.md，不直接删除历史材料。
 ```

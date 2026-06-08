@@ -1,6 +1,6 @@
 # P2 第一版 Migration 顺序草案
 
-本文档把 [P2 第一版 Migration 范围清单](/F:/workspace/CropFlow/docs/planning/P2/p2-v1-migration-scope.md:1) 进一步落实为可执行的 migration 拆分顺序。
+本文档把 [P2 第一版 Migration 范围清单](/F:/workspace/CropFlow/docs/planning/archive/P2/p2-v1-migration-scope.md:1) 进一步落实为可执行的 migration 拆分顺序。
 
 目标：
 

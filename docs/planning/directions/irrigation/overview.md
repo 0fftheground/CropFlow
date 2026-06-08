@@ -165,6 +165,62 @@
 |---|---|---|---|---|---|---|---|
 ```
 
+## 按植保接入经验补齐的开发材料清单
+
+植保方向在实际接入开发时，真正被后端、前端和编排反复消费的材料，不只是接口摘要，还包括主链路任务清单、冻结口径、字段草案和端到端场景。灌溉方向如果希望尽快进入开发，建议同事至少补齐下面这套材料。
+
+### A. 主链路任务清单
+
+建议按“像 `docs/planning/directions/plant-protection/task-checklist.md` 一样可以直接驱动开发”的颗粒度整理：
+
+```text
+1. 常规灌溉
+2. 排水
+3. 水层保持 / 补水
+4. 晒田
+5. 人工灌溉执行
+6. 设备自动灌溉执行
+7. 灌溉后达标评价 / 异常反馈
+8. 设备异常、执行失败或水位不达标后的人工复核或再次灌溉
+```
+
+每个任务项至少写清：
+
+```text
+1. 任务触发条件
+2. 接口依赖
+3. 接口调用时间
+4. 接口主要返回结果和分支
+5. 系统动作：新增/更新 CalendarItem、TaskIntent、FarmingTask、OperationPlan、ReviewRequest
+6. 作业方案：窗口、水量/水位目标、区域、设备参数、验收标准
+7. 作业流程：人工/设备/第三方执行、状态回调、轮询兜底、后续动作
+8. 任务后续操作：是否进入评价、复核、再次灌溉、结束
+```
+
+### B. 建议优先收集的 API 契约文档
+
+以下是建议落点，重点是把契约沉淀成可引用 markdown，而不是继续停留在口头说明或厂商文档截图：
+
+| 建议文件 | 需要包含的内容 |
+|---|---|
+| `docs/api/irrigation_recommendation_api.md` | 灌溉/排水/晒田推荐接口；说明输入、输出、执行窗口、异常、字段映射 |
+| `docs/api/irrigation_device_callback_api.md` | 设备回调协议；说明开始、完成、失败、取消、实时状态上报字段 |
+| `docs/api/irrigation_status_polling_api.md` | 轮询兜底接口；说明查询方式、状态码、重试、幂等关联字段 |
+| `docs/api/irrigation_evaluation_api.md` | 达标评价或异常反馈接口；说明评价输入、水位/时长/面积类结果和复核触发条件 |
+| `docs/api/irrigation_payload_mapping.md` | 入参组装和返回结果对象构建说明；把算法字段如何落到 `OperationPlan / Execution / ExecutionRecord / Feedback` 写清 |
+
+### C. 进入开发前建议冻结的口径
+
+建议在灌溉方向文档里单独列一段“当前冻结口径”，至少拍板这些问题：
+
+```text
+1. 哪些灌溉链路直接生成正式任务，哪些只维护 CalendarItem
+2. executionMode 第一版支持到什么程度：manual / device / external 各自哪些场景上线
+3. 设备执行状态以回调为主还是轮询为主，失败兜底如何定义
+4. 水位不达标或执行中断时，是直接生成后续灌溉任务、先触发 ReviewRequest，还是只记录反馈
+5. operationArea 和设备分区第一版要求到什么粒度
+```
+
 ## 当前阶段完成标准
 
 ```text
