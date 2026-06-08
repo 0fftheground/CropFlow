@@ -641,6 +641,13 @@ Query 参数：
 | `downstream_calendar_items` | `TaskDetailCalendarItemResponse[]` | 下游日历项 |
 | `event_records` | `EventRecordResponse[]` | 相关事件 |
 
+补充说明：
+
+1. `source_calendar_item` 当前会带出 `generation_condition`
+2. `plant_protection.regular_disease_pest_survey` 页面建议优先从 `source_calendar_item.generation_condition` 读取上下文
+3. 常规病虫调查上下文中的 `rawPlan` 已统一为英文键：`survey_window`、`targets`、`exclude_reasons`
+4. `survey_method` 可从 `source_calendar_item.generation_condition.surveyMethod` 回填
+
 #### `OperationPlanResponse`
 
 | field | type |
@@ -823,8 +830,10 @@ Query 参数：
 1. `survey_date` 必填，格式建议用 `YYYYMMDD`
 2. `survey_method` 仅支持 `一级理论防治日期 / 生育期`；建议直接回传任务上下文中的调查日期来源；第一版按只读回填处理
 3. `bbch_stage` 为当前调查时的 BBCH 阶段数值
-4. 第一版对象范围包含 `DaoFeiShi`、`DaoWenBing`、`ErHuaMing`、`DaoZongJuanYeMing`、`WenKuBing`
-5. 按新版算法文档，第一版建议把 5 类对象字段组都回传；未发现病虫时显式传 `0 / false`
+4. 动态对象建议优先按任务上下文展开；上下文来源优先取 `source_calendar_item.generation_condition.rawPlan.targets`
+5. `source_calendar_item.generation_condition.rawPlan` 中的窗口和对象字段使用英文键：`survey_window`、`targets`、`exclude_reasons`
+6. `cultivation_type=早稻` 时，任务上下文可能不包含 `DaoFeiShi`
+7. 第一版提交口径仍建议按完整 5 类对象 schema 回传；未发现病虫时显式传 `0 / false`
 
 行为：
 

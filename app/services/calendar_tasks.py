@@ -152,6 +152,7 @@ class PestDiseaseSurveyWindowClient(Protocol):
     def daily_update_surveys(
         self,
         *,
+        cultivation_type: str | None = None,
         growth_stage: dict[str, str],
         regular_plans: list[dict[str, Any]],
         weather_data: list[dict[str, Any]],
@@ -561,6 +562,7 @@ class HttpPestDiseaseSurveyWindowClient:
     def daily_update_surveys(
         self,
         *,
+        cultivation_type: str | None = None,
         growth_stage: dict[str, str],
         regular_plans: list[dict[str, Any]],
         weather_data: list[dict[str, Any]],
@@ -573,6 +575,8 @@ class HttpPestDiseaseSurveyWindowClient:
             "weather_data": weather_data,
             "typhoon_data": typhoon_data,
         }
+        if cultivation_type is not None:
+            payload["cultivation_type"] = cultivation_type
         if actual_control_date is not None:
             payload["actual_control_date"] = actual_control_date.strftime("%Y%m%d")
         response = self._post_json("/pestDisease/survey/daily-update-survey", payload)
@@ -656,16 +660,22 @@ class MockPestDiseaseSurveyWindowClient:
         year = date.fromisoformat(growth_stage["tillering_date"]).year
         plans: list[PestDiseaseRegularSurveyPlan] = []
         raw_plans: list[dict[str, Any]] = []
+        excluded_brown_planthopper = cultivation_type == "早稻"
         for sequence, window in sorted(level1_of_year.items(), key=lambda item: int(item[0])):
             start_date = _parse_month_day(year, window[0])
             end_date = _parse_month_day(year, window[1])
+            targets = ["二化螟", "稻纵卷叶螟", "稻飞虱", "稻瘟病", "纹枯病"]
+            exclude_reasons: dict[str, Any] = {}
+            if excluded_brown_planthopper:
+                targets.remove("稻飞虱")
+                exclude_reasons["稻飞虱"] = "早稻不调查稻飞虱"
             raw_plan = {
                 "status": "need_survey",
-                "调查日期": [start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d")],
+                "survey_window": [start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d")],
                 "spray_stage": "常规病虫预防",
                 "survey_method": "一级理论防治日期",
-                "调查对象": ["二化螟", "稻纵卷叶螟", "稻飞虱", "稻瘟病", "纹枯病"],
-                "排除原因": {},
+                "targets": targets,
+                "exclude_reasons": exclude_reasons,
                 "msg": f"Mock regular pest disease survey plan {sequence}",
                 "adjusted": False,
             }
@@ -684,6 +694,7 @@ class MockPestDiseaseSurveyWindowClient:
     def daily_update_surveys(
         self,
         *,
+        cultivation_type: str | None = None,
         growth_stage: dict[str, str],
         regular_plans: list[dict[str, Any]],
         weather_data: list[dict[str, Any]],
@@ -691,16 +702,22 @@ class MockPestDiseaseSurveyWindowClient:
         actual_control_date: date | None = None,
     ) -> PestDiseaseDailyUpdateResult:
         has_typhoon_alert = bool(typhoon_data.get("alerts"))
+        targets = ["稻飞虱", "纹枯病"]
+        exclude_reasons: dict[str, Any] = {}
+        if cultivation_type == "早稻":
+            targets = ["纹枯病"]
+            exclude_reasons["稻飞虱"] = "早稻不调查稻飞虱"
         if has_typhoon_alert:
             data = {
                 "status": "new_emergency",
                 "msg": "已识别到临时调查触发条件，建议开展临时调查",
                 "survey_window": ["20260703", "20260704"],
                 "spray_stage": "突发病虫防治",
-                "targets": ["稻飞虱", "纹枯病"],
-                "exclude_reasons": {},
+                "targets": targets,
+                "exclude_reasons": exclude_reasons,
                 "source": "emergency",
                 "raw_result": {
+                    "cultivation_type": cultivation_type,
                     "growth_stage": growth_stage,
                     "regular_plans": regular_plans,
                     "weather_data": weather_data,
@@ -718,6 +735,7 @@ class MockPestDiseaseSurveyWindowClient:
                 "exclude_reasons": {},
                 "source": "none",
                 "raw_result": {
+                    "cultivation_type": cultivation_type,
                     "growth_stage": growth_stage,
                     "regular_plans": regular_plans,
                     "weather_data": weather_data,
@@ -1970,6 +1988,7 @@ class SurveyDateRecommendationService:
 
         weather_provider = self._require_pest_disease_weather_provider()
         payload: dict[str, Any] = {
+            "cultivation_type": self.context_resolver.resolve(planting_plan).cultivation_system,
             "growth_stage": request_payload["growth_stage"],
             "regular_plans": regular_plans,
             "weather_data": weather_provider.get_pest_disease_daily_weather(
@@ -2004,6 +2023,7 @@ class SurveyDateRecommendationService:
         if payload is None:
             return None
         return self.pest_disease_client.daily_update_surveys(
+            cultivation_type=str(payload.get("cultivation_type")) if payload.get("cultivation_type") is not None else None,
             growth_stage=dict(payload["growth_stage"]),
             regular_plans=[dict(item) for item in payload["regular_plans"]],
             weather_data=[dict(item) for item in payload["weather_data"]],
@@ -2245,19 +2265,19 @@ class SurveyDateRecommendationService:
             generation_condition = dict(item.generation_condition or {})
             raw_plan = generation_condition.get("rawPlan")
             if isinstance(raw_plan, dict):
-                raw_plans.append(dict(raw_plan))
+                raw_plans.append(_normalize_pest_disease_regular_plan(raw_plan))
                 continue
             raw_plans.append(
                 {
                     "status": str(generation_condition.get("status") or "need_survey"),
-                    "调查日期": [
+                    "survey_window": [
                         item.suggested_start_date.strftime("%Y%m%d"),
                         item.suggested_end_date.strftime("%Y%m%d"),
                     ],
                     "spray_stage": generation_condition.get("sprayStage"),
                     "survey_method": generation_condition.get("surveyMethod"),
-                    "调查对象": list(generation_condition.get("targets") or []),
-                    "排除原因": dict(generation_condition.get("excludeReasons") or {}),
+                    "targets": list(generation_condition.get("targets") or []),
+                    "exclude_reasons": dict(generation_condition.get("excludeReasons") or {}),
                     "msg": str(generation_condition.get("message") or ""),
                 },
             )
@@ -2270,7 +2290,7 @@ class SurveyDateRecommendationService:
             growth_stage=request_payload["growth_stage"],
             level1_of_year=request_payload["level1_of_year"],
         )
-        return [dict(plan.raw_plan) for plan in init_result.regular_plans]
+        return [_normalize_pest_disease_regular_plan(plan.raw_plan) for plan in init_result.regular_plans]
 
     def _require_pest_disease_weather_provider(self) -> Any:
         missing_methods = [
@@ -2915,26 +2935,54 @@ def _parse_api_date_range(raw_value: list[str] | None) -> tuple[date, date] | No
     return _parse_api_date(raw_value[0]), _parse_api_date(raw_value[1])
 
 
+def _normalize_pest_disease_regular_plan(raw_plan: dict[str, Any]) -> dict[str, Any]:
+    normalized_plan = dict(raw_plan)
+    raw_window = normalized_plan.get("survey_window", normalized_plan.get("调查日期"))
+    raw_targets = normalized_plan.get("targets", normalized_plan.get("调查对象"))
+    raw_exclude_reasons = normalized_plan.get("exclude_reasons", normalized_plan.get("排除原因"))
+
+    if isinstance(raw_window, list):
+        normalized_plan["survey_window"] = [str(item) for item in raw_window]
+    elif raw_window is not None:
+        normalized_plan["survey_window"] = raw_window
+
+    if isinstance(raw_targets, list):
+        normalized_plan["targets"] = [str(item) for item in raw_targets]
+    elif raw_targets is not None:
+        normalized_plan["targets"] = raw_targets
+
+    if isinstance(raw_exclude_reasons, dict):
+        normalized_plan["exclude_reasons"] = dict(raw_exclude_reasons)
+    elif raw_exclude_reasons is not None:
+        normalized_plan["exclude_reasons"] = raw_exclude_reasons
+
+    normalized_plan.pop("调查日期", None)
+    normalized_plan.pop("调查对象", None)
+    normalized_plan.pop("排除原因", None)
+    return normalized_plan
+
+
 def _parse_pest_disease_regular_plan(raw_plan: dict[str, Any]) -> PestDiseaseRegularSurveyPlan:
-    raw_window = raw_plan.get("调查日期")
+    normalized_plan = _normalize_pest_disease_regular_plan(raw_plan)
+    raw_window = normalized_plan.get("survey_window")
     if not isinstance(raw_window, list) or len(raw_window) != 2:
-        raise ValueError("regular plan did not return a valid 调查日期 window.")
-    raw_targets = raw_plan.get("调查对象") or []
+        raise ValueError("regular plan did not return a valid survey_window.")
+    raw_targets = normalized_plan.get("targets") or []
     if not isinstance(raw_targets, list):
-        raise ValueError("regular plan 调查对象 must be a list.")
-    raw_exclude_reasons = raw_plan.get("排除原因") or {}
+        raise ValueError("regular plan targets must be a list.")
+    raw_exclude_reasons = normalized_plan.get("exclude_reasons") or {}
     if not isinstance(raw_exclude_reasons, dict):
-        raise ValueError("regular plan 排除原因 must be an object.")
+        raise ValueError("regular plan exclude_reasons must be an object.")
     return PestDiseaseRegularSurveyPlan(
         survey_window=(_parse_api_date(str(raw_window[0])), _parse_api_date(str(raw_window[1]))),
         targets=[str(item) for item in raw_targets],
         exclude_reasons=raw_exclude_reasons,
-        status=str(raw_plan.get("status") or ""),
-        message=str(raw_plan.get("msg") or ""),
-        spray_stage=str(raw_plan["spray_stage"]) if raw_plan.get("spray_stage") is not None else None,
-        survey_method=str(raw_plan["survey_method"]) if raw_plan.get("survey_method") is not None else None,
-        adjusted=bool(raw_plan.get("adjusted")),
-        raw_plan=dict(raw_plan),
+        status=str(normalized_plan.get("status") or ""),
+        message=str(normalized_plan.get("msg") or ""),
+        spray_stage=str(normalized_plan["spray_stage"]) if normalized_plan.get("spray_stage") is not None else None,
+        survey_method=str(normalized_plan["survey_method"]) if normalized_plan.get("survey_method") is not None else None,
+        adjusted=bool(normalized_plan.get("adjusted")),
+        raw_plan=normalized_plan,
     )
 
 

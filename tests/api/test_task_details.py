@@ -103,6 +103,17 @@ class FakeFarmingTaskQueryService:
                 suggested_start_date=date(2026, 4, 18),
                 suggested_end_date=date(2026, 4, 18),
                 status="generated",
+                generation_condition={
+                    "algorithmCode": "pestDisease.init_regular_survey",
+                    "surveyMethod": "一级理论防治日期",
+                    "rawPlan": {
+                        "status": "need_survey",
+                        "survey_window": ["20260502", "20260504"],
+                        "survey_method": "一级理论防治日期",
+                        "targets": ["二化螟"],
+                        "exclude_reasons": {"稻飞虱": "早稻不调查稻飞虱"},
+                    },
+                },
                 generated_task_id=farming_task_id,
                 idempotency_key="calendar:10",
             ),
@@ -156,6 +167,8 @@ def test_get_task_detail_route_returns_aggregated_context() -> None:
     assert body["task"]["id"] == 10
     assert body["operation_plans"][0]["version"] == 2
     assert body["source_task_intent"]["id"] == 11
+    assert body["source_calendar_item"]["generation_condition"]["surveyMethod"] == "一级理论防治日期"
+    assert body["source_calendar_item"]["generation_condition"]["rawPlan"]["targets"] == ["二化螟"]
     assert body["source_execution_record"]["record_type"] == "survey_result"
     assert body["downstream_calendar_items"][0]["task_subtype"] == "plant_protection.rice_safety_survey"
     assert body["event_records"][0]["event_type"] == "FarmingTaskCreated"

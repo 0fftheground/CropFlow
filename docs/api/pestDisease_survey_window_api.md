@@ -22,21 +22,13 @@
 
 ### 2.2 请求参数
 
-CropFlow 内部调用本接口时，`level1_of_year` 不再要求上游业务方手工传入种植计划 metadata。
-服务端会先根据种植计划的 `farm_id` 查农场，读取 `province`、`city`、`district_county`，再结合种植计划年份匹配表 `pp_rice_control_window_level_1` 的 `detail` 字段，并把该结果作为 `level1_of_year` 传给算法接口。
-
-匹配键如下：
-
-- `province` -> 农场 `province`
-- `city` -> 农场 `city`
-- `county` -> 农场 `district_county`
-- `data_year` -> 种植计划 `year`；若为空则回退到 `sowing_date.year`
-
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `cultivation_type` | string | 是 | 种植制度，例如 `早稻`、`中稻`、`晚稻`、`再生稻`。 |
 | `growth_stage` | object | 是 | 生育期信息。 |
-| `level1_of_year` | object | 是 | 病虫全年一级理论防治日期。对算法接口是必填；在 CropFlow 内部由服务端查表组装。 |
+| `level1_of_year` | object | 是 | 病虫全年一级理论防治日期。 |
+
+规则说明：`cultivation_type=早稻` 时，不生成稻飞虱调查对象。
 
 #### `growth_stage`
 
@@ -85,11 +77,11 @@ CropFlow 内部调用本接口时，`level1_of_year` 不再要求上游业务方
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `status` | string | 调查状态，常见值为 `need_survey`。 |
-| `调查日期` | array | 调查日期窗口，格式 `[YYYYMMDD, YYYYMMDD]`。 |
+| `survey_window` | array | 调查日期窗口，格式 `[YYYYMMDD, YYYYMMDD]`。 |
 | `spray_stage` | string | 本次调查对应的打药阶段，取值为 `封行药`、`破口药`、`齐穗药` 或 `常规病虫预防`。 |
 | `survey_method` | string | 调查日期来源，取值为 `一级理论防治日期` 或 `生育期`。 |
-| `调查对象` | array | 本次调查涉及的病虫害。 |
-| `排除原因` | object | 未纳入调查对象的原因。 |
+| `targets` | array | 本次调查涉及的病虫害。 |
+| `exclude_reasons` | object | 未纳入调查对象的原因。 |
 | `msg` | string | 结果说明。 |
 
 `spray_stage` 根据本次实际防治窗口 `[effective_start_dt, effective_end_dt]` 与生育期节点窗口重叠关系确定：
@@ -112,11 +104,12 @@ CropFlow 内部调用本接口时，`level1_of_year` 不再要求上游业务方
     "regular_plans": [
       {
         "status": "need_survey",
-        "调查日期": ["20260502", "20260504"],
+        "survey_window": ["20260502", "20260504"],
         "spray_stage": "封行药",
         "survey_method": "一级理论防治日期",
-        "调查对象": ["二化螟", "稻纵卷叶螟", "稻飞虱", "稻瘟病", "纹枯病"],
-        "排除原因": {
+        "targets": ["二化螟", "稻纵卷叶螟", "稻瘟病", "纹枯病"],
+        "exclude_reasons": {
+          "稻飞虱": "早稻不调查稻飞虱",
           "稻曲病": "当前一级理论防治日期不在目标防治范围内"
         },
         "msg": "当前处于可防治周期，建议按调查日期开展调查"
@@ -143,6 +136,7 @@ CropFlow 内部调用本接口时，`level1_of_year` 不再要求上游业务方
 | `weather_data` | array | 是 | 逐日天气数据，至少覆盖当前日期前 8 天至当前日期后 7 天。 |
 | `typhoon_data` | object | 是 | 未来 72 小时台风相关预警和逐小时天气数据。 |
 | `actual_control_date` | string | 否 | 上次打药实际日期，格式 `YYYYMMDD`，仅用于合并判断。 |
+| `cultivation_type` | string | 否 | 种植制度。传 `早稻` 时，常规和突发调查结果都会排除稻飞虱；不传时保持兼容旧规则。 |
 
 不输入以下字段：
 
@@ -227,6 +221,7 @@ CropFlow 内部调用本接口时，`level1_of_year` 不再要求上游业务方
 
 ```json
 {
+  "cultivation_type": "早稻",
   "growth_stage": {
     "tillering_date": "2026-04-20",
     "pokou_date": "2026-06-10",
@@ -236,11 +231,11 @@ CropFlow 内部调用本接口时，`level1_of_year` 不再要求上游业务方
   "regular_plans": [
     {
       "status": "need_survey",
-      "调查日期": ["20260502", "20260504"],
+      "survey_window": ["20260502", "20260504"],
       "spray_stage": "封行药",
       "survey_method": "一级理论防治日期",
-      "调查对象": ["二化螟", "稻纵卷叶螟"],
-      "排除原因": {},
+      "targets": ["二化螟", "稻纵卷叶螟"],
+      "exclude_reasons": {},
       "msg": "当前处于可防治周期，建议按调查日期开展调查"
     }
   ],
@@ -307,27 +302,29 @@ CropFlow 内部调用本接口时，`level1_of_year` 不再要求上游业务方
     "msg": "已识别到临时调查触发条件，建议开展临时调查",
     "survey_window": ["20260703", "20260704"],
     "spray_stage": "突发病虫防治",
-    "targets": ["稻飞虱", "纹枯病"],
+    "targets": ["纹枯病"],
     "exclude_reasons": {
+      "稻飞虱": "早稻不调查稻飞虱",
       "稻曲病": "当前调查窗口不在目标防治范围内"
     },
     "source": "emergency",
     "raw_result": {
       "regular": {
         "status": "need_survey",
-        "调查日期": ["20260502", "20260504"],
+        "survey_window": ["20260502", "20260504"],
         "spray_stage": "封行药",
         "survey_method": "一级理论防治日期",
-        "调查对象": ["二化螟", "稻纵卷叶螟"],
-        "排除原因": {},
+        "targets": ["二化螟", "稻纵卷叶螟"],
+        "exclude_reasons": {},
         "msg": "当前处于可防治周期，建议按调查日期开展调查"
       },
       "emergency": {
         "status": "need_survey",
-        "调查日期": ["20260703", "20260704"],
+        "survey_window": ["20260703", "20260704"],
         "spray_stage": "突发病虫防治",
-        "调查对象": ["稻飞虱", "纹枯病"],
-        "排除原因": {
+        "targets": ["纹枯病"],
+        "exclude_reasons": {
+          "稻飞虱": "早稻不调查稻飞虱",
           "稻曲病": "当前调查窗口不在目标防治范围内"
         },
         "msg": "已识别到临时调查触发条件，建议开展临时调查"
@@ -352,26 +349,3 @@ CropFlow 内部调用本接口时，`level1_of_year` 不再要求上游业务方
 - 调用方负责保存常规调查初始化接口输出的 `regular_plans`，并在每日更新时传回。
 - 接口不访问数据库、不请求气象接口。
 - 气象数据由 `weather_data` 和 `typhoon_data.hourly_weather_72h` 直接传入，农场坐标不作为生产接口入参。
-
-## 5. CropFlow 当前落库方式
-
-CropFlow 当前把 `daily-update-survey` 的返回映射为调查类 `CalendarItem`，规则如下：
-
-- `new_emergency`
-  - 新增或更新 `plant_protection.sudden_disease_pest_survey`
-  - 调查窗口取 `survey_window`
-  - `generation_condition` 保存 `status / source / targets / exclude_reasons / raw_result / raw_response`
-
-- `merged_into_regular`
-  - 不新建突发调查 `CalendarItem`
-  - 把合并结果回写到匹配窗口的 `plant_protection.regular_disease_pest_survey`
-  - 如存在已激活的旧突发调查 `CalendarItem`，标记为 `invalidated`
-
-- `no_new_event`
-  - 不新建调查 `CalendarItem`
-  - 如存在已激活的旧突发调查 `CalendarItem`，标记为 `invalidated`
-
-补充说明：
-
-- 当前 `survey_window` 命中已有常规调查窗口时，后端优先回写已有 `regular_disease_pest_survey`。
-- `daily-update-survey` 运行结果同时写 `CalendarItemUpdated` 事件，便于联调排查。

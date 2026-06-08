@@ -277,28 +277,34 @@ class FakePestDiseaseSurveyWindowClient:
         assert level1_of_year == {"1": ["0509", "0513"], "2": ["0607", "0611"]}
         first_plan = {
             "status": "need_survey",
-            "调查日期": ["20260502", "20260504"],
+            "survey_window": ["20260502", "20260504"],
             "spray_stage": "封行药",
             "survey_method": "一级理论防治日期",
-            "调查对象": ["二化螟", "稻飞虱"],
-            "排除原因": {"稻曲病": "当前一级理论防治日期不在目标防治范围内"},
+            "targets": ["二化螟"],
+            "exclude_reasons": {
+                "稻飞虱": "早稻不调查稻飞虱",
+                "稻曲病": "当前一级理论防治日期不在目标防治范围内",
+            },
             "msg": "当前处于可防治周期，建议按调查日期开展调查",
         }
         second_plan = {
             "status": "need_survey",
-            "调查日期": ["20260601", "20260603"],
+            "survey_window": ["20260601", "20260603"],
             "spray_stage": "破口药",
             "survey_method": "生育期",
-            "调查对象": ["稻瘟病", "纹枯病"],
-            "排除原因": {},
+            "targets": ["稻瘟病", "纹枯病"],
+            "exclude_reasons": {},
             "msg": "当前处于可防治周期，建议按调查日期开展调查",
         }
         return PestDiseaseRegularSurveyInitResult(
             regular_plans=[
                 PestDiseaseRegularSurveyPlan(
                     survey_window=(date(2026, 5, 2), date(2026, 5, 4)),
-                    targets=["二化螟", "稻飞虱"],
-                    exclude_reasons={"稻曲病": "当前一级理论防治日期不在目标防治范围内"},
+                    targets=["二化螟"],
+                    exclude_reasons={
+                        "稻飞虱": "早稻不调查稻飞虱",
+                        "稻曲病": "当前一级理论防治日期不在目标防治范围内",
+                    },
                     status="need_survey",
                     message="当前处于可防治周期，建议按调查日期开展调查",
                     spray_stage="封行药",
@@ -645,7 +651,7 @@ def test_recommend_regular_disease_pest_surveys_creates_multiple_calendar_items(
         (date(2026, 5, 2), date(2026, 5, 4)),
         (date(2026, 6, 1), date(2026, 6, 3)),
     ]
-    assert items[0].generation_condition["targets"] == ["二化螟", "稻飞虱"]
+    assert items[0].generation_condition["targets"] == ["二化螟"]
     assert items[0].generation_condition["sprayStage"] == "封行药"
     assert items[1].generation_condition["surveyMethod"] == "生育期"
     assert "regular:1:" not in items[0].idempotency_key
@@ -795,7 +801,7 @@ def test_recommend_regular_disease_pest_surveys_uses_latest_stage_snapshot_growt
     items = service.recommend_regular_disease_pest_surveys(1)
 
     assert len(items) == 2
-    assert items[0].generation_condition["targets"] == ["二化螟", "稻飞虱"]
+    assert items[0].generation_condition["targets"] == ["二化螟"]
 
 
 def test_generate_due_tasks_marks_calendar_item_generated() -> None:

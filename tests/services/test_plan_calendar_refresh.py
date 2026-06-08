@@ -297,6 +297,7 @@ class ActiveStageChangedPestDiseaseClient:
     def daily_update_surveys(
         self,
         *,
+        cultivation_type: str | None = None,
         growth_stage: dict[str, str],
         regular_plans: list[dict[str, object]],
         weather_data: list[dict[str, object]],

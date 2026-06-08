@@ -128,6 +128,7 @@ class TaskDetailCalendarItemResponse(BaseModel):
     suggested_start_date: datetime | date
     suggested_end_date: datetime | date
     status: str
+    generation_condition: dict[str, Any]
     generated_task_id: int | None
 
 
@@ -429,6 +430,7 @@ def _serialize_calendar_item(calendar_item: CalendarItem) -> TaskDetailCalendarI
         suggested_start_date=calendar_item.suggested_start_date,
         suggested_end_date=calendar_item.suggested_end_date,
         status=calendar_item.status,
+        generation_condition=calendar_item.generation_condition or {},
         generated_task_id=calendar_item.generated_task_id,
     )
 

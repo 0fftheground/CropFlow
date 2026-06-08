@@ -166,6 +166,7 @@ class FakePestDiseaseClient:
     def daily_update_surveys(
         self,
         *,
+        cultivation_type: str | None = None,
         growth_stage: dict[str, str],
         regular_plans: list[dict[str, object]],
         weather_data: list[dict[str, object]],
@@ -174,6 +175,7 @@ class FakePestDiseaseClient:
     ) -> PestDiseaseDailyUpdateResult:
         self.daily_update_calls.append(
             {
+                "cultivation_type": cultivation_type,
                 "growth_stage": growth_stage,
                 "regular_plans": regular_plans,
                 "weather_data": weather_data,
@@ -186,8 +188,8 @@ class FakePestDiseaseClient:
             message="已识别到临时调查触发条件，建议开展临时调查",
             survey_window=(date(2026, 6, 1), date(2026, 6, 2)),
             spray_stage="突发病虫防治",
-            targets=["稻飞虱"],
-            exclude_reasons={},
+            targets=["纹枯病"],
+            exclude_reasons={"稻飞虱": "早稻不调查稻飞虱"} if cultivation_type == "早稻" else {},
             source="emergency",
             raw_result={"mock": True},
             raw_response={"code": 200},
@@ -198,6 +200,7 @@ class FakeMergedPestDiseaseClient(FakePestDiseaseClient):
     def daily_update_surveys(
         self,
         *,
+        cultivation_type: str | None = None,
         growth_stage: dict[str, str],
         regular_plans: list[dict[str, object]],
         weather_data: list[dict[str, object]],
@@ -206,6 +209,7 @@ class FakeMergedPestDiseaseClient(FakePestDiseaseClient):
     ) -> PestDiseaseDailyUpdateResult:
         self.daily_update_calls.append(
             {
+                "cultivation_type": cultivation_type,
                 "growth_stage": growth_stage,
                 "regular_plans": regular_plans,
                 "weather_data": weather_data,
@@ -218,8 +222,8 @@ class FakeMergedPestDiseaseClient(FakePestDiseaseClient):
             message="突发调查已合并到常规调查",
             survey_window=(date(2026, 5, 30), date(2026, 6, 1)),
             spray_stage="封行药",
-            targets=["二化螟", "稻飞虱"],
-            exclude_reasons={},
+            targets=["二化螟"],
+            exclude_reasons={"稻飞虱": "早稻不调查稻飞虱"} if cultivation_type == "早稻" else {},
             source="merge",
             raw_result={"mock": True},
             raw_response={"code": 200},
@@ -230,6 +234,7 @@ class FakeNoEventPestDiseaseClient(FakePestDiseaseClient):
     def daily_update_surveys(
         self,
         *,
+        cultivation_type: str | None = None,
         growth_stage: dict[str, str],
         regular_plans: list[dict[str, object]],
         weather_data: list[dict[str, object]],
@@ -238,6 +243,7 @@ class FakeNoEventPestDiseaseClient(FakePestDiseaseClient):
     ) -> PestDiseaseDailyUpdateResult:
         self.daily_update_calls.append(
             {
+                "cultivation_type": cultivation_type,
                 "growth_stage": growth_stage,
                 "regular_plans": regular_plans,
                 "weather_data": weather_data,
@@ -332,11 +338,11 @@ def _make_regular_calendar_item() -> CalendarItem:
         generation_condition={
             "rawPlan": {
                 "status": "need_survey",
-                "调查日期": ["20260530", "20260601"],
+                "survey_window": ["20260530", "20260601"],
                 "spray_stage": "封行药",
                 "survey_method": "一级理论防治日期",
-                "调查对象": ["二化螟", "稻飞虱"],
-                "排除原因": {},
+                "targets": ["二化螟"],
+                "exclude_reasons": {"稻飞虱": "早稻不调查稻飞虱"},
                 "msg": "当前处于可防治周期，建议按调查日期开展调查",
             },
         },
@@ -366,14 +372,15 @@ def test_build_pest_disease_daily_update_payload_uses_farm_hourly_and_alert_sour
     )
 
     assert payload is not None
+    assert payload["cultivation_type"] == "早稻"
     assert payload["regular_plans"] == [
         {
             "status": "need_survey",
-            "调查日期": ["20260530", "20260601"],
+            "survey_window": ["20260530", "20260601"],
             "spray_stage": "封行药",
             "survey_method": "一级理论防治日期",
-            "调查对象": ["二化螟", "稻飞虱"],
-            "排除原因": {},
+            "targets": ["二化螟"],
+            "exclude_reasons": {"稻飞虱": "早稻不调查稻飞虱"},
             "msg": "当前处于可防治周期，建议按调查日期开展调查",
         },
     ]
@@ -414,6 +421,7 @@ def test_run_pest_disease_daily_update_calls_client_with_built_payload() -> None
     assert result.status == "new_emergency"
     assert result.survey_window == (date(2026, 6, 1), date(2026, 6, 2))
     assert len(pest_disease_client.daily_update_calls) == 1
+    assert pest_disease_client.daily_update_calls[0]["cultivation_type"] == "早稻"
     assert pest_disease_client.daily_update_calls[0]["actual_control_date"] == date(2026, 5, 28)
 
 

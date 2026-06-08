@@ -271,7 +271,10 @@ service_effect_survey
    `survey_date`、`survey_method`、`bbch_stage`
    其中 `survey_method` 第一版按任务上下文只读回填，不允许用户手改
    `survey_method` 当前只支持 `一级理论防治日期 / 生育期`
-   动态区按任务上下文里的调查对象展开，例如：
+   动态区按任务上下文里的调查对象展开；建议优先读取 `source_calendar_item.generation_condition.rawPlan.targets`
+   `rawPlan` 中相关字段已统一为英文键：`survey_window`、`targets`、`exclude_reasons`
+   `cultivation_type=早稻` 时，任务上下文可能不包含 `DaoFeiShi`
+   例如：
    `DaoFeiShi.insects_per_100_hills`
    `DaoWenBing.acute_lesion`
    `DaoWenBing.diseased_leaf_rate`
@@ -313,10 +316,10 @@ service_effect_survey
      - widget: `date`
      - submit format: `YYYYMMDD`
    - `survey_method`
-     - required: `yes`
-     - widget: `readonly text / readonly select`
-     - allowed values: `一级理论防治日期 / 生育期`
-     - source: 任务上下文或 `CalendarItem.generation_condition.surveyMethod`
+      - required: `yes`
+      - widget: `readonly text / readonly select`
+      - allowed values: `一级理论防治日期 / 生育期`
+      - source: 任务上下文或 `source_calendar_item.generation_condition.surveyMethod`
    - `bbch_stage`
      - required: `yes`
      - widget: `number`
@@ -617,6 +620,12 @@ service_effect_survey
   "event_records": []
 }
 ```
+
+补充说明：
+
+1. `source_calendar_item` 当前会带 `generation_condition`
+2. 常规病虫调查页建议从 `source_calendar_item.generation_condition.rawPlan` 读取调查窗口和调查对象
+3. `rawPlan` 中相关字段使用英文键：`survey_window`、`targets`、`exclude_reasons`
 
 前端建议重点展示：
 
@@ -969,7 +978,8 @@ service_effect_survey
 2. 表单 schema 按 `task.task_subtype` 切换
 3. 病虫害调查结果提交后，可能返回新的 `task_intent_ids` 和 `review_request_ids`，前端不要假设只会生成执行记录
 4. `regular_disease_pest_survey` 建议默认带出 `survey_method`
-5. `regular_disease_pest_survey` 和 `sudden_disease_pest_survey` 都建议至少支持：
+5. `regular_disease_pest_survey` 的动态对象建议按 `source_calendar_item.generation_condition.rawPlan.targets` 渲染，不要硬编码固定对象集
+6. `regular_disease_pest_survey` 和 `sudden_disease_pest_survey` 都建议至少支持：
    `survey_date`
    `bbch_stage`
    一个动态病虫对象字段组
