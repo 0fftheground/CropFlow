@@ -966,7 +966,7 @@ class MockWeedDiagnosisClient:
 
 
 class HttpWeatherProvider:
-    FORECAST_HOURLY_PATH = "/algBaseDataApi/v1/getForecast10DaysBeforeAndAfter"
+    FORECAST_HOURLY_PATH = "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter"
     FORECAST_DAILY_PATH = "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter"
     AVERAGE_TEMP_PRECIPITATION_PATH = "/weather/v1/getAvgTemAndPre"
     FARM_ID_PAYLOAD_CANDIDATES = ("farmId", "farmID")

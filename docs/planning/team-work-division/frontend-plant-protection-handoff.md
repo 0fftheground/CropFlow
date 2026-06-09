@@ -903,26 +903,27 @@ service_effect_survey
 建议至少展示：
 
 1. `PlantingPlan.plan_name`
-2. `PlantingPlan.crop_name`
-3. `PlantingPlan.variety_name`
-4. `PlantingPlan.sowing_date`
-5. `PlantingPlan.status`
-6. `CropStageState.current_stage`
-7. `CropStageState.current_stage_name`
-8. `CropThermalTimeState.accumulated_thermal_time`
-9. `CropThermalTimeState.last_calculated_date`
-10. `StagePredictionSnapshot.stage_timeline.stages`
-11. `StagePredictionSnapshot.stage_timeline.raw_stage_points`
-12. `CalendarItem.title`
-13. `CalendarItem.suggested_start_date`
-14. `CalendarItem.status`
-15. `FarmingTask.title`
-16. `FarmingTask.task_subtype`
-17. `FarmingTask.status`
-18. `ReviewRequest.title`
-19. `ReviewRequest.status`
-20. `EventRecord.event_type`
-21. `EventRecord.processing_status`
+2. `PlantingPlan.farm_name`
+3. `PlantingPlan.crop_name`
+4. `PlantingPlan.variety_name`
+5. `PlantingPlan.sowing_date`
+6. `PlantingPlan.status`
+7. `CropStageState.current_stage`
+8. `CropStageState.current_stage_name`
+9. `CropThermalTimeState.accumulated_thermal_time`
+10. `CropThermalTimeState.last_calculated_date`
+11. `StagePredictionSnapshot.stage_timeline.stages`
+12. `StagePredictionSnapshot.stage_timeline.raw_stage_points`
+13. `CalendarItem.title`
+14. `CalendarItem.suggested_start_date`
+15. `CalendarItem.status`
+16. `FarmingTask.title`
+17. `FarmingTask.task_subtype`
+18. `FarmingTask.status`
+19. `ReviewRequest.title`
+20. `ReviewRequest.status`
+21. `EventRecord.event_type`
+22. `EventRecord.processing_status`
 
 ### 5.3 `task_detail`
 

@@ -878,7 +878,7 @@ class SurveyResultRecordedHandler:
                 merge_candidate=merge_candidate,
                 planting_plan_id=event.planting_plan_id,
             )
-            stale_task_intents, stale_review_requests = self._close_existing_pest_disease_control_recommendations(
+            stale_farming_tasks, stale_task_intents, stale_review_requests = self._close_existing_pest_disease_control_artifacts(
                 event.planting_plan_id,
             )
             if not merge_result.merged_result.events:
@@ -897,6 +897,7 @@ class SurveyResultRecordedHandler:
                     },
                 )
                 return OrchestratorResult(
+                    farming_tasks=stale_farming_tasks,
                     task_intents=[*stale_task_intents, task_intent],
                     review_requests=stale_review_requests,
                 )
@@ -951,6 +952,7 @@ class SurveyResultRecordedHandler:
                 description=merge_result.review_description,
             )
             return OrchestratorResult(
+                farming_tasks=stale_farming_tasks,
                 task_intents=[*stale_task_intents, task_intent],
                 review_requests=[*stale_review_requests, review_request],
             )
@@ -1085,15 +1087,34 @@ class SurveyResultRecordedHandler:
     ) -> TaskIntent | None:
         opposite_control_type = "emergency" if current_control_type == "regular" else "regular"
         for item in self.task_intent_repository.list_current_by_plan(planting_plan_id):
+            if self._is_pest_disease_merge_candidate(item, expected_control_type=opposite_control_type):
+                return item
+        for item in self.farming_task_repository.list_current_by_plan(planting_plan_id):
             if item.task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
                 continue
-            proposed_plan = dict(item.rule_result.get("proposedPlan") or {})
-            if proposed_plan.get("controlType") != opposite_control_type:
+            if item.status != FARMING_TASK_STATUS_PENDING:
                 continue
-            if not isinstance(proposed_plan.get("theoryPlan"), dict):
+            if item.task_intent_id is None:
                 continue
-            return item
+            source_task_intent = self.task_intent_repository.get(item.task_intent_id)
+            if source_task_intent is None or source_task_intent.status != TASK_INTENT_STATUS_CONVERTED:
+                continue
+            if self._is_pest_disease_merge_candidate(source_task_intent, expected_control_type=opposite_control_type):
+                return source_task_intent
         return None
+
+    def _is_pest_disease_merge_candidate(
+        self,
+        task_intent: TaskIntent,
+        *,
+        expected_control_type: str,
+    ) -> bool:
+        if task_intent.task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
+            return False
+        proposed_plan = dict(task_intent.rule_result.get("proposedPlan") or {})
+        if proposed_plan.get("controlType") != expected_control_type:
+            return False
+        return isinstance(proposed_plan.get("theoryPlan"), dict)
 
     def _build_pest_disease_merge_result(
         self,
@@ -1117,12 +1138,15 @@ class SurveyResultRecordedHandler:
             emergency_theory=emergency_theory,
         )
 
-    def _close_existing_pest_disease_control_recommendations(
+    def _close_existing_pest_disease_control_artifacts(
         self,
         planting_plan_id: int,
-    ) -> tuple[list[TaskIntent], list[ReviewRequest]]:
+    ) -> tuple[list[FarmingTask], list[TaskIntent], list[ReviewRequest]]:
+        stale_farming_tasks: list[FarmingTask] = []
         closed_task_intents: list[TaskIntent] = []
         closed_review_requests: list[ReviewRequest] = []
+        closed_task_intent_ids: set[int] = set()
+        stale_reason = "Superseded by merged disease pest control recommendation."
         active_task_intents = [
             item
             for item in self.task_intent_repository.list_current_by_plan(planting_plan_id)
@@ -1130,8 +1154,10 @@ class SurveyResultRecordedHandler:
         ]
         for item in active_task_intents:
             item.status = TASK_INTENT_STATUS_REJECTED
-            item.no_action_reason = "Superseded by merged disease pest control recommendation."
+            item.no_action_reason = stale_reason
             closed_task_intents.append(item)
+            if item.id is not None:
+                closed_task_intent_ids.add(int(item.id))
         active_task_intent_ids = {int(item.id) for item in active_task_intents if item.id is not None}
         for item in self.review_request_repository.list_current_by_plan(planting_plan_id):
             if item.source_entity_type not in {"task_intent", "cf_task_intent"}:
@@ -1141,7 +1167,22 @@ class SurveyResultRecordedHandler:
             item.status = "cancelled"
             item.decision = None
             closed_review_requests.append(item)
-        return (closed_task_intents, closed_review_requests)
+        for item in self.farming_task_repository.list_current_by_plan(planting_plan_id):
+            if item.task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
+                continue
+            item.status = "cancelled"
+            stale_farming_tasks.append(item)
+            if item.task_intent_id is None:
+                continue
+            source_task_intent = self.task_intent_repository.get(item.task_intent_id)
+            if source_task_intent is None or source_task_intent.task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
+                continue
+            source_task_intent.no_action_reason = stale_reason
+            if source_task_intent.id is None or int(source_task_intent.id) in closed_task_intent_ids:
+                continue
+            closed_task_intents.append(source_task_intent)
+            closed_task_intent_ids.add(int(source_task_intent.id))
+        return (stale_farming_tasks, closed_task_intents, closed_review_requests)
 
     def _handle_rice_safety_survey(
         self,

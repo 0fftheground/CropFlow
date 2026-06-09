@@ -45,6 +45,7 @@ def _make_details(plan_id: int, *, status: str = "draft") -> PlantingPlanDetails
             updated_at=datetime(2026, 5, 22, 10, 0, 0),
         ),
         field_ids=[10, 11],
+        farm_name="测试农场",
     )
 
 
@@ -261,6 +262,7 @@ class FakePlantingPlanQueryService:
             {
                 "planting_plan": _make_details(planting_plan_id).planting_plan,
                 "field_ids": [10, 11],
+                "farm_name": "测试农场",
                 "calendar_items": self.list_calendar_items(planting_plan_id),
                 "farming_tasks": self.list_farming_tasks(planting_plan_id),
                 "task_intents": self.list_task_intents(planting_plan_id),
@@ -318,9 +320,11 @@ def test_create_and_list_planting_plans_routes() -> None:
 
     assert create_response.status_code == 201
     assert create_response.json()["plan_code"] == "PLAN-001"
+    assert create_response.json()["farm_name"] == "测试农场"
     assert fake_service.created_payload.plan_code is None
     assert list_response.status_code == 200
     assert list_response.json()[0]["status"] == "active"
+    assert list_response.json()[0]["farm_name"] == "测试农场"
     assert fake_service.list_statuses == ["active"]
 
     app.dependency_overrides.clear()
@@ -362,8 +366,10 @@ def test_get_and_patch_planting_plan_routes() -> None:
 
     assert get_response.status_code == 200
     assert get_response.json()["id"] == 1
+    assert get_response.json()["farm_name"] == "测试农场"
     assert patch_response.status_code == 200
     assert patch_response.json()["status"] == "completed"
+    assert patch_response.json()["farm_name"] == "测试农场"
 
     app.dependency_overrides.clear()
 
@@ -423,6 +429,7 @@ def test_list_calendar_items_and_tasks_routes() -> None:
     assert snapshot_response.status_code == 200
     assert snapshot_response.json()["algorithm_code"] == "stage_prediction_algorithm"
     assert debug_response.status_code == 200
+    assert debug_response.json()["planting_plan"]["farm_name"] == "测试农场"
     assert debug_response.json()["operation_plans"][0]["farming_task_id"] == 1
     assert debug_response.json()["stage_prediction_snapshots"][0]["prediction_version"] == 3
 

@@ -54,10 +54,12 @@ class TaskExecutionCompleteResponse(BaseModel):
     execution_id: int
     execution_record_id: int
     event_record_id: int
+    operation_date: date | None
     calendar_item_ids: list[int]
 
 
 class TaskExecutionRecordUpdateRequest(BaseModel):
+    operation_date: datetime | None = None
     result_payload: dict[str, Any] | None = None
     actual_start_at: datetime | None = None
     actual_end_at: datetime | None = None
@@ -70,6 +72,7 @@ class TaskExecutionRecordUpdateResponse(BaseModel):
     execution_id: int
     execution_record_id: int
     event_record_id: int
+    operation_date: date | None
     updated_fields: list[str]
 
 
@@ -176,6 +179,7 @@ class ExecutionRecordResponse(BaseModel):
     planting_plan_id: int
     execution_id: int
     record_type: str
+    operation_date: date | None
     record_time: datetime
     actual_start_at: datetime | None
     actual_end_at: datetime | None
@@ -292,6 +296,7 @@ def update_latest_execution_record(
         result = service.update_latest_execution_record(
             task_id,
             TaskExecutionRecordUpdateInput(
+                operation_date=payload.operation_date.date() if payload.operation_date is not None else None,
                 result_payload=payload.result_payload,
                 actual_start_at=payload.actual_start_at,
                 actual_end_at=payload.actual_end_at,
@@ -326,6 +331,7 @@ def _serialize_task_execution_response(result: TaskExecutionCompleteResult) -> T
         execution_id=result.execution.id,
         execution_record_id=result.execution_record.id,
         event_record_id=result.event_record.id,
+        operation_date=_parse_optional_payload_date(result.event_record.payload, "operationDate"),
         calendar_item_ids=[item.id for item in result.calendar_items],
     )
 
@@ -337,16 +343,24 @@ def _serialize_task_execution_record_update_response(
         execution_id=result.execution.id,
         execution_record_id=result.execution_record.id,
         event_record_id=result.event_record.id,
+        operation_date=result.operation_date,
         updated_fields=result.updated_fields,
     )
 
 
 def _serialize_task_detail(detail: FarmingTaskDetail) -> FarmingTaskDetailResponse:
+    operation_dates_by_execution_record_id = _build_operation_date_map(detail.event_records)
     return FarmingTaskDetailResponse(
         task=_serialize_farming_task(detail.farming_task),
         operation_plans=[_serialize_operation_plan(item) for item in detail.operation_plans],
         executions=[_serialize_execution(item) for item in detail.executions],
-        execution_records=[_serialize_execution_record(item) for item in detail.execution_records],
+        execution_records=[
+            _serialize_execution_record(
+                item,
+                operation_date=operation_dates_by_execution_record_id.get(int(item.id)),
+            )
+            for item in detail.execution_records
+        ],
         review_request=_serialize_review_request(detail.review_request) if detail.review_request is not None else None,
         source_task_intent=(
             _serialize_task_intent(detail.source_task_intent)
@@ -359,7 +373,10 @@ def _serialize_task_detail(detail: FarmingTaskDetail) -> FarmingTaskDetailRespon
             else None
         ),
         source_execution_record=(
-            _serialize_execution_record(detail.source_execution_record)
+            _serialize_execution_record(
+                detail.source_execution_record,
+                operation_date=operation_dates_by_execution_record_id.get(int(detail.source_execution_record.id)),
+            )
             if detail.source_execution_record is not None
             else None
         ),
@@ -478,12 +495,17 @@ def _serialize_execution(execution: Execution) -> ExecutionResponse:
     )
 
 
-def _serialize_execution_record(execution_record: ExecutionRecord) -> ExecutionRecordResponse:
+def _serialize_execution_record(
+    execution_record: ExecutionRecord,
+    *,
+    operation_date: date | None = None,
+) -> ExecutionRecordResponse:
     return ExecutionRecordResponse(
         id=execution_record.id,
         planting_plan_id=execution_record.planting_plan_id,
         execution_id=execution_record.execution_id,
         record_type=execution_record.record_type,
+        operation_date=operation_date,
         record_time=execution_record.record_time,
         actual_start_at=execution_record.actual_start_at,
         actual_end_at=execution_record.actual_end_at,
@@ -509,3 +531,31 @@ def _serialize_event_record(event_record: EventRecord) -> EventRecordResponse:
         processing_status=event_record.processing_status,
         error_message=event_record.error_message,
     )
+
+
+def _build_operation_date_map(event_records: list[EventRecord]) -> dict[int, date]:
+    operation_dates_by_execution_record_id: dict[int, date] = {}
+    for event_record in event_records:
+        payload = dict(event_record.payload or {})
+        execution_record_id = payload.get("executionRecordId")
+        operation_date = _parse_optional_payload_date(payload, "operationDate")
+        if execution_record_id is None or operation_date is None:
+            continue
+        operation_dates_by_execution_record_id[int(execution_record_id)] = operation_date
+    return operation_dates_by_execution_record_id
+
+
+def _parse_optional_payload_date(payload: dict[str, Any], *keys: str) -> date | None:
+    for key in keys:
+        raw_value = payload.get(key)
+        if raw_value is None:
+            continue
+        if isinstance(raw_value, datetime):
+            return raw_value.date()
+        if isinstance(raw_value, date):
+            return raw_value
+        if isinstance(raw_value, str):
+            if "T" in raw_value:
+                return datetime.fromisoformat(raw_value).date()
+            return date.fromisoformat(raw_value)
+    return None

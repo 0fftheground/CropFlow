@@ -88,6 +88,7 @@ class PlantingPlanResponse(BaseModel):
     plan_code: str
     plan_name: str
     farm_id: int
+    farm_name: str | None
     field_ids: list[int]
     year: int | None
     culti_type_code: int
@@ -431,7 +432,11 @@ def get_planting_plan_debug_snapshot(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return PlantingPlanDebugSnapshotResponse(
         planting_plan=_serialize_planting_plan(
-            PlantingPlanDetails(planting_plan=result.planting_plan, field_ids=result.field_ids),
+            PlantingPlanDetails(
+                planting_plan=result.planting_plan,
+                field_ids=result.field_ids,
+                farm_name=result.farm_name,
+            ),
         ),
         calendar_items=[_serialize_calendar_item(item) for item in result.calendar_items],
         farming_tasks=[_serialize_farming_task(item) for item in result.farming_tasks],
@@ -558,6 +563,7 @@ def _serialize_planting_plan(details: PlantingPlanDetails) -> PlantingPlanRespon
         plan_code=planting_plan.plan_code,
         plan_name=planting_plan.plan_name,
         farm_id=planting_plan.farm_id,
+        farm_name=details.farm_name,
         field_ids=details.field_ids,
         year=planting_plan.year,
         culti_type_code=planting_plan.culti_type_code,

@@ -50,6 +50,7 @@ class TaskExecutionCompleteResult:
 
 @dataclass(slots=True)
 class TaskExecutionRecordUpdateInput:
+    operation_date: date | None = None
     result_payload: dict[str, Any] | None = None
     actual_start_at: datetime | None = None
     actual_end_at: datetime | None = None
@@ -63,6 +64,7 @@ class TaskExecutionRecordUpdateResult:
     execution: Execution
     execution_record: ExecutionRecord
     event_record: EventRecord
+    operation_date: date | None
     updated_fields: list[str]
 
 
@@ -91,6 +93,7 @@ class TaskExecutionService:
         farming_task = self.farming_task_repository.get(farming_task_id)
         if farming_task is None:
             raise LookupError(f"Farming task {farming_task_id} does not exist.")
+        self._ensure_task_accepts_execution_records(farming_task)
 
         execution = self._get_or_create_execution(farming_task)
         farming_task.status = FARMING_TASK_STATUS_COMPLETED
@@ -140,6 +143,7 @@ class TaskExecutionService:
         farming_task = self.farming_task_repository.get(farming_task_id)
         if farming_task is None:
             raise LookupError(f"Farming task {farming_task_id} does not exist.")
+        self._ensure_task_accepts_execution_records(farming_task)
 
         latest_records = self.execution_record_repository.list_by_task(farming_task_id)
         if not latest_records:
@@ -149,8 +153,17 @@ class TaskExecutionService:
         execution = self.execution_repository.get(latest_record.execution_id)
         if execution is None:
             raise LookupError(f"Execution {latest_record.execution_id} does not exist.")
+        completed_event = self._get_execution_completed_event(
+            planting_plan_id=farming_task.planting_plan_id,
+            execution_record_id=int(latest_record.id),
+        )
+        current_operation_date = _parse_optional_payload_date(
+            completed_event.payload if completed_event is not None else {},
+            "operationDate",
+        )
 
         proposed_values = {
+            "operation_date": payload.operation_date,
             "result_payload": payload.result_payload,
             "actual_start_at": payload.actual_start_at,
             "actual_end_at": payload.actual_end_at,
@@ -162,15 +175,33 @@ class TaskExecutionService:
         if not provided_fields:
             raise ValueError("At least one execution record field must be provided for update.")
 
-        before_snapshot = self._build_execution_record_snapshot(latest_record)
+        before_snapshot = self._build_execution_record_snapshot(
+            latest_record,
+            operation_date=current_operation_date,
+        )
         for field_name in provided_fields:
+            if field_name == "operation_date":
+                continue
             setattr(latest_record, field_name, proposed_values[field_name])
         if payload.actual_end_at is not None:
             latest_record.record_time = payload.actual_end_at
             execution.completed_at = payload.actual_end_at
+        if payload.operation_date is not None:
+            if completed_event is None:
+                raise ValueError(
+                    f"Execution record {latest_record.id} does not have an ExecutionCompleted event to update operation date.",
+                )
+            completed_event.payload = {
+                **dict(completed_event.payload or {}),
+                "operationDate": payload.operation_date.isoformat(),
+            }
+            completed_event.updated_at = _utcnow()
         latest_record.updated_at = _utcnow()
 
-        after_snapshot = self._build_execution_record_snapshot(latest_record)
+        after_snapshot = self._build_execution_record_snapshot(
+            latest_record,
+            operation_date=payload.operation_date or current_operation_date,
+        )
         updated_fields = [
             field_name
             for field_name in after_snapshot
@@ -193,8 +224,13 @@ class TaskExecutionService:
             execution=execution,
             execution_record=latest_record,
             event_record=event_record,
+            operation_date=payload.operation_date or current_operation_date,
             updated_fields=updated_fields,
         )
+
+    def _ensure_task_accepts_execution_records(self, farming_task) -> None:
+        if farming_task.status == "cancelled":
+            raise ValueError(f"Farming task {farming_task.id} is cancelled and cannot accept execution records.")
 
     def _get_or_create_execution(self, farming_task) -> Execution:
         active_operation_plan = (
@@ -295,8 +331,33 @@ class TaskExecutionService:
         self.event_record_repository.flush()
         return event_record
 
-    def _build_execution_record_snapshot(self, execution_record: ExecutionRecord) -> dict[str, Any]:
+    def _get_execution_completed_event(
+        self,
+        *,
+        planting_plan_id: int,
+        execution_record_id: int,
+    ) -> EventRecord | None:
+        if hasattr(self.event_record_repository, "list_by_source_record_id"):
+            for item in self.event_record_repository.list_by_source_record_id(str(execution_record_id)):
+                if item.event_type == EVENT_TYPE_EXECUTION_COMPLETED:
+                    return item
+        if hasattr(self.event_record_repository, "list_by_plan"):
+            for item in self.event_record_repository.list_by_plan(planting_plan_id):
+                payload = dict(item.payload or {})
+                if item.event_type != EVENT_TYPE_EXECUTION_COMPLETED:
+                    continue
+                if payload.get("executionRecordId") == execution_record_id:
+                    return item
+        return None
+
+    def _build_execution_record_snapshot(
+        self,
+        execution_record: ExecutionRecord,
+        *,
+        operation_date: date | None = None,
+    ) -> dict[str, Any]:
         return {
+            "operation_date": _serialize_execution_value(operation_date),
             "result_payload": dict(execution_record.result_payload or {}),
             "actual_start_at": _serialize_execution_value(execution_record.actual_start_at),
             "actual_end_at": _serialize_execution_value(execution_record.actual_end_at),
@@ -314,6 +375,24 @@ def _utcnow() -> datetime:
 def _serialize_execution_value(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
     if isinstance(value, Decimal):
         return str(value)
     return value
+
+
+def _parse_optional_payload_date(payload: dict[str, Any], *keys: str) -> date | None:
+    for key in keys:
+        raw_value = payload.get(key)
+        if raw_value is None:
+            continue
+        if isinstance(raw_value, datetime):
+            return raw_value.date()
+        if isinstance(raw_value, date):
+            return raw_value
+        if isinstance(raw_value, str):
+            if "T" in raw_value:
+                return datetime.fromisoformat(raw_value).date()
+            return date.fromisoformat(raw_value)
+    return None

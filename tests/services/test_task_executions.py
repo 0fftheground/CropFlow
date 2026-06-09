@@ -228,25 +228,55 @@ def test_update_latest_execution_record_updates_latest_record_and_creates_audit_
                 )
             ]
         ),
-        event_record_repository=event_repo,
+        event_record_repository=FakeEventRecordRepository(
+            [
+                EventRecord(
+                    id=60,
+                    planting_plan_id=1,
+                    event_type="ExecutionCompleted",
+                    event_category="execution",
+                    event_source="api",
+                    source_record_id="52",
+                    payload={
+                        "taskId": 55,
+                        "executionId": 47,
+                        "executionRecordId": 52,
+                        "operationDate": "2026-05-11",
+                    },
+                    occurred_at=datetime(2026, 5, 11, 9, 0, 0),
+                    processing_status="processed",
+                    idempotency_key="execution-completed:52",
+                )
+            ]
+        ),
         plan_orchestrator=plan_orchestrator,
     )
 
     result = service.update_latest_execution_record(
         55,
         TaskExecutionRecordUpdateInput(
+            operation_date=date(2026, 5, 12),
             actual_end_at=datetime(2026, 5, 11, 9, 30, 0),
             actual_amount=Decimal("10.5000"),
             result_payload={"note": "corrected"},
         ),
     )
 
+    execution_completed_event = service.event_record_repository.items[0]
     assert result.execution_record.actual_end_at == datetime(2026, 5, 11, 9, 30, 0)
     assert result.execution_record.actual_amount == Decimal("10.5000")
     assert result.execution_record.result_payload == {"note": "corrected"}
+    assert result.operation_date == date(2026, 5, 12)
     assert result.execution.completed_at == datetime(2026, 5, 11, 9, 30, 0)
-    assert set(result.updated_fields) == {"actual_end_at", "actual_amount", "result_payload", "record_time"}
-    assert event_repo.items[-1].event_type == "ExecutionRecordUpdated"
+    assert execution_completed_event.payload["operationDate"] == "2026-05-12"
+    assert set(result.updated_fields) == {
+        "operation_date",
+        "actual_end_at",
+        "actual_amount",
+        "result_payload",
+        "record_time",
+    }
+    assert service.event_record_repository.items[-1].event_type == "ExecutionRecordUpdated"
 
 
 def test_update_latest_execution_record_requires_existing_record() -> None:
@@ -306,4 +336,115 @@ def test_update_latest_execution_record_requires_existing_record() -> None:
             TaskExecutionRecordUpdateInput(
                 actual_amount=Decimal("1.0"),
             ),
+        )
+
+
+def test_complete_task_rejects_cancelled_task() -> None:
+    farming_task = FarmingTask(
+        id=10,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype="plant_protection.stem_leaf_weed_control",
+        title="茎叶除草",
+        status="cancelled",
+        execution_mode="manual",
+        idempotency_key="task:10",
+    )
+    service = TaskExecutionService(
+        farming_task_repository=FakeFarmingTaskRepository({10: farming_task}),
+        operation_plan_repository=FakeOperationPlanRepository(),
+        execution_repository=FakeExecutionRepository(),
+        execution_record_repository=FakeExecutionRecordRepository(),
+        event_record_repository=FakeEventRecordRepository(),
+        plan_orchestrator=build_plan_orchestrator(
+            planting_plan_repository=FakePlantingPlanRepository(make_plan()),
+            calendar_item_repository=FakeCalendarItemRepository(),
+            farming_task_repository=FakeFarmingTaskRepository({10: farming_task}),
+            event_record_repository=FakeEventRecordRepository(),
+            task_intent_repository=FakeTaskIntentRepository(),
+            review_request_repository=FakeReviewRequestRepository(),
+            operation_plan_repository=FakeOperationPlanRepository(),
+            stage_management_service=object(),
+            survey_date_recommendation_service=object(),
+            weather_provider=MockWeatherProvider(),
+            diagnosis_client=MockWeedDiagnosisClient(),
+            context_resolver=PlantProtectionPlanContextResolver(
+                FakeCodeDictRepository(make_code_dicts()),
+                FakeRiceVarietyRepository(make_variety()),
+            ),
+            pest_disease_control_planning_service=object(),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="is cancelled and cannot accept execution records"):
+        service.complete_task(
+            10,
+            TaskExecutionCompleteInput(
+                operation_date=date(2026, 4, 20),
+                result_payload={"actual": "completed"},
+            ),
+        )
+
+
+def test_update_latest_execution_record_rejects_cancelled_task() -> None:
+    farming_task = FarmingTask(
+        id=55,
+        planting_plan_id=1,
+        task_category="plant_protection",
+        task_subtype="plant_protection.soil_sealing_weed_control",
+        title="土壤封闭除草",
+        status="cancelled",
+        execution_mode="manual",
+        idempotency_key="task:55",
+    )
+    execution = Execution(
+        id=47,
+        planting_plan_id=1,
+        farming_task_id=55,
+        status="completed",
+        completed_at=datetime(2026, 5, 11, 9, 0, 0),
+    )
+    service = TaskExecutionService(
+        farming_task_repository=FakeFarmingTaskRepository({55: farming_task}),
+        operation_plan_repository=FakeOperationPlanRepository(),
+        execution_repository=FakeExecutionRepository([execution]),
+        execution_record_repository=FakeExecutionRecordRepository(
+            [
+                ExecutionRecord(
+                    id=52,
+                    planting_plan_id=1,
+                    execution_id=47,
+                    record_type="operation_result",
+                    record_time=datetime(2026, 5, 11, 9, 0, 0),
+                    actual_end_at=datetime(2026, 5, 11, 9, 0, 0),
+                    result_payload={"note": "old"},
+                    attachments=[],
+                )
+            ]
+        ),
+        event_record_repository=FakeEventRecordRepository(),
+        plan_orchestrator=build_plan_orchestrator(
+            planting_plan_repository=FakePlantingPlanRepository(make_plan()),
+            calendar_item_repository=FakeCalendarItemRepository(),
+            farming_task_repository=FakeFarmingTaskRepository({55: farming_task}),
+            event_record_repository=FakeEventRecordRepository(),
+            task_intent_repository=FakeTaskIntentRepository(),
+            review_request_repository=FakeReviewRequestRepository(),
+            operation_plan_repository=FakeOperationPlanRepository(),
+            stage_management_service=object(),
+            survey_date_recommendation_service=object(),
+            weather_provider=MockWeatherProvider(),
+            diagnosis_client=MockWeedDiagnosisClient(),
+            context_resolver=PlantProtectionPlanContextResolver(
+                FakeCodeDictRepository(make_code_dicts()),
+                FakeRiceVarietyRepository(make_variety()),
+            ),
+            pest_disease_control_planning_service=object(),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="is cancelled and cannot accept execution records"):
+        service.update_latest_execution_record(
+            55,
+            TaskExecutionRecordUpdateInput(actual_amount=Decimal("1.0")),
         )

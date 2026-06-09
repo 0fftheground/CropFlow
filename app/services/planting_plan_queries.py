@@ -19,6 +19,7 @@ from app.repositories import (
     CropStageStateRepository,
     CropThermalTimeStateRepository,
     EventRecordRepository,
+    FarmRepository,
     FarmingTaskRepository,
     OperationPlanRepository,
     PlantingPlanRepository,
@@ -46,6 +47,7 @@ class PlantingPlanM2Snapshot:
 class PlantingPlanDebugSnapshot:
     planting_plan: PlantingPlan
     field_ids: list[int]
+    farm_name: str | None
     calendar_items: list[CalendarItem]
     farming_tasks: list[FarmingTask]
     task_intents: list[TaskIntent]
@@ -71,6 +73,7 @@ class PlantingPlanQueryService:
         crop_stage_state_repository: CropStageStateRepository,
         crop_thermal_time_state_repository: CropThermalTimeStateRepository,
         stage_prediction_snapshot_repository: StagePredictionSnapshotRepository,
+        farm_repository: FarmRepository | None = None,
     ) -> None:
         self.planting_plan_repository = planting_plan_repository
         self.planting_plan_field_relation_repository = planting_plan_field_relation_repository
@@ -83,6 +86,7 @@ class PlantingPlanQueryService:
         self.crop_stage_state_repository = crop_stage_state_repository
         self.crop_thermal_time_state_repository = crop_thermal_time_state_repository
         self.stage_prediction_snapshot_repository = stage_prediction_snapshot_repository
+        self.farm_repository = farm_repository
 
     def list_calendar_items(self, planting_plan_id: int) -> list[CalendarItem]:
         self._get_plan(planting_plan_id)
@@ -135,6 +139,7 @@ class PlantingPlanQueryService:
         return PlantingPlanDebugSnapshot(
             planting_plan=planting_plan,
             field_ids=self.planting_plan_field_relation_repository.list_field_ids_by_plan(planting_plan_id),
+            farm_name=self._get_farm_name(planting_plan.farm_id),
             calendar_items=self.calendar_item_repository.list_current_by_plan(planting_plan_id),
             farming_tasks=self.farming_task_repository.list_by_plan(planting_plan_id),
             task_intents=self.task_intent_repository.list_current_by_plan(planting_plan_id),
@@ -145,6 +150,12 @@ class PlantingPlanQueryService:
             crop_stage_state=self.crop_stage_state_repository.get_by_plan(planting_plan_id),
             crop_thermal_time_state=self.crop_thermal_time_state_repository.get_by_plan(planting_plan_id),
         )
+
+    def _get_farm_name(self, farm_id: int) -> str | None:
+        if self.farm_repository is None:
+            return None
+        farm = self.farm_repository.get(farm_id)
+        return farm.farm_name if farm is not None else None
 
     def _get_plan(self, planting_plan_id: int) -> PlantingPlan:
         planting_plan = self.planting_plan_repository.get(planting_plan_id)

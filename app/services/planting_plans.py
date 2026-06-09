@@ -20,6 +20,7 @@ from app.core.constants import (
 from app.models import EventRecord, Field, PlantingPlan, RiceVariety
 from app.repositories import (
     EventRecordRepository,
+    FarmRepository,
     FieldRepository,
     PlantingPlanFieldRelationRepository,
     PlantingPlanRepository,
@@ -43,6 +44,7 @@ PLANTING_PLAN_ALLOWED_STATUSES = {"draft", "active", "completed", "cancelled"}
 class PlantingPlanDetails:
     planting_plan: PlantingPlan
     field_ids: list[int]
+    farm_name: str | None = None
 
 
 @dataclass(slots=True)
@@ -106,6 +108,7 @@ class PlantingPlanService:
         field_repository: FieldRepository,
         planting_plan_field_relation_repository: PlantingPlanFieldRelationRepository,
         rice_variety_repository: RiceVarietyRepository,
+        farm_repository: FarmRepository | None = None,
         event_record_repository: EventRecordRepository | None = None,
         plan_orchestrator: PlanEventDispatcher | None = None,
         plan_code_factory: Callable[[], str] | None = None,
@@ -114,6 +117,7 @@ class PlantingPlanService:
         self.field_repository = field_repository
         self.planting_plan_field_relation_repository = planting_plan_field_relation_repository
         self.rice_variety_repository = rice_variety_repository
+        self.farm_repository = farm_repository
         self.event_record_repository = event_record_repository
         self.plan_orchestrator = plan_orchestrator
         self.plan_code_factory = plan_code_factory
@@ -168,13 +172,23 @@ class PlantingPlanService:
                 return candidate
         raise ValueError("Unable to generate unique planting plan code.")
 
+    def _get_farm_name(self, farm_id: int) -> str | None:
+        if self.farm_repository is None:
+            return None
+        farm = self.farm_repository.get(farm_id)
+        return farm.farm_name if farm is not None else None
+
     def get_details(self, planting_plan_id: int) -> PlantingPlanDetails:
         planting_plan = self.planting_plan_repository.get(planting_plan_id)
         if planting_plan is None:
             raise LookupError(f"Planting plan {planting_plan_id} does not exist.")
 
         field_ids = self.planting_plan_field_relation_repository.list_field_ids_by_plan(planting_plan_id)
-        return PlantingPlanDetails(planting_plan=planting_plan, field_ids=field_ids)
+        return PlantingPlanDetails(
+            planting_plan=planting_plan,
+            field_ids=field_ids,
+            farm_name=self._get_farm_name(planting_plan.farm_id),
+        )
 
     def list_by_statuses(self, statuses: list[str] | None = None) -> list[PlantingPlanDetails]:
         if statuses:
@@ -190,6 +204,7 @@ class PlantingPlanService:
             PlantingPlanDetails(
                 planting_plan=plan,
                 field_ids=field_ids_map.get(plan.id, []),
+                farm_name=self._get_farm_name(plan.farm_id),
             )
             for plan in planting_plans
         ]
@@ -305,7 +320,6 @@ class PlantingPlanService:
             enumerate(payload.stage_dates.items()),
             key=lambda item: (item[1][1], item[0]),
         )
-        today = date.today()
         normalized_stage_dates: dict[str, date] = {}
         for _, (raw_stage_code, effective_date) in ordered_stage_dates:
             stage_code = str(raw_stage_code).strip()
@@ -313,10 +327,6 @@ class PlantingPlanService:
                 raise ValueError("Actual stage code cannot be empty.")
             if not is_raw_stage_code(stage_code):
                 raise ValueError(f"Actual stage code must be a raw stage code, got: {stage_code}.")
-            if effective_date > today:
-                raise ValueError(
-                    f"Actual stage effective date cannot be in the future: {effective_date.isoformat()}.",
-                )
             normalized_stage_dates[stage_code] = effective_date
         validate_manual_raw_stage_dates(normalized_stage_dates)
         latest_stage_code, latest_effective_date = max(

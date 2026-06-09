@@ -223,6 +223,7 @@ def get_planting_plan_service(
         field_repository=FieldRepository(db),
         planting_plan_field_relation_repository=PlantingPlanFieldRelationRepository(db),
         rice_variety_repository=RiceVarietyRepository(db),
+        farm_repository=FarmRepository(db),
         event_record_repository=EventRecordRepository(db),
         plan_orchestrator=build_cropflow_plan_orchestrator(db, settings),
     )
@@ -241,6 +242,7 @@ def get_planting_plan_query_service(db: Session = Depends(get_db)) -> Generator[
         crop_stage_state_repository=CropStageStateRepository(db),
         crop_thermal_time_state_repository=CropThermalTimeStateRepository(db),
         stage_prediction_snapshot_repository=StagePredictionSnapshotRepository(db),
+        farm_repository=FarmRepository(db),
     )
 
 

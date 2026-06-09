@@ -78,6 +78,7 @@ Content-Type: application/json
 | `plan_code` | `string` | 计划编码；由后端生成 |
 | `plan_name` | `string` | 计划名称 |
 | `farm_id` | `int` | 农场 id |
+| `farm_name` | `string \| null` | 农场名称；由后端根据 `farm_id` 关联返回 |
 | `field_ids` | `int[]` | 地块 id 列表 |
 | `year` | `int \| null` | 年份 |
 | `culti_type_code` | `int` | 稻作类型编码 |
@@ -699,6 +700,7 @@ Query 参数：
 | `planting_plan_id` | `int` |
 | `execution_id` | `int` |
 | `record_type` | `string` |
+| `operation_date` | `date \| null` |
 | `record_time` | `datetime` |
 | `actual_start_at` | `datetime \| null` |
 | `actual_end_at` | `datetime \| null` |
@@ -714,6 +716,7 @@ Query 参数：
 
 1. `execution_records` 已包含已完成任务的执行结果，不要因为任务状态为 `completed` 就隐藏这块
 2. 建议优先展示最近一条记录的：
+   `operation_date`
    `actual_start_at`
    `actual_end_at`
    `actual_area`
@@ -965,6 +968,7 @@ Query 参数：
 | `execution_id` | `int` | 执行 id |
 | `execution_record_id` | `int` | 执行记录 id |
 | `event_record_id` | `int` | 事件 id |
+| `operation_date` | `date \| null` | 本次作业日期；当前由 `ExecutionCompleted` 事件回填到响应 |
 | `calendar_item_ids` | `int[]` | 新生成的下游 CalendarItem |
 
 #### `plant_protection.disease_pest_control`
@@ -1009,6 +1013,7 @@ Query 参数：
 
 | field | type | required | notes |
 |---|---|---|---|
+| `operation_date` | `datetime \| null` | no | 本次作业日期；仅保留日期部分，后端会同步更新对应 `ExecutionCompleted.operationDate` |
 | `result_payload` | `object \| null` | no | 执行结果补充信息；整体替换 |
 | `actual_start_at` | `datetime \| null` | no | 实际开始时间 |
 | `actual_end_at` | `datetime \| null` | no | 实际结束时间；如变更会同步更新 `Execution.completed_at` |
@@ -1031,12 +1036,14 @@ Query 参数：
 | `execution_id` | `int` | 执行 id |
 | `execution_record_id` | `int` | 被更新的执行记录 id |
 | `event_record_id` | `int` | 新建审计事件 id |
+| `operation_date` | `date \| null` | 当前执行记录对应的作业日期 |
 | `updated_fields` | `string[]` | 本次实际发生变化的字段 |
 
 最小示例：
 
 ```json
 {
+  "operation_date": "2026-05-12T00:00:00",
   "actual_end_at": "2026-05-11T09:30:00",
   "actual_amount": 10.5,
   "result_payload": {
@@ -1052,7 +1059,9 @@ Query 参数：
   "execution_id": 21,
   "execution_record_id": 22,
   "event_record_id": 24,
+  "operation_date": "2026-05-12",
   "updated_fields": [
+    "operation_date",
     "actual_end_at",
     "actual_amount",
     "result_payload",

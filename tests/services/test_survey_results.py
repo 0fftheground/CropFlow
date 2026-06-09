@@ -62,7 +62,11 @@ class FakeFarmingTaskRepository:
             self.tasks[farming_task.id] = farming_task
 
     def list_current_by_plan(self, planting_plan_id: int) -> list[FarmingTask]:
-        return [item for item in self.tasks.values() if item.planting_plan_id == planting_plan_id]
+        return [
+            item
+            for item in self.tasks.values()
+            if item.planting_plan_id == planting_plan_id and item.status not in {"completed", "failed", "cancelled"}
+        ]
 
 
 @dataclass
@@ -114,6 +118,12 @@ class FakeEventRecordRepository:
 
     def flush(self) -> None:
         return None
+
+    def list_by_source_record_id(self, source_record_id: str) -> list[EventRecord]:
+        return [item for item in self.items if item.source_record_id == source_record_id]
+
+    def list_by_plan(self, planting_plan_id: int) -> list[EventRecord]:
+        return [item for item in self.items if item.planting_plan_id == planting_plan_id]
 
 
 @dataclass
@@ -455,7 +465,12 @@ def make_service(
     return service, task_intent_repo, review_repo, calendar_repo
 
 
-def make_merge_service() -> tuple[SurveyResultService, FakeTaskIntentRepository, FakeReviewRequestRepository]:
+def make_merge_service() -> tuple[
+    SurveyResultService,
+    FakeTaskIntentRepository,
+    FakeReviewRequestRepository,
+    FakeFarmingTaskRepository,
+]:
     plan = PlantingPlan(
         id=1,
         plan_code="PLAN-001",
@@ -595,7 +610,7 @@ def make_merge_service() -> tuple[SurveyResultService, FakeTaskIntentRepository,
         event_record_repository=event_repo,
         plan_orchestrator=plan_orchestrator,
     )
-    return service, task_intent_repo, review_repo
+    return service, task_intent_repo, review_repo, farming_task_repo
 
 
 def make_pre_treatment_payload(**extra: Any) -> dict[str, Any]:
@@ -621,6 +636,14 @@ def test_pre_treatment_survey_creates_task_intent_and_review_request() -> None:
     assert task_intent_repo.items[0].task_subtype == "plant_protection.stem_leaf_weed_control"
     assert task_intent_repo.items[0].status == "pending"
     assert review_repo.items[0].source_entity_id == task_intent_repo.items[0].id
+
+
+def test_record_survey_result_rejects_cancelled_task() -> None:
+    service, _, _, _ = make_service("plant_protection.stem_leaf_weed_pre_survey")
+    service.farming_task_repository.get(10).status = "cancelled"
+
+    with pytest.raises(ValueError, match="is cancelled and cannot accept execution records"):
+        service.record_survey_result(10, make_pre_treatment_payload())
 
 
 def test_rice_safety_survey_records_no_action_when_no_mitigation_needed() -> None:
@@ -862,7 +885,7 @@ def test_regular_disease_pest_survey_adjust_no_action_creates_no_action_intent()
 
 
 def test_sudden_disease_pest_survey_merges_with_existing_regular_control_recommendation() -> None:
-    service, task_intent_repo, review_repo = make_merge_service()
+    service, task_intent_repo, review_repo, _ = make_merge_service()
 
     service.record_survey_result(
         10,
@@ -904,6 +927,64 @@ def test_sudden_disease_pest_survey_merges_with_existing_regular_control_recomme
         "date": "20260626",
         "dy_ws": 1.0,
     }
+    assert merged_review_request.status == "open"
+    assert merged_review_request.source_entity_id == merged_task_intent.id
+    assert merge_result.task_intents[-1].id == merged_task_intent.id
+
+
+def test_regular_disease_pest_survey_merges_with_existing_converted_emergency_control_task() -> None:
+    service, task_intent_repo, review_repo, farming_task_repo = make_merge_service()
+
+    service.record_survey_result(
+        11,
+        {
+            "survey_date": "20260629",
+            "bbch_stage": 45,
+            "DaoWenBing": {"acute_lesion": True, "diseased_leaf_rate": 5},
+        },
+    )
+    existing_task_intent = task_intent_repo.items[0]
+    existing_review_request = review_repo.items[0]
+    existing_task_intent.status = "converted"
+    existing_task_intent.converted_task_id = 100
+    existing_review_request.status = "resolved"
+    existing_review_request.decision = "approve"
+    farming_task_repo.add(
+        FarmingTask(
+            id=100,
+            planting_plan_id=1,
+            task_intent_id=existing_task_intent.id,
+            review_request_id=existing_review_request.id,
+            task_category="plant_protection",
+            task_subtype="plant_protection.disease_pest_control",
+            title="病虫突发防治",
+            status="pending",
+            execution_mode="manual",
+            idempotency_key="task:converted-disease-pest-control",
+        ),
+    )
+    farming_task_repo.flush()
+
+    merge_result = service.record_survey_result(
+        10,
+        {
+            "survey_date": "20260628",
+            "survey_method": "一级理论防治日期",
+            "bbch_stage": 23,
+            "DaoFeiShi": {"insects_per_100_hills": 12},
+        },
+    )
+
+    assert existing_task_intent.status == "converted"
+    assert existing_task_intent.no_action_reason == "Superseded by merged disease pest control recommendation."
+    assert farming_task_repo.get(100).status == "cancelled"
+
+    merged_task_intent = task_intent_repo.items[-1]
+    merged_review_request = review_repo.items[-1]
+
+    assert merged_task_intent.status == "pending"
+    assert merged_task_intent.rule_result["algorithmCode"] == "pest_disease.merge_control_plan"
+    assert merged_task_intent.rule_result["proposedPlan"]["controlType"] == "merged"
     assert merged_review_request.status == "open"
     assert merged_review_request.source_entity_id == merged_task_intent.id
     assert merge_result.task_intents[-1].id == merged_task_intent.id

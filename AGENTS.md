@@ -244,6 +244,51 @@ docs/decisions/
 5. 修改完成后应尽量运行与变更范围匹配的检查。
 ```
 
+## 本地运行与验证环境
+
+```text
+1. 跑测试、脚本和本地 FastAPI 接口时，默认使用工程内虚拟环境 `F:\workspace\CropFlow\.venv`。
+2. 优先显式调用 `.venv\Scripts\python.exe`，例如 `.venv\Scripts\python.exe -m pytest`、`.venv\Scripts\python.exe -m uvicorn`。
+3. 不要混用系统 Python、外部 Conda 环境或未绑定到本仓库 `.venv` 的解释器。
+4. 如果当前 shell 没有激活 `.venv`，也应通过显式解释器路径执行命令，而不是继续使用外部环境。
+```
+
+## Headroom MCP 使用规则
+
+当当前 session 提供 Headroom MCP 且任务涉及大文件、长日志、多文件分析、RAG 检索结果、数据库查询结果、测试输出或长上下文时，优先使用 Headroom MCP。
+
+### 必须调用 `headroom_compress` 的情况
+
+```text
+1. 单个文件超过约 300 行。
+2. 日志、traceback、测试输出超过约 100 行。
+3. 一次需要阅读 5 个以上文件。
+4. 搜索结果、grep 结果、RAG chunks 很多。
+5. JSON、CSV、Markdown、SQL dump 等结构化文本很长。
+6. 用户要求分析“大文件 / 多文件 / 长上下文 / 整个项目 / 全量日志”。
+```
+
+### 使用流程
+
+```text
+1. 先调用 `headroom_compress` 压缩大上下文。
+2. 基于压缩结果判断是否足够回答。
+3. 如果需要具体证据、行号、字段、函数实现、异常栈、配置值，必须调用 `headroom_retrieve` 获取原文片段。
+4. 不要只凭压缩摘要修改关键代码。
+5. 修改代码前，应 retrieve 相关原文或直接读取关键文件。
+6. 任务完成后调用 `headroom_stats`，汇报压缩次数、retrieve 次数、节省 token 和是否有风险。
+```
+
+### 禁止滥用
+
+```text
+1. 不要对很短的文件或简单问题调用 Headroom。
+2. 不要把压缩摘要当成完整事实。
+3. 不要基于压缩摘要做数据库迁移、删除文件、修改生产配置。
+4. 涉及 schema、SQL、配置、diff、正则、错误栈时，必须查看原文。
+5. 如果当前 session 没有提供 Headroom MCP，则回退到常规文件读取、搜索和定点取证，不要在回答里假设这些工具存在。
+```
+
 ## 当前技术栈
 
 当前已确认的基础口径：
@@ -255,4 +300,3 @@ docs/decisions/
 前端：由前端负责人确定，但需遵循统一 API contract
 ```
 
-在正式进入 P2 实现前，仍应先确认当前任务依赖的契约是否已经在当前 phase 内冻结。

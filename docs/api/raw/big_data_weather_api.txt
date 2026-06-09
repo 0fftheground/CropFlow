@@ -3,7 +3,7 @@
 1.1接口描述
 查询农场当前日期前后10天小时级预报气象预报数据接口。
 1.2接口URL
- https://iland-t.zoomlion.com/open-sharing-platform/zlapi/algBaseDataApi/v1/getForecast10DaysBeforeAndAfter	
+ https://iland-t.zoomlion.com/open-sharing-platform/zlapi/weather/v1/getForecast10DaysBeforeAnd15DaysAfter
 1.3请求头入参
 字段名称	类型	描述	是否必须
 Content-Type	String	application/json	Y

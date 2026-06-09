@@ -143,11 +143,16 @@ class FakeFarmingTaskQueryService:
                 EventRecord(
                     id=50,
                     planting_plan_id=1,
-                    event_type="FarmingTaskCreated",
-                    event_category="runtime",
-                    event_source="orchestrator",
-                    source_record_id=str(farming_task_id),
-                    payload={"farmingTaskId": farming_task_id},
+                    event_type="ExecutionCompleted",
+                    event_category="execution",
+                    event_source="api",
+                    source_record_id="31",
+                    payload={
+                        "taskId": farming_task_id,
+                        "executionId": 30,
+                        "executionRecordId": 31,
+                        "operationDate": "2026-05-22",
+                    },
                     occurred_at=datetime(2026, 5, 22, 10, 0, 0),
                     processing_status="processed",
                     idempotency_key="event:50",
@@ -170,8 +175,10 @@ def test_get_task_detail_route_returns_aggregated_context() -> None:
     assert body["source_calendar_item"]["generation_condition"]["surveyMethod"] == "一级理论防治日期"
     assert body["source_calendar_item"]["generation_condition"]["rawPlan"]["targets"] == ["二化螟"]
     assert body["source_execution_record"]["record_type"] == "survey_result"
+    assert body["source_execution_record"]["operation_date"] is None
+    assert body["execution_records"][0]["operation_date"] == "2026-05-22"
     assert body["downstream_calendar_items"][0]["task_subtype"] == "plant_protection.rice_safety_survey"
-    assert body["event_records"][0]["event_type"] == "FarmingTaskCreated"
+    assert body["event_records"][0]["event_type"] == "ExecutionCompleted"
 
     app.dependency_overrides.clear()
 

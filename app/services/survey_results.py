@@ -72,6 +72,7 @@ class SurveyResultService:
         farming_task = self.farming_task_repository.get(farming_task_id)
         if farming_task is None:
             raise LookupError(f"Farming task {farming_task_id} does not exist.")
+        self._ensure_task_accepts_execution_records(farming_task)
 
         self._validate_result_payload(farming_task.task_subtype, result_payload)
         execution = self._get_or_create_execution(farming_task)
@@ -108,6 +109,10 @@ class SurveyResultService:
             task_intents=orchestrator_result.task_intents,
             review_requests=orchestrator_result.review_requests,
         )
+
+    def _ensure_task_accepts_execution_records(self, farming_task) -> None:
+        if farming_task.status == "cancelled":
+            raise ValueError(f"Farming task {farming_task.id} is cancelled and cannot accept execution records.")
 
     def _validate_result_payload(self, task_subtype: str, result_payload: dict[str, Any]) -> None:
         if task_subtype != TASK_SUBTYPE_SERVICE_EFFECT_SURVEY:

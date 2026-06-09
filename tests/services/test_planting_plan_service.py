@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.models import EventRecord, Field, PlantingPlan, RiceVariety
+from app.models import EventRecord, Farm, Field, PlantingPlan, RiceVariety
 from app.services.planting_plans import (
     ActualStageRecordedInput,
     PLANTING_PLAN_ALLOWED_STATUSES,
@@ -53,6 +53,14 @@ class FakeFieldRepository:
 
     def list_by_ids(self, field_ids: list[int]) -> list[Field]:
         return [self.fields[field_id] for field_id in field_ids if field_id in self.fields]
+
+
+@dataclass
+class FakeFarmRepository:
+    items: dict[int, Farm]
+
+    def get(self, farm_id: int) -> Farm | None:
+        return self.items.get(farm_id)
 
 
 @dataclass
@@ -111,6 +119,7 @@ def test_create_plan_derives_variety_name_and_field_relations() -> None:
         ),
         planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
         rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        farm_repository=FakeFarmRepository({1: Farm(id=1, farm_name="测试农场")}),
         event_record_repository=FakeEventRecordRepository(),
         plan_orchestrator=plan_orchestrator,
         plan_code_factory=lambda: "PLAN-AUTO-001",
@@ -132,6 +141,7 @@ def test_create_plan_derives_variety_name_and_field_relations() -> None:
 
     assert result.planting_plan.plan_code == "PLAN-AUTO-001"
     assert result.planting_plan.variety_name == "黄广农占"
+    assert result.farm_name == "测试农场"
     assert result.field_ids == [10, 11]
     assert plan_orchestrator.triggered_plan_ids == [result.planting_plan.id]
 
@@ -500,7 +510,10 @@ def test_record_actual_stages_rejects_non_raw_stage_code() -> None:
         )
 
 
-def test_record_actual_stages_rejects_future_effective_date() -> None:
+def test_record_actual_stages_allows_future_effective_date() -> None:
+    future_date = date.today() + timedelta(days=1)
+    event_repository = FakeEventRecordRepository()
+    plan_orchestrator = FakePlanOrchestrator()
     service = PlantingPlanService(
         planting_plan_repository=FakePlantingPlanRepository(
             {
@@ -524,19 +537,24 @@ def test_record_actual_stages_rejects_future_effective_date() -> None:
         field_repository=FakeFieldRepository({}),
         planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
         rice_variety_repository=FakeRiceVarietyRepository({}),
-        event_record_repository=FakeEventRecordRepository(),
-        plan_orchestrator=FakePlanOrchestrator(),
+        event_record_repository=event_repository,
+        plan_orchestrator=plan_orchestrator,
     )
 
-    with pytest.raises(ValueError, match="cannot be in the future"):
-        service.record_actual_stages(
-            1,
-            ActualStageRecordedInput(
-                stage_dates={"BBCH58": date.today() + timedelta(days=1)},
-                source_record_id="manual-1",
-                operator_id="user-7",
-            ),
-        )
+    result = service.record_actual_stages(
+        1,
+        ActualStageRecordedInput(
+            stage_dates={"BBCH58": future_date},
+            source_record_id="manual-1",
+            operator_id="user-7",
+        ),
+    )
+
+    assert len(result) == 1
+    assert result[0].payload["stageCode"] == "BBCH58"
+    assert result[0].payload["effectiveDate"] == future_date.isoformat()
+    assert event_repository.items[0].event_type == "ActualStageRecorded"
+    assert plan_orchestrator.triggered_plan_ids == [1]
 
 
 def test_record_actual_stages_rejects_conflicting_raw_stage_date_order() -> None:

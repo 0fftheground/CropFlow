@@ -130,7 +130,7 @@ class FakeTaskExecutionService:
                 event_type="ExecutionCompleted",
                 event_category="execution",
                 event_source="api",
-                payload={},
+                payload={"operationDate": payload.operation_date.isoformat()},
                 occurred_at=datetime(2026, 5, 22, 12, 0, 0),
                 idempotency_key="event:23",
             ),
@@ -167,6 +167,9 @@ class FakeTaskExecutionService:
             raise LookupError("missing")
         if farming_task_id == 400:
             raise ValueError("no execution record")
+        updated_fields = ["actual_amount", "result_payload"]
+        if payload.operation_date is not None:
+            updated_fields.insert(0, "operation_date")
         return TaskExecutionRecordUpdateResult(
             execution=Execution(
                 id=21,
@@ -191,7 +194,8 @@ class FakeTaskExecutionService:
                 occurred_at=datetime(2026, 5, 22, 12, 5, 0),
                 idempotency_key="event:24",
             ),
-            updated_fields=["actual_amount", "result_payload"],
+            operation_date=payload.operation_date,
+            updated_fields=updated_fields,
         )
 
 
@@ -291,6 +295,7 @@ def test_complete_task_execution_route_returns_calendar_item_ids() -> None:
         "execution_id": 21,
         "execution_record_id": 22,
         "event_record_id": 23,
+        "operation_date": "2026-04-20",
         "calendar_item_ids": [24, 25],
     }
 
@@ -317,6 +322,7 @@ def test_update_latest_execution_record_route_returns_updated_fields() -> None:
     response = client.patch(
         "/api/tasks/10/execution-records/latest",
         json={
+            "operation_date": "2026-05-12T00:00:00",
             "actual_amount": "12.5",
             "result_payload": {"note": "corrected"},
         },
@@ -327,7 +333,8 @@ def test_update_latest_execution_record_route_returns_updated_fields() -> None:
         "execution_id": 21,
         "execution_record_id": 22,
         "event_record_id": 24,
-        "updated_fields": ["actual_amount", "result_payload"],
+        "operation_date": "2026-05-12",
+        "updated_fields": ["operation_date", "actual_amount", "result_payload"],
     }
 
     app.dependency_overrides.clear()
