@@ -133,8 +133,9 @@ Stage Orchestrator
 ```text
 1. 更新 CropThermalTimeState
 2. 更新 StagePredictionSnapshot
-3. 产生 StageChanged
-4. 触发后续 CalendarItem / FarmingTask 更新
+3. 如 observed 导致当前阶段实际变化，产生 StageChanged
+4. forecast / climatology 默认只刷新预测层，不直接触发 StageChanged
+5. 仅当产生 StageChanged 时，才继续触发后续 CalendarItem / FarmingTask 更新
 ```
 
 ---

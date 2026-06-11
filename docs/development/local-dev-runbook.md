@@ -74,6 +74,22 @@ curl http://127.0.0.1:8000/api/health
 3. 同步导入 `pp_rice_control_window_level_1.csv`
 4. 同步导入 `cf_crop_stage_dict_20260601.csv`
 
+如果只需要最小必需参考数据，不要演示农场 / 计划 / 任务数据，执行：
+
+```powershell
+.venv\Scripts\python.exe scripts/seed_reference_data.py
+```
+
+用途：
+
+1. 初始化 `cf_code_dict`
+2. 初始化 `cf_crop_stage_dict`
+3. 初始化 `cf_rice_variety`
+4. 初始化 `pp_rice_control_window_level_1`
+5. 初始化 `cf_farm`
+6. 初始化 `cf_field`
+7. 初始化 `cf_farm_field_relation`
+
 ## 5. 后端自检
 
 健康检查：
@@ -96,3 +112,4 @@ curl http://127.0.0.1:8000/api/health
 4. 本地 API 日志默认可落到：
    `./.codex-temp/cropflow-api.stdout.log`
    `./.codex-temp/cropflow-api.stderr.log`
+5. 如果需要通过本地 SSH tunnel 初始化远程数据库，优先看 `docs/development/remote-db-bootstrap.md`，或直接执行 `scripts/bootstrap-db.ps1`。

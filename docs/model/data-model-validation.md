@@ -434,16 +434,17 @@ additional_treatment_diagnosis 返回无需补防、需缓解药害、待药害�
 
 | 问题 | 结论 | 影响 |
 |---|---|---|
-| 外部执行系统是否有主动回调？ | pending | ExecutionStatusUpdated |
+| 外部执行系统是否有主动回调？ | 结构上需要支持；HW 主动回调进入 Execution Module，杂草防治第一版暂不接 | ExecutionStatusUpdated |
 | 回调 payload 格式是什么？ | pending | ExecutionRecord.resultPayload |
 | 一个 Execution 是否可能下发多个 DeviceCommand？ | pending | DeviceCommand |
-| 是否需要轮询兜底？ | pending | ExecutionStatusPollingJob / EventRecord |
+| 是否需要轮询兜底？ | 需要；如 HW 不主动回调，由 ExecutionStatusPollingJob 轮询兜底 | ExecutionStatusPollingJob / EventRecord |
 | 设备失败原因是否结构化？ | pending | failureReason / callbackPayload |
 
 当前对杂草防治链路已补充冻结结论：
 
 ```text
-杂草防治第一版不接设备回调或第三方执行系统回传；相关回调、轮询和 DeviceCommand 细节后续按其他农事项统一扩展。
+1. 结构边界已经冻结：HW 主动回调进入 Execution Module；如 HW 不主动回调，由 ExecutionStatusPollingJob 轮询兜底。
+2. 杂草防治第一版不接设备回调或第三方执行系统回传；相关 payload 细节和 DeviceCommand 约束后续按其他农事项统一扩展。
 ```
 
 ---

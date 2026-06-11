@@ -30,9 +30,11 @@ class Settings(BaseSettings):
     debug: bool = False
     api_prefix: str = "/api"
     sql_echo: bool = False
+    require_real_integrations: bool = False
     database_url: str | None = None
     weed_diagnosis_base_url: str | None = None
     pest_disease_survey_base_url: str | None = None
+    pest_disease_control_base_url: str | None = None
     stage_prediction_base_url: str | None = None
     weather_api_base_url: str | None = None
     weather_api_token: str | None = None

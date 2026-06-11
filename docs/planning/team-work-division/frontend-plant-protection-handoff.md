@@ -579,7 +579,7 @@ service_effect_survey
 2. 点击 `FarmingTask` 卡片跳转 `task_detail`
 3. 点击 `ReviewRequest` 卡片跳转 `review_request`
 4. 对具备权限的人员开放“人工录入真实生育期”入口，提交 `POST /actual-stages`
-5. 人工录入只接受 raw stage code，且日期只能是当天或过去日期
+5. 人工录入只接受 raw stage code；日期第一版允许按联调需要录入未来日期
 6. 支持同一次提交录入多个 raw stage code；后端会把这些点作为一批人工锚点一起应用
 7. 如多条 raw stage 的日期顺序与 raw stage 顺序冲突，后端会直接拒绝录入
 8. 提交后后端会以这些 raw stage code 作为锚点重算后续预测日期；锚点之间已存在的中间阶段日期默认保留

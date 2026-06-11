@@ -79,7 +79,7 @@ observed > forecast > climatology
 
 ```text
 1. 只接受 raw stage code。
-2. 只能录入当天或过去日期。
+2. 第一版允许按联调需要录入未来日期，不再限制只能录入当天或过去日期。
 3. 录入后以该 raw stage code 作为锚点，重算后续所有生育期预测日期。
 4. 当前阶段编码在人工录入场景下以 raw stage code 为准。
 ```

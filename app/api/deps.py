@@ -59,15 +59,81 @@ from app.services import (
 )
 
 
+def _require_setting(settings: Settings, value: str | None, env_name: str, capability: str) -> str:
+    normalized = value.strip() if isinstance(value, str) else ""
+    if normalized:
+        return normalized
+    if settings.require_real_integrations:
+        raise RuntimeError(
+            f"{capability} requires {env_name} when CROPFLOW_REQUIRE_REAL_INTEGRATIONS=true.",
+        )
+    return ""
+
+
+def build_weed_diagnosis_client(
+    settings: Settings,
+) -> HttpWeedDiagnosisClient | MockWeedDiagnosisClient:
+    base_url = _require_setting(
+        settings,
+        settings.weed_diagnosis_base_url,
+        "CROPFLOW_WEED_DIAGNOSIS_BASE_URL",
+        "Weed diagnosis integration",
+    )
+    if base_url:
+        return HttpWeedDiagnosisClient(base_url)
+    return MockWeedDiagnosisClient()
+
+
+def build_pest_disease_survey_window_client(
+    settings: Settings,
+) -> HttpPestDiseaseSurveyWindowClient | MockPestDiseaseSurveyWindowClient:
+    base_url = _require_setting(
+        settings,
+        settings.pest_disease_survey_base_url,
+        "CROPFLOW_PEST_DISEASE_SURVEY_BASE_URL",
+        "Pest disease survey integration",
+    )
+    if base_url:
+        return HttpPestDiseaseSurveyWindowClient(base_url)
+    return MockPestDiseaseSurveyWindowClient()
+
+
+def build_pest_disease_control_client(
+    settings: Settings,
+) -> HttpPestDiseaseControlClient | MockPestDiseaseControlClient:
+    base_url = settings.pest_disease_control_base_url or settings.pest_disease_survey_base_url
+    base_url = _require_setting(
+        settings,
+        base_url,
+        "CROPFLOW_PEST_DISEASE_CONTROL_BASE_URL",
+        "Pest disease control integration",
+    )
+    if base_url:
+        return HttpPestDiseaseControlClient(base_url)
+    return MockPestDiseaseControlClient()
+
+
 def build_weather_provider(
     db: Session,
     settings: Settings,
 ) -> WeatherProvider:
-    if settings.weather_api_base_url and settings.weather_api_token:
+    weather_api_base_url = _require_setting(
+        settings,
+        settings.weather_api_base_url,
+        "CROPFLOW_WEATHER_API_BASE_URL",
+        "Weather integration",
+    )
+    weather_api_token = _require_setting(
+        settings,
+        settings.weather_api_token,
+        "CROPFLOW_WEATHER_API_TOKEN",
+        "Weather integration",
+    )
+    if weather_api_base_url and weather_api_token:
         return HttpWeatherProvider(
             farm_repository=FarmRepository(db),
-            base_url=settings.weather_api_base_url,
-            auth_token=settings.weather_api_token,
+            base_url=weather_api_base_url,
+            auth_token=weather_api_token,
             alert_base_url=settings.weather_alert_api_base_url,
             alert_auth_token=settings.weather_alert_api_token,
             timeout_seconds=settings.weather_api_timeout_seconds,
@@ -80,16 +146,8 @@ def build_survey_date_recommendation_service(
     db: Session,
     settings: Settings,
 ) -> SurveyDateRecommendationService | None:
-    diagnosis_client = (
-        HttpWeedDiagnosisClient(settings.weed_diagnosis_base_url)
-        if settings.weed_diagnosis_base_url
-        else MockWeedDiagnosisClient()
-    )
-    pest_disease_client = (
-        HttpPestDiseaseSurveyWindowClient(settings.pest_disease_survey_base_url)
-        if settings.pest_disease_survey_base_url
-        else MockPestDiseaseSurveyWindowClient()
-    )
+    diagnosis_client = build_weed_diagnosis_client(settings)
+    pest_disease_client = build_pest_disease_survey_window_client(settings)
 
     return SurveyDateRecommendationService(
         planting_plan_repository=PlantingPlanRepository(db),
@@ -114,9 +172,15 @@ def build_stage_management_service(
     weather_provider: WeatherProvider | None = None,
 ) -> StageManagementService:
     weather_provider = weather_provider or build_weather_provider(db, settings)
+    stage_prediction_base_url = _require_setting(
+        settings,
+        settings.stage_prediction_base_url,
+        "CROPFLOW_STAGE_PREDICTION_BASE_URL",
+        "Stage prediction integration",
+    )
     stage_prediction_client = (
-        HttpStagePredictionClient(settings.stage_prediction_base_url)
-        if settings.stage_prediction_base_url
+        HttpStagePredictionClient(stage_prediction_base_url)
+        if stage_prediction_base_url
         else MockStagePredictionClient()
     )
     return StageManagementService(
@@ -141,21 +205,9 @@ def build_cropflow_plan_orchestrator(
     pest_disease_client: HttpPestDiseaseSurveyWindowClient | MockPestDiseaseSurveyWindowClient | None = None,
 ) -> PlanOrchestrator:
     weather_provider = weather_provider or build_weather_provider(db, settings)
-    diagnosis_client = diagnosis_client or (
-        HttpWeedDiagnosisClient(settings.weed_diagnosis_base_url)
-        if settings.weed_diagnosis_base_url
-        else MockWeedDiagnosisClient()
-    )
-    pest_disease_client = pest_disease_client or (
-        HttpPestDiseaseSurveyWindowClient(settings.pest_disease_survey_base_url)
-        if settings.pest_disease_survey_base_url
-        else MockPestDiseaseSurveyWindowClient()
-    )
-    pest_disease_control_client = (
-        HttpPestDiseaseControlClient(settings.pest_disease_survey_base_url)
-        if settings.pest_disease_survey_base_url
-        else MockPestDiseaseControlClient()
-    )
+    diagnosis_client = diagnosis_client or build_weed_diagnosis_client(settings)
+    pest_disease_client = pest_disease_client or build_pest_disease_survey_window_client(settings)
+    pest_disease_control_client = build_pest_disease_control_client(settings)
     context_resolver = PlantProtectionPlanContextResolver(
         code_dict_repository=CodeDictRepository(db),
         rice_variety_repository=RiceVarietyRepository(db),
@@ -291,11 +343,7 @@ def get_survey_result_service(
     settings: Settings = Depends(get_settings),
 ) -> Generator[SurveyResultService, None, None]:
     weather_provider = build_weather_provider(db, settings)
-    diagnosis_client = (
-        HttpWeedDiagnosisClient(settings.weed_diagnosis_base_url)
-        if settings.weed_diagnosis_base_url
-        else MockWeedDiagnosisClient()
-    )
+    diagnosis_client = build_weed_diagnosis_client(settings)
     yield SurveyResultService(
         farming_task_repository=FarmingTaskRepository(db),
         execution_repository=ExecutionRepository(db),
@@ -315,11 +363,7 @@ def get_task_execution_service(
     settings: Settings = Depends(get_settings),
 ) -> Generator[TaskExecutionService, None, None]:
     weather_provider = build_weather_provider(db, settings)
-    diagnosis_client = (
-        HttpWeedDiagnosisClient(settings.weed_diagnosis_base_url)
-        if settings.weed_diagnosis_base_url
-        else MockWeedDiagnosisClient()
-    )
+    diagnosis_client = build_weed_diagnosis_client(settings)
     yield TaskExecutionService(
         farming_task_repository=FarmingTaskRepository(db),
         operation_plan_repository=OperationPlanRepository(db),

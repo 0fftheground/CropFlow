@@ -521,7 +521,7 @@ PlantingPlanFieldRelation 用于维护种植计划与地块关系，是 Planting
 生育期预测算法当前只返回预测时间线，不直接返回当前阶段。
 CropStageState.currentStageCode 由 Stage Orchestrator 根据 stageTimeline 和当前日期计算或由人工录入修正。
 人工录入真实生育期时，优先修正 CropStageState；CropThermalTimeState 仍按 sowingDate 持续累计，不因人工反馈重新起算。
-人工录入只接受 raw stage code，且只能录入当天或过去日期；录入后以该 raw stage code 作为锚点，重算后续所有生育期预测日期。
+人工录入只接受 raw stage code；日期第一版允许按联调需要录入未来日期，录入后以该 raw stage code 作为锚点，重算后续所有生育期预测日期。
 人工录入触发的当前阶段编码以 raw stage code 为准；业务阶段码只用于映射、展示或帮助选择 raw stage code。
 stageTimeline 第一版保存算法返回的各生育期节点日期。
 算法版本如果外部服务暂不返回，可以为空；algorithmCode 仍用于标识调用的算法接口。

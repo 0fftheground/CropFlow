@@ -1,25 +1,19 @@
 from __future__ import annotations
 
-import csv
-import json
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 
-from sqlalchemy import Select, func, select, text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from app.bootstrap.reference_data import seed_reference_data
 from app.db.session import get_session_factory
 from app.models import (
     CalendarItem,
-    CodeDict,
-    CropStageDict,
     Farm,
     FarmingTask,
     Field,
-    RiceControlWindowLevel1,
-    RiceVariety,
     User,
 )
 from app.orchestrator import build_plan_orchestrator
@@ -56,11 +50,6 @@ from app.services import (
     TaskGenerationService,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-CODE_DICT_CSV = REPO_ROOT / "database" / "sql" / "agri_code_dict_202605181653.csv"
-STAGE_DICT_CSV = REPO_ROOT / "database" / "sql" / "cf_crop_stage_dict_20260601.csv"
-RICE_VARIETY_CSV = REPO_ROOT / "database" / "sql" / "agri_rice_variety_202605181649.csv"
-RICE_CONTROL_WINDOW_LEVEL1_CSV = REPO_ROOT / "database" / "sql" / "pp_rice_control_window_level_1.csv"
 SEED_ACTOR = "seed_local_dev_data"
 DEMO_PLAN_CODE = "DEV-PLAN-001"
 
@@ -99,10 +88,7 @@ def main() -> None:
 
 
 def seed_local_dev_data(session: Session) -> SeedSummary:
-    code_dict_count = _seed_code_dicts(session)
-    crop_stage_dict_count = _seed_crop_stage_dict(session)
-    rice_variety_count = _seed_rice_varieties(session)
-    rice_control_window_level1_count = _seed_rice_control_window_level1(session)
+    reference_summary = seed_reference_data(session)
     farm = _upsert_demo_farm(session)
     fields = _upsert_demo_fields(session)
     _ensure_farm_field_relations(session, farm_id=farm.id, field_ids=[field.id for field in fields])
@@ -114,10 +100,10 @@ def seed_local_dev_data(session: Session) -> SeedSummary:
     farming_task_ids = _ensure_due_tasks(session, planting_plan_id)
 
     return SeedSummary(
-        code_dict_count=code_dict_count,
-        crop_stage_dict_count=crop_stage_dict_count,
-        rice_variety_count=rice_variety_count,
-        rice_control_window_level1_count=rice_control_window_level1_count,
+        code_dict_count=reference_summary.code_dict_count,
+        crop_stage_dict_count=reference_summary.crop_stage_dict_count,
+        rice_variety_count=reference_summary.rice_variety_count,
+        rice_control_window_level1_count=reference_summary.rice_control_window_level1_count,
         farm_id=farm.id,
         field_ids=[field.id for field in fields],
         reviewer_user_id=reviewer.id,
@@ -125,95 +111,6 @@ def seed_local_dev_data(session: Session) -> SeedSummary:
         calendar_item_ids=calendar_item_ids,
         farming_task_ids=farming_task_ids,
     )
-
-
-def _seed_code_dicts(session: Session) -> int:
-    with CODE_DICT_CSV.open("r", encoding="utf-8-sig", newline="") as handle:
-        for row in csv.DictReader(handle):
-            item = session.get(CodeDict, int(row["id"]))
-            if item is None:
-                item = CodeDict(id=int(row["id"]))
-                session.add(item)
-
-            item.code = int(row["code"])
-            item.code_name = row["code_name"]
-            item.category = row["category"]
-            item.is_active = row["is_active"].lower() == "true"
-            item.created_by_type = "system"
-            item.created_by_id = SEED_ACTOR
-
-    session.flush()
-    _sync_id_sequence(session, "cf_code_dict")
-    return _count_rows(session, select(func.count()).select_from(CodeDict))
-
-
-def _seed_crop_stage_dict(session: Session) -> int:
-    with STAGE_DICT_CSV.open("r", encoding="utf-8-sig", newline="") as handle:
-        for row in csv.DictReader(handle):
-            item = session.get(CropStageDict, int(row["id"]))
-            if item is None:
-                item = CropStageDict(id=int(row["id"]))
-                session.add(item)
-
-            item.stage_code = row["stage_code"].strip()
-            item.stage_name = row["stage_name"].strip()
-            item.season_scope = row["season_scope"].strip()
-            item.business_stage_code = row["business_stage_code"].strip() or None
-            item.display_order = int(row["display_order"])
-            item.is_active = str(row["is_active"]).strip().lower() == "true"
-            item.created_by_type = "system"
-            item.created_by_id = SEED_ACTOR
-
-    session.flush()
-    _sync_id_sequence(session, "cf_crop_stage_dict")
-    return _count_rows(session, select(func.count()).select_from(CropStageDict))
-
-
-def _seed_rice_varieties(session: Session) -> int:
-    with RICE_VARIETY_CSV.open("r", encoding="utf-8-sig", newline="") as handle:
-        for row in csv.DictReader(handle):
-            item = session.get(RiceVariety, int(row["id"]))
-            if item is None:
-                item = RiceVariety(id=int(row["id"]))
-                session.add(item)
-
-            item.name = row["name"]
-            item.approve_year = _parse_optional_int(row["approve_year"])
-            item.approve_no = row["approve_no"] or None
-            item.approve_region = row["approve_region"] or None
-            item.suitable_region = row["suitable_region"] or None
-            item.culti_type_code = _parse_optional_int(row["culti_type"])
-            item.sub_type_code = _parse_optional_int(row["sub_type"])
-            item.maturity_code = _parse_optional_int(row["maturity"])
-            item.control_variety = row["control_variety"] or None
-            item.growth_days = _parse_optional_decimal(row["growth_days"])
-            item.compare_days = _parse_optional_decimal(row["compare_days"])
-            item.rice_code = row["rice_code"] or None
-            item.created_by_type = "system"
-            item.created_by_id = SEED_ACTOR
-
-    session.flush()
-    _sync_id_sequence(session, "cf_rice_variety")
-    return _count_rows(session, select(func.count()).select_from(RiceVariety))
-
-
-def _seed_rice_control_window_level1(session: Session) -> int:
-    with RICE_CONTROL_WINDOW_LEVEL1_CSV.open("r", encoding="utf-8-sig", newline="") as handle:
-        for row in csv.DictReader(handle):
-            item = session.get(RiceControlWindowLevel1, int(row["id"]))
-            if item is None:
-                item = RiceControlWindowLevel1(id=int(row["id"]))
-                session.add(item)
-
-            item.province = row["province"].strip()
-            item.city = row["city"].strip()
-            item.county = row["county"].strip()
-            item.data_year = int(str(row["data_year"]).strip().strip('"'))
-            item.detail = json.loads(row["detail"])
-
-    session.flush()
-    _sync_id_sequence(session, "pp_rice_control_window_level_1")
-    return _count_rows(session, select(func.count()).select_from(RiceControlWindowLevel1))
 
 
 def _upsert_demo_farm(session: Session) -> Farm:
@@ -497,20 +394,6 @@ def _sync_id_sequence(session: Session, table_name: str) -> None:
             """,
         ),
     )
-
-
-def _count_rows(session: Session, stmt: Select[tuple[int]]) -> int:
-    return int(session.execute(stmt).scalar_one())
-
-
-def _parse_optional_int(raw_value: str) -> int | None:
-    value = raw_value.strip()
-    return int(value) if value else None
-
-
-def _parse_optional_decimal(raw_value: str) -> Decimal | None:
-    value = raw_value.strip()
-    return Decimal(value) if value else None
 
 
 if __name__ == "__main__":

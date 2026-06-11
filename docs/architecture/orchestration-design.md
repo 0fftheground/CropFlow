@@ -378,9 +378,17 @@ Stage Orchestrator 更新积温
   ↓
 判断是否影响生育期预测
   ↓
-如生育期变化，返回 StageChanged
+刷新 StagePredictionSnapshot / CropThermalTimeState
+  ↓
+如 observed 导致当前阶段实际变化，返回 StageChanged
   ↓
 Plan Orchestrator 继续处理 StageChanged 影响
+```
+
+补充口径：
+
+```text
+forecast / climatology 默认只刷新预测层，不产生 StageChanged。
 ```
 
 #### ActualStageRecordedHandler
