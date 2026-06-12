@@ -893,16 +893,16 @@ Query 参数：
 
 | 对象 key | 中文建议 | 字段 | type | 取值/单位 | 说明 |
 |---|---|---|---|---|---|
-| `ErHuaMing` | 二化螟 | `dead_sheath_rate` | `number` | `0~1` | 枯鞘比例 |
-| `ErHuaMing` | 二化螟 | `dead_heart_rate` | `number` | `0~1` | 枯心比例 |
+| `ErHuaMing` | 二化螟 | `dead_sheath_rate` | `number` | `0~1` | 枯鞘率 |
+| `ErHuaMing` | 二化螟 | `dead_heart_rate` | `number` | `0~1` | 枯心率 |
 | `ErHuaMing` | 二化螟 | `main_larval_instars` | `int` | `0~6` | 主要虫龄，`0` 表示未发现或无主要虫龄 |
-| `ErHuaMing` | 二化螟 | `damaged_plant_rate` | `number` | `0~1` | 虫伤株比例 |
-| `DaoFeiShi` | 稻飞虱 | `insects_per_100_hills` | `number` | `>=0` | 每百丛虫量 |
+| `ErHuaMing` | 二化螟 | `damaged_plant_rate` | `number` | `0~1` | 虫伤株率 |
+| `DaoFeiShi` | 稻飞虱 | `insects_per_100_hills` | `number` | `>=0` | 百丛虫量 |
 | `DaoWenBing` | 稻瘟病 | `acute_lesion` | `bool` | `true/false` | 是否发现急性病斑 |
-| `DaoWenBing` | 稻瘟病 | `diseased_leaf_rate` | `number` | `0~1` | 病叶比例 |
+| `DaoWenBing` | 稻瘟病 | `diseased_leaf_rate` | `number` | `0~1` | 病叶率 |
 | `WenKuBing` | 纹枯病 | `lesion_on_upper_leaf_sheath` | `bool` | `true/false` | 倒 2 叶鞘及以上是否发现病斑 |
-| `WenKuBing` | 纹枯病 | `diseased_hill_rate` | `number` | `0~1` | 病丛比例 |
-| `DaoZongJuanYeMing` | 稻纵卷叶螟 | `rolled_leaf_tips_per_100_hills` | `number` | `>=0` | 每百丛束尖数 |
+| `WenKuBing` | 纹枯病 | `diseased_hill_rate` | `number` | `0~1` | 病丛率 |
+| `DaoZongJuanYeMing` | 稻纵卷叶螟 | `rolled_leaf_tips_per_100_hills` | `number` | `>=0` | 百丛束尖数 |
 | `DaoZongJuanYeMing` | 稻纵卷叶螟 | `larvae_count` | `number` | `>=0` | 幼虫数量 |
 | `DaoZongJuanYeMing` | 稻纵卷叶螟 | `moths_per_square_meter` | `number` | `>=0` | 每平方米蛾量 |
 

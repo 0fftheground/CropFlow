@@ -75,20 +75,20 @@
 
 病虫调查字段：
 
-| 对象 | 字段 | 类型 | 取值/单位 | 说明 |
-| --- | --- | --- | --- | --- |
-| `ErHuaMing` | `dead_sheath_rate` | number | `0~1` | 枯鞘比例。 |
-| `ErHuaMing` | `dead_heart_rate` | number | `0~1` | 枯心比例。 |
+| 对象 | 字段 | 类型 | 取值/单位 | 说明                   |
+| --- | --- | --- | --- |----------------------|
+| `ErHuaMing` | `dead_sheath_rate` | number | `0~1` | 枯鞘率。                 |
+| `ErHuaMing` | `dead_heart_rate` | number | `0~1` | 枯心率。                 |
 | `ErHuaMing` | `main_larval_instars` | integer | `0~6` | 主要虫龄，`0` 表示未发现或无主要虫龄。 |
-| `ErHuaMing` | `damaged_plant_rate` | number | `0~1` | 虫伤株比例。 |
-| `DaoFeiShi` | `insects_per_100_hills` | number | `>=0` | 每百丛虫量。 |
-| `DaoWenBing` | `acute_lesion` | boolean | `true/false` | 是否发现急性病斑。 |
-| `DaoWenBing` | `diseased_leaf_rate` | number | `0~1` | 病叶比例。 |
-| `WenKuBing` | `lesion_on_upper_leaf_sheath` | boolean | `true/false` | 倒 2 叶鞘及以上是否发现病斑。 |
-| `WenKuBing` | `diseased_hill_rate` | number | `0~1` | 病丛比例。 |
-| `DaoZongJuanYeMing` | `rolled_leaf_tips_per_100_hills` | number | `>=0` | 每百丛束尖数。 |
-| `DaoZongJuanYeMing` | `larvae_count` | number | `>=0` | 幼虫数量。 |
-| `DaoZongJuanYeMing` | `moths_per_square_meter` | number | `>=0` | 每平方米蛾量。 |
+| `ErHuaMing` | `damaged_plant_rate` | number | `0~1` | 虫伤株率。                |
+| `DaoFeiShi` | `insects_per_100_hills` | number | `>=0` | 百丛虫量。                |
+| `DaoWenBing` | `acute_lesion` | boolean | `true/false` | 是否发现急性病斑。            |
+| `DaoWenBing` | `diseased_leaf_rate` | number | `0~1` | 病叶率。                 |
+| `WenKuBing` | `lesion_on_upper_leaf_sheath` | boolean | `true/false` | 倒 2 叶鞘及以上是否发现病斑。     |
+| `WenKuBing` | `diseased_hill_rate` | number | `0~1` | 病丛率。                 |
+| `DaoZongJuanYeMing` | `rolled_leaf_tips_per_100_hills` | number | `>=0` | 百丛束尖数。               |
+| `DaoZongJuanYeMing` | `larvae_count` | number | `>=0` | 幼虫数量。                |
+| `DaoZongJuanYeMing` | `moths_per_square_meter` | number | `>=0` | 每平方米蛾量。              |
 
 病虫调查字段缺失或为空时按 `0` 或 `false` 处理；为保证诊断准确性，建议完整传入实际调查数据。
 
