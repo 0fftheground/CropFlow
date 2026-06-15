@@ -451,6 +451,7 @@ service_effect_survey
 3. 候选任务或候选方案
 4. 来源调查或来源执行记录
 5. 当前待审核状态
+6. 对于 `review_type=disease_pest_control_recommendation`，优先展示 `source_task_intent.rule_result.proposedPlan` 中的候选防治方案
 
 主要操作：
 
@@ -463,6 +464,8 @@ service_effect_survey
 
 1. 审核页不要只显示一个按钮，必须能看清上下文
 2. 审核结果要能带回任务或方案的 id 变化
+3. 病虫害防治审核在待审核阶段通常还没有正式 `OperationPlan`；`operation_plans` 为空属于正常
+4. 病虫害防治审核页不要只盯 `operation_plans`，应优先读取 `source_task_intent.rule_result.proposedPlan`
 
 ### 3.7 `execution_feedback`
 
@@ -705,6 +708,15 @@ service_effect_survey
 |---|---|---|---|
 | 查看复核详情 | `GET` | `/api/review-requests/{reviewRequestId}` | 读取审核上下文 |
 | 提交审核结论 | `POST` | `/api/review-requests/{reviewRequestId}/resolve` | 提交复核决策 |
+
+病虫害防治审核页读取建议：
+
+1. `GET /api/planting-plans/{plantingPlanId}/review-requests` 只适合做待审核列表摘要，不包含候选防治方案全文
+2. 进入审核详情页后，使用 `GET /api/review-requests/{reviewRequestId}` 拉取完整上下文
+3. 对 `review_type=disease_pest_control_recommendation`，前端应优先从 `source_task_intent.rule_result.proposedPlan` 读取候选防治方案
+4. 当前病虫害审核建议稿的关键字段通常在 `proposedPlan.operationWindow`、`proposedPlan.targets`、`proposedPlan.rounds`、`proposedPlan.controlPlan`、`proposedPlan.theoryPlan`、`proposedPlan.adjustedPlan`、`proposedPlan.basis`
+5. `operation_plans` 只有在审核已生成正式 `FarmingTask / OperationPlan` 后才会有值；对处于 `open` 状态的病虫害审核，`operation_plans` 为空通常是正常表现
+6. 审核通过后，前端应优先使用返回的 `farming_task_ids` 或 `operation_plan_ids` 刷新任务详情页；正式方案再从 `GET /api/tasks/{taskId}` 的 `operation_plans` 读取
 
 `POST /api/review-requests/{reviewRequestId}/resolve` 请求格式：
 

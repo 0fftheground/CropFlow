@@ -1104,6 +1104,93 @@ Query 参数：
 | `source_execution_record` | `ReviewRequestExecutionRecordResponse \| null` | 来源调查记录 |
 | `event_records` | `ReviewRequestEventRecordResponse[]` | 相关事件 |
 
+#### `ReviewRequestTaskIntentResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 来源 `TaskIntent` id |
+| `task_subtype` | `string` | 建议对应的任务 subtype |
+| `status` | `string` | 当前建议状态 |
+| `trigger_type` | `string` | 触发事件类型 |
+| `trigger_summary` | `string \| null` | 触发摘要 |
+| `suggested_action` | `string \| null` | 建议动作 |
+| `rule_result` | `object` | 结构化建议正文；病虫害审核页应重点读取其中的 `proposedPlan` |
+| `converted_task_id` | `int \| null` | 已转成正式任务时的任务 id |
+| `source_execution_record_id` | `int \| null` | 来源调查记录 id |
+
+`rule_result` 当前常见结构：
+
+1. `algorithmCode`
+2. `branchType`
+3. `proposedTask`
+4. `proposedPlan`
+5. `parentTaskId`
+6. `sourceExecutionId`
+7. `sourceExecutionRecordId`
+8. `inputExecutionRecordIds`
+9. `rawResponse`
+
+病虫害防治审核页读取建议：
+
+1. 对 `review_type=disease_pest_control_recommendation`，优先从 `source_task_intent.rule_result.proposedPlan` 读取候选防治方案
+2. 当前常见关键字段包括 `operationWindow`、`targets`、`rounds`、`controlPlan`、`theoryPlan`、`adjustedPlan`、`basis`
+3. 审核通过前通常还没有正式 `OperationPlan`，因此 `operation_plans` 为空属于正常
+
+#### `ReviewRequestFarmingTaskResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 已关联正式任务 id |
+| `task_subtype` | `string` | 正式任务 subtype |
+| `title` | `string` | 任务标题 |
+| `status` | `string` | 任务状态 |
+| `execution_mode` | `string` | 执行方式 |
+| `planned_start_at` | `datetime \| null` | 计划开始时间 |
+| `planned_end_at` | `datetime \| null` | 计划结束时间 |
+
+#### `ReviewRequestOperationPlanResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 方案 id |
+| `farming_task_id` | `int` | 所属正式任务 id |
+| `plan_type` | `string` | 方案类型 |
+| `status` | `string` | 方案状态 |
+| `version` | `int` | 方案版本 |
+| `algorithm_code` | `string \| null` | 算法编码 |
+| `execution_mode` | `string` | 执行方式 |
+| `operation_window_start` | `datetime \| null` | 作业窗口开始时间 |
+| `operation_window_end` | `datetime \| null` | 作业窗口结束时间 |
+| `parameters` | `object` | 方案参数正文 |
+| `basis` | `string \| null` | 方案依据摘要 |
+
+#### `ReviewRequestExecutionRecordResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 执行记录 id |
+| `execution_id` | `int` | 所属执行 id |
+| `record_type` | `string` | 记录类型 |
+| `record_time` | `datetime` | 记录时间 |
+| `actual_start_at` | `datetime \| null` | 实际开始时间 |
+| `actual_end_at` | `datetime \| null` | 实际结束时间 |
+| `result_payload` | `object` | 调查或执行结果正文 |
+| `attachments` | `array` | 附件列表 |
+
+#### `ReviewRequestEventRecordResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 事件 id |
+| `event_type` | `string` | 事件类型 |
+| `event_category` | `string` | 事件分类 |
+| `event_source` | `string` | 事件来源 |
+| `source_record_id` | `string \| null` | 来源记录 id |
+| `payload` | `object` | 事件 payload |
+| `occurred_at` | `datetime` | 事件发生时间 |
+| `processing_status` | `string` | 处理状态 |
+| `error_message` | `string \| null` | 错误信息 |
+
 ### 5.2 复核处理
 
 `POST /api/review-requests/{reviewRequestId}/resolve`
