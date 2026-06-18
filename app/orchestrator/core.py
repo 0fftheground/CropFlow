@@ -1641,10 +1641,24 @@ class ReviewRequestResolvedHandler:
         proposed_task = dict(task_intent.rule_result.get("proposedTask") or {})
         proposed_plan = dict(task_intent.rule_result.get("proposedPlan") or {})
         overrides = dict(event_record.payload.get("decisionPayload") or {})
-        proposed_task = _merge_review_override(proposed_task, dict(overrides.get("proposedTask") or {}))
-        proposed_plan = _merge_review_override(proposed_plan, dict(overrides.get("proposedPlan") or {}))
-        _validate_disease_pest_review_rounds(task_intent.task_subtype, proposed_plan)
-        if _has_disease_pest_theory_plan_override(task_intent.task_subtype, overrides):
+        proposed_task_overrides = dict(overrides.get("proposedTask") or {})
+        proposed_plan_overrides = dict(overrides.get("proposedPlan") or {})
+        has_disease_pest_theory_plan_override = _has_disease_pest_theory_plan_override(
+            task_intent.task_subtype,
+            overrides,
+        )
+        _validate_disease_pest_review_payload(task_intent.task_subtype, proposed_task_overrides, proposed_plan_overrides)
+        replaced_theory_rounds = _extract_disease_pest_replaced_theory_rounds(
+            task_intent.task_subtype,
+            proposed_plan_overrides,
+        )
+        proposed_task = _merge_review_override(proposed_task, proposed_task_overrides)
+        proposed_plan = _merge_review_override(proposed_plan, proposed_plan_overrides)
+        if replaced_theory_rounds is not None:
+            theory_plan = dict(proposed_plan.get("theoryPlan") or {})
+            theory_plan["rounds"] = replaced_theory_rounds
+            proposed_plan["theoryPlan"] = theory_plan
+        if has_disease_pest_theory_plan_override:
             self._refresh_disease_pest_adjusted_plan(task_intent, proposed_task, proposed_plan)
         self._sync_supported_control_schedule(task_intent, proposed_task, proposed_plan, overrides)
 
@@ -1745,6 +1759,7 @@ class ReviewRequestResolvedHandler:
         )
         proposed_plan["spraySuitabilityData"] = [dict(item) for item in review_adjustment.spray_suitability_data]
         proposed_plan["weatherAdjust"] = dict(adjusted_result.weather_adjust)
+        _sync_disease_pest_control_plan_from_theory(proposed_plan)
 
     def _sync_supported_control_schedule(
         self,
@@ -2245,23 +2260,94 @@ def _has_disease_pest_theory_plan_override(task_subtype: str, overrides: dict[st
     return bool(theory_plan)
 
 
-def _validate_disease_pest_review_rounds(task_subtype: str, proposed_plan: dict[str, Any]) -> None:
+def _extract_disease_pest_replaced_theory_rounds(
+    task_subtype: str,
+    proposed_plan_overrides: dict[str, Any],
+) -> list[Any] | None:
+    if task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
+        return None
+    theory_plan_overrides = proposed_plan_overrides.get("theoryPlan")
+    if not isinstance(theory_plan_overrides, dict):
+        return None
+    override_rounds = theory_plan_overrides.get("rounds")
+    if not isinstance(override_rounds, list) or not override_rounds:
+        return None
+    if any(isinstance(item, dict) and item.get("_action") is not None for item in override_rounds):
+        return None
+    if not all(_is_complete_disease_pest_theory_round(item) for item in override_rounds):
+        return None
+
+    theory_plan_overrides.pop("rounds", None)
+    return _normalize_replaced_rounds(override_rounds)
+
+
+def _is_complete_disease_pest_theory_round(item: Any) -> bool:
+    return (
+        isinstance(item, dict)
+        and isinstance(item.get("targets"), dict)
+        and item.get("theory_window") is not None
+    )
+
+
+def _normalize_replaced_rounds(rounds: list[Any]) -> list[Any]:
+    normalized_rounds: list[Any] = []
+    for index, item in enumerate(rounds, start=1):
+        if not isinstance(item, dict):
+            normalized_rounds.append(item)
+            continue
+        normalized_round = dict(item)
+        normalized_round["round"] = index
+        normalized_round.pop("_action", None)
+        normalized_rounds.append(normalized_round)
+    return normalized_rounds
+
+
+def _validate_disease_pest_review_payload(
+    task_subtype: str,
+    proposed_task_overrides: dict[str, Any],
+    proposed_plan_overrides: dict[str, Any],
+) -> None:
     if task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
         return
-    control_plan = proposed_plan.get("controlPlan")
+    if proposed_task_overrides:
+        raise ValueError("Disease pest control review adjustments must submit proposedPlan.theoryPlan only; task time is generated after weather adjustment.")
+    unsupported_plan_keys = set(proposed_plan_overrides) - {"theoryPlan"}
+    if unsupported_plan_keys:
+        unsupported = ", ".join(sorted(unsupported_plan_keys))
+        raise ValueError(f"Disease pest control review adjustments must submit proposedPlan.theoryPlan only; unsupported fields: {unsupported}.")
+
+
+def _sync_disease_pest_control_plan_from_theory(proposed_plan: dict[str, Any]) -> None:
     theory_plan = proposed_plan.get("theoryPlan")
-    control_rounds = control_plan.get("rounds") if isinstance(control_plan, dict) else None
-    theory_rounds = theory_plan.get("rounds") if isinstance(theory_plan, dict) else None
-    if control_rounds is None and theory_rounds is None:
+    if not isinstance(theory_plan, dict):
         return
-    if not isinstance(control_rounds, list) or not isinstance(theory_rounds, list):
-        raise ValueError("Disease pest control review requires both controlPlan.rounds and theoryPlan.rounds.")
-    if len(control_rounds) != len(theory_rounds):
-        raise ValueError("Disease pest control review requires controlPlan.rounds and theoryPlan.rounds to have the same number of rounds.")
-    control_round_numbers = [int(item.get("round") or index + 1) for index, item in enumerate(control_rounds) if isinstance(item, dict)]
-    theory_round_numbers = [int(item.get("round") or index + 1) for index, item in enumerate(theory_rounds) if isinstance(item, dict)]
-    if control_round_numbers != theory_round_numbers:
-        raise ValueError("Disease pest control review requires controlPlan.rounds and theoryPlan.rounds to stay aligned by round.")
+    theory_rounds = theory_plan.get("rounds")
+    if not isinstance(theory_rounds, list):
+        return
+
+    existing_control_plan = dict(proposed_plan.get("controlPlan") or {})
+    existing_control_rounds = existing_control_plan.get("rounds")
+    if not isinstance(existing_control_rounds, list):
+        existing_control_rounds = []
+
+    synced_rounds: list[dict[str, Any]] = []
+    for index, theory_round in enumerate(theory_rounds):
+        if not isinstance(theory_round, dict):
+            continue
+        fallback_round = existing_control_rounds[index] if index < len(existing_control_rounds) else {}
+        if not isinstance(fallback_round, dict):
+            fallback_round = {}
+        prescription = theory_round.get("prescription", fallback_round.get("prescription") or {})
+        synced_rounds.append(
+            {
+                "round": int(theory_round.get("round") or index + 1),
+                "targets": dict(theory_round.get("targets") or fallback_round.get("targets") or {}),
+                "prescription": dict(prescription) if isinstance(prescription, dict) else prescription,
+            },
+        )
+
+    existing_control_plan["rounds"] = synced_rounds
+    proposed_plan["controlPlan"] = existing_control_plan
 
 
 def _resolve_control_schedule_task_key(task_subtype: str) -> str | None:

@@ -659,6 +659,7 @@ service_effect_survey
    `plant_protection.disease_pest_control`
    必显：任务主信息、`operation_plans`、执行记录、来源 `TaskIntent`、下游日历项
    主要操作：进入 `execution_feedback`
+   对 `plant_protection.disease_pest_control`，任务详情里的 `source_task_intent.rule_result.proposedPlan` 和 `operation_plans[].parameters / prescription_map` 中的 `targets` key 已统一返回中文对象名
 
 3. 服务评价尾链路任务
    适用 subtype：
@@ -731,7 +732,7 @@ service_effect_survey
 }
 ```
 
-如果审核时只修改病虫害作业方案的一部分，`decision_payload` 只传变化字段即可，不需要回传完整候选方案。后端会把提交内容合并到 `source_task_intent.rule_result.proposedPlan` 后生成正式 `OperationPlan`。
+如果审核时只修改病虫害理论防治方案的一部分，`decision_payload` 只传 `proposedPlan.theoryPlan` 中发生变化的字段即可，不需要回传完整候选方案。后端会把审核后的 `theoryPlan` 重新进行气象修正，并派生正式 `OperationPlan`。
 
 本地联调建议：
 
@@ -753,7 +754,7 @@ service_effect_survey
   "decision": "adjust",
   "decision_payload": {
     "proposedPlan": {
-      "controlPlan": {
+      "theoryPlan": {
         "rounds": [
           {
             "round": 1,
@@ -878,16 +879,17 @@ service_effect_survey
 1. `decision=adjust` 表示审核通过但有人工调整；会生成正式 `FarmingTask / OperationPlan`
 2. `decision_payload` 是补丁，不是完整替换；对象字段递归合并，未提交字段保留原候选值
 3. 普通数组字段整体替换，例如 `operationWindow`
-4. 对 `plant_protection.disease_pest_control`、`plant_protection.soil_sealing_weed_control`、`plant_protection.stem_leaf_weed_control`，如果只提交 `proposedTask.recommendedControlDate` 或只提交 `proposedPlan.operationWindow`，后端会自动同步另一边
+4. 对 `plant_protection.soil_sealing_weed_control`、`plant_protection.stem_leaf_weed_control`，如果只提交 `proposedTask.recommendedControlDate` 或只提交 `proposedPlan.operationWindow`，后端会自动同步另一边
 5. `rounds` 默认支持修改已有轮次；病虫害防治额外支持新增和删除轮次，建议始终传 `round` 定位
 6. `plant_protection.soil_sealing_weed_control` 当前常见可改字段是 `proposedPlan.operationAction`、`proposedPlan.controlPlan`
 7. `plant_protection.stem_leaf_weed_control` 当前常见可改字段是 `proposedPlan.controlTarget`、`proposedPlan.controlPlan`
-8. 当前病虫害审核支持修改 `proposedPlan.controlPlan.rounds[].prescription`、`proposedPlan.theoryPlan.rounds[].targets`、`proposedPlan.theoryPlan.rounds[].theory_window`
-9. 病虫害防治新增或删除轮次时，使用 `proposedPlan.controlPlan.rounds[]._action` 和 `proposedPlan.theoryPlan.rounds[]._action`，支持 `add` / `delete`
-10. 病虫害防治做轮次增删时，需要同时提交 `controlPlan.rounds` 和 `theoryPlan.rounds` 的对应变更；删除后后端会自动把剩余轮次重排为 `1..N`
-11. 如果提交了病虫害 `theoryPlan` 的轮次变更，例如 `theory_window`、`targets`、新增轮次、删除轮次，后端会重新调用 `/pestDisease/control/adjust-control-window` 更新实际防治时间
-12. 重算气象数据范围为所有理论轮次的最早开始日期减 3 天，到最晚结束日期加 30 天
-13. 审核提交成功后，前端应按返回的 `farming_task_ids` / `operation_plan_ids` 刷新正式任务详情，不要继续用审核页旧草稿作为最终方案
+8. 当前病虫害审核支持修改 `proposedPlan.theoryPlan.rounds[].targets`、`proposedPlan.theoryPlan.rounds[].theory_window`、`proposedPlan.theoryPlan.rounds[].prescription`
+9. 病虫害防治审核阶段只提交 `proposedPlan.theoryPlan`；不要提交 `proposedTask`、`proposedPlan.operationWindow` 或 `proposedPlan.controlPlan`
+10. 病虫害防治的 `proposedPlan.theoryPlan.rounds` 不带 `_action` 时，后端按“整组 rounds 替换”处理；前端提交用户编辑后的完整轮次列表即可，数量变多表示新增，数量变少表示删除
+11. 替换后的轮次会按数组顺序自动重排为 `1..N`，并从审核后的 `theoryPlan.rounds[].prescription` 派生最终 `controlPlan`
+12. 如果提交了病虫害 `theoryPlan` 的轮次变更，例如 `theory_window`、`targets`、`prescription`、新增轮次、删除轮次，后端会重新调用 `/pestDisease/control/adjust-control-window` 更新实际防治时间
+13. 重算气象数据范围为所有理论轮次的最早开始日期减 3 天，到最晚结束日期加 30 天
+14. 审核提交成功后，前端应按返回的 `farming_task_ids` / `operation_plan_ids` 刷新正式任务详情，不要继续用审核页旧草稿作为最终方案
 
 成功响应格式：
 

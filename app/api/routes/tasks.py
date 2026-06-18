@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_farming_task_query_service, get_survey_result_service, get_task_execution_service
+from app.api.serialization import localize_disease_pest_plan_payload
+from app.core.constants import TASK_SUBTYPE_DISEASE_PEST_CONTROL
 from app.db.session import get_db
 from app.models import CalendarItem, EventRecord, Execution, ExecutionRecord, FarmingTask, OperationPlan, ReviewRequest, TaskIntent
 from app.services import (
@@ -426,6 +428,7 @@ def _serialize_review_request(review_request: ReviewRequest) -> TaskDetailReview
 
 
 def _serialize_task_intent(task_intent: TaskIntent) -> TaskDetailTaskIntentResponse:
+    rule_result = _build_task_detail_rule_result(task_intent)
     return TaskDetailTaskIntentResponse(
         id=task_intent.id,
         task_subtype=task_intent.task_subtype,
@@ -433,7 +436,7 @@ def _serialize_task_intent(task_intent: TaskIntent) -> TaskDetailTaskIntentRespo
         trigger_type=task_intent.trigger_type,
         trigger_summary=task_intent.trigger_summary,
         suggested_action=task_intent.suggested_action,
-        rule_result=task_intent.rule_result or {},
+        rule_result=rule_result,
         source_execution_record_id=task_intent.source_execution_record_id,
         converted_task_id=task_intent.converted_task_id,
     )
@@ -453,6 +456,8 @@ def _serialize_calendar_item(calendar_item: CalendarItem) -> TaskDetailCalendarI
 
 
 def _serialize_operation_plan(operation_plan: OperationPlan) -> OperationPlanResponse:
+    parameters = localize_disease_pest_plan_payload(operation_plan.parameters or {})
+    prescription_map = localize_disease_pest_plan_payload(operation_plan.prescription_map or {})
     return OperationPlanResponse(
         id=operation_plan.id,
         farming_task_id=operation_plan.farming_task_id,
@@ -465,14 +470,24 @@ def _serialize_operation_plan(operation_plan: OperationPlan) -> OperationPlanRes
         operation_window_start=operation_plan.operation_window_start,
         operation_window_end=operation_plan.operation_window_end,
         execution_mode=operation_plan.execution_mode,
-        parameters=operation_plan.parameters or {},
-        prescription_map=operation_plan.prescription_map or {},
+        parameters=parameters,
+        prescription_map=prescription_map,
         acceptance_criteria=operation_plan.acceptance_criteria or {},
         basis=operation_plan.basis,
         source_event_id=operation_plan.source_event_id,
         created_at=operation_plan.created_at,
         updated_at=operation_plan.updated_at,
     )
+
+
+def _build_task_detail_rule_result(task_intent: TaskIntent) -> dict[str, Any]:
+    rule_result = dict(task_intent.rule_result or {})
+    if task_intent.task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
+        return rule_result
+    proposed_plan = rule_result.get("proposedPlan")
+    if isinstance(proposed_plan, dict):
+        rule_result["proposedPlan"] = localize_disease_pest_plan_payload(proposed_plan)
+    return rule_result
 
 
 def _serialize_execution(execution: Execution) -> ExecutionResponse:

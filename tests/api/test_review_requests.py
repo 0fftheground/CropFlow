@@ -183,13 +183,31 @@ class FakeDiseasePestReviewRequestQueryService:
                 trigger_summary="病虫害调查触发",
                 rule_result={
                     "proposedPlan": {
-                        "targets": {"二化螟": "防治"},
+                        "targets": {"ErHuaMing": "防治"},
+                        "controlPlan": {
+                            "rounds": [
+                                {
+                                    "round": 1,
+                                    "targets": {"ErHuaMing": "防治", "DaoFeiShi": "兼防"},
+                                    "prescription": {"product": "示例药剂"},
+                                },
+                            ],
+                        },
                         "theoryPlan": {
                             "rounds": [
                                 {
                                     "round": 1,
-                                    "targets": {"二化螟": "防治"},
+                                    "targets": {"ErHuaMing": "防治"},
                                     "theory_window": ["20260629", "20260701"],
+                                },
+                            ],
+                        },
+                        "adjustedPlan": {
+                            "rounds": [
+                                {
+                                    "round": 1,
+                                    "targets": {"ErHuaMing": "防治"},
+                                    "final_window": ["20260630"],
                                 },
                             ],
                         },
@@ -330,6 +348,16 @@ def test_get_review_request_detail_route_adds_available_targets_for_disease_pest
     body = response.json()
     assert body["source_task_intent"]["task_subtype"] == "plant_protection.disease_pest_control"
     assert body["source_task_intent"]["rule_result"]["proposedPlan"]["targets"] == {"二化螟": "防治"}
+    assert body["source_task_intent"]["rule_result"]["proposedPlan"]["controlPlan"]["rounds"][0]["targets"] == {
+        "二化螟": "防治",
+        "稻飞虱": "兼防",
+    }
+    assert body["source_task_intent"]["rule_result"]["proposedPlan"]["theoryPlan"]["rounds"][0]["targets"] == {
+        "二化螟": "防治",
+    }
+    assert body["source_task_intent"]["rule_result"]["proposedPlan"]["adjustedPlan"]["rounds"][0]["targets"] == {
+        "二化螟": "防治",
+    }
     assert body["source_task_intent"]["rule_result"]["reviewContext"]["availableTargets"] == [
         "二化螟",
         "稻纵卷叶螟",

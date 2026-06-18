@@ -46,6 +46,13 @@ PEST_DISEASE_CONTROL_AVAILABLE_TARGETS = (
     "稻瘟病",
     "纹枯病",
 )
+PEST_DISEASE_TARGET_LABELS = {
+    "ErHuaMing": "二化螟",
+    "DaoZongJuanYeMing": "稻纵卷叶螟",
+    "DaoFeiShi": "稻飞虱",
+    "DaoWenBing": "稻瘟病",
+    "WenKuBing": "纹枯病",
+}
 
 CALENDAR_STATUS_ACTIVE = "active"
 CALENDAR_STATUS_GENERATED = "generated"

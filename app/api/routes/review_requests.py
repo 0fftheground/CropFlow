@@ -9,7 +9,11 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_review_request_query_service, get_review_request_service
-from app.core.constants import PEST_DISEASE_CONTROL_AVAILABLE_TARGETS, TASK_SUBTYPE_DISEASE_PEST_CONTROL
+from app.api.serialization import localize_disease_pest_plan_payload
+from app.core.constants import (
+    PEST_DISEASE_CONTROL_AVAILABLE_TARGETS,
+    TASK_SUBTYPE_DISEASE_PEST_CONTROL,
+)
 from app.db.session import get_db
 from app.models import EventRecord, ExecutionRecord, FarmingTask, OperationPlan, ReviewRequest, TaskIntent, User
 from app.services import (
@@ -243,6 +247,10 @@ def _build_review_request_rule_result(task_intent: TaskIntent) -> dict[str, Any]
     rule_result = dict(task_intent.rule_result or {})
     if task_intent.task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
         return rule_result
+
+    proposed_plan = rule_result.get("proposedPlan")
+    if isinstance(proposed_plan, dict):
+        rule_result["proposedPlan"] = localize_disease_pest_plan_payload(proposed_plan)
 
     review_context = dict(rule_result.get("reviewContext") or {})
     review_context["availableTargets"] = list(PEST_DISEASE_CONTROL_AVAILABLE_TARGETS)

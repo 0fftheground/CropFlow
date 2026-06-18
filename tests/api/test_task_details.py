@@ -161,6 +161,92 @@ class FakeFarmingTaskQueryService:
         )
 
 
+@dataclass
+class FakeDiseasePestTaskQueryService:
+    def get_detail(self, farming_task_id: int) -> FarmingTaskDetail:
+        return FarmingTaskDetail(
+            farming_task=FarmingTask(
+                id=farming_task_id,
+                planting_plan_id=1,
+                task_intent_id=21,
+                review_request_id=22,
+                task_category="plant_protection",
+                task_subtype="plant_protection.disease_pest_control",
+                title="病虫害防治",
+                priority="normal",
+                status="pending",
+                execution_mode="manual",
+                idempotency_key=f"task:{farming_task_id}",
+            ),
+            operation_plans=[
+                OperationPlan(
+                    id=120,
+                    planting_plan_id=1,
+                    farming_task_id=farming_task_id,
+                    plan_type="plant_protection.disease_pest_control",
+                    status="active",
+                    version=1,
+                    parameters={
+                        "targets": {"ErHuaMing": "防治"},
+                        "controlPlan": {
+                            "rounds": [
+                                {
+                                    "round": 1,
+                                    "targets": {"ErHuaMing": "防治", "DaoFeiShi": "兼防"},
+                                    "prescription": {"product": "示例药剂"},
+                                },
+                            ],
+                        },
+                    },
+                    prescription_map={
+                        "rounds": [
+                            {
+                                "round": 1,
+                                "targets": {"ErHuaMing": "防治"},
+                            },
+                        ],
+                    },
+                    acceptance_criteria={},
+                    execution_mode="manual",
+                    idempotency_key="operation-plan:120",
+                ),
+            ],
+            executions=[],
+            execution_records=[],
+            review_request=None,
+            source_task_intent=TaskIntent(
+                id=21,
+                planting_plan_id=1,
+                task_category="plant_protection",
+                task_subtype="plant_protection.disease_pest_control",
+                status="converted",
+                trigger_type="SurveyResultRecorded",
+                trigger_summary="病虫害调查触发",
+                rule_result={
+                    "proposedPlan": {
+                        "targets": {"ErHuaMing": "防治"},
+                        "theoryPlan": {
+                            "rounds": [
+                                {
+                                    "round": 1,
+                                    "targets": {"ErHuaMing": "防治"},
+                                    "theory_window": ["20260629", "20260701"],
+                                },
+                            ],
+                        },
+                    },
+                },
+                suggested_action="建议执行病虫害防治",
+                converted_task_id=farming_task_id,
+                idempotency_key="intent:21",
+            ),
+            source_calendar_item=None,
+            source_execution_record=None,
+            downstream_calendar_items=[],
+            event_records=[],
+        )
+
+
 def test_get_task_detail_route_returns_aggregated_context() -> None:
     app.dependency_overrides[get_farming_task_query_service] = lambda: FakeFarmingTaskQueryService()
     client = TestClient(app)
@@ -190,5 +276,29 @@ def test_get_task_detail_route_returns_404_for_missing_task() -> None:
     response = client.get("/api/tasks/404")
 
     assert response.status_code == 404
+
+    app.dependency_overrides.clear()
+
+
+def test_get_task_detail_route_localizes_disease_pest_targets_to_chinese() -> None:
+    app.dependency_overrides[get_farming_task_query_service] = lambda: FakeDiseasePestTaskQueryService()
+    client = TestClient(app)
+
+    response = client.get("/api/tasks/88")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source_task_intent"]["rule_result"]["proposedPlan"]["targets"] == {"二化螟": "防治"}
+    assert body["source_task_intent"]["rule_result"]["proposedPlan"]["theoryPlan"]["rounds"][0]["targets"] == {
+        "二化螟": "防治",
+    }
+    assert body["operation_plans"][0]["parameters"]["targets"] == {"二化螟": "防治"}
+    assert body["operation_plans"][0]["parameters"]["controlPlan"]["rounds"][0]["targets"] == {
+        "二化螟": "防治",
+        "稻飞虱": "兼防",
+    }
+    assert body["operation_plans"][0]["prescription_map"]["rounds"][0]["targets"] == {
+        "二化螟": "防治",
+    }
 
     app.dependency_overrides.clear()

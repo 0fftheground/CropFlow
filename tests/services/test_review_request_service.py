@@ -518,11 +518,13 @@ def test_adjust_disease_pest_review_updates_specific_round_fields_only() -> None
                         "round": 1,
                         "targets": {"二化螟": "防治"},
                         "theory_window": ["20260629", "20260701"],
+                        "prescription": {"product": "原方案药剂", "dose": "100ml/亩"},
                     },
                     {
                         "round": 2,
                         "targets": {"纹枯病": "防治"},
                         "theory_window": ["20260708", "20260710"],
+                        "prescription": {"product": "第二轮药剂", "dose": "80ml/亩"},
                     },
                 ],
             },
@@ -535,20 +537,19 @@ def test_adjust_disease_pest_review_updates_specific_round_fields_only() -> None
             decision="adjust",
             decision_payload={
                 "proposedPlan": {
-                    "controlPlan": {
-                        "rounds": [
-                            {
-                                "round": 1,
-                                "prescription": {"product": "人工调整药剂", "dose": "120ml/亩"},
-                            },
-                        ],
-                    },
                     "theoryPlan": {
                         "rounds": [
                             {
                                 "round": 1,
                                 "targets": {"二化螟": "重点防治", "稻纵卷叶螟": "兼治"},
                                 "theory_window": ["20260630", "20260702"],
+                                "prescription": {"product": "人工调整药剂", "dose": "120ml/亩"},
+                            },
+                            {
+                                "round": 2,
+                                "targets": {"纹枯病": "防治"},
+                                "theory_window": ["20260708", "20260710"],
+                                "prescription": {"product": "第二轮药剂", "dose": "80ml/亩"},
                             },
                         ],
                     },
@@ -571,11 +572,13 @@ def test_adjust_disease_pest_review_updates_specific_round_fields_only() -> None
                         "round": 1,
                         "targets": {"二化螟": "重点防治", "稻纵卷叶螟": "兼治"},
                         "theory_window": ["20260630", "20260702"],
+                        "prescription": {"product": "人工调整药剂", "dose": "120ml/亩"},
                     },
                     {
                         "round": 2,
                         "targets": {"纹枯病": "防治"},
                         "theory_window": ["20260708", "20260710"],
+                        "prescription": {"product": "第二轮药剂", "dose": "80ml/亩"},
                     },
                 ],
             },
@@ -600,7 +603,7 @@ def test_adjust_disease_pest_review_updates_specific_round_fields_only() -> None
     assert proposed_plan["controlPlan"]["rounds"] == [
         {
             "round": 1,
-            "targets": {"二化螟": "防治"},
+            "targets": {"二化螟": "重点防治", "稻纵卷叶螟": "兼治"},
             "prescription": {"product": "人工调整药剂", "dose": "120ml/亩"},
         },
         {
@@ -614,11 +617,13 @@ def test_adjust_disease_pest_review_updates_specific_round_fields_only() -> None
             "round": 1,
             "targets": {"二化螟": "重点防治", "稻纵卷叶螟": "兼治"},
             "theory_window": ["20260630", "20260702"],
+            "prescription": {"product": "人工调整药剂", "dose": "120ml/亩"},
         },
         {
             "round": 2,
             "targets": {"纹枯病": "防治"},
             "theory_window": ["20260708", "20260710"],
+            "prescription": {"product": "第二轮药剂", "dose": "80ml/亩"},
         },
     ]
 
@@ -652,6 +657,7 @@ def test_adjust_disease_pest_review_supports_adding_rounds() -> None:
                         "round": 1,
                         "targets": {"二化螟": "防治"},
                         "theory_window": ["20260629", "20260701"],
+                        "prescription": {"product": "第一轮药剂", "dose": "100ml/亩"},
                     },
                 ],
             },
@@ -664,23 +670,19 @@ def test_adjust_disease_pest_review_supports_adding_rounds() -> None:
             decision="adjust",
             decision_payload={
                 "proposedPlan": {
-                    "controlPlan": {
-                        "rounds": [
-                            {
-                                "_action": "add",
-                                "round": 2,
-                                "targets": {"纹枯病": "防治"},
-                                "prescription": {"product": "新增第二轮药剂", "dose": "80ml/亩"},
-                            },
-                        ],
-                    },
                     "theoryPlan": {
                         "rounds": [
                             {
-                                "_action": "add",
+                                "round": 1,
+                                "targets": {"二化螟": "防治"},
+                                "theory_window": ["20260629", "20260701"],
+                                "prescription": {"product": "第一轮药剂", "dose": "100ml/亩"},
+                            },
+                            {
                                 "round": 2,
                                 "targets": {"纹枯病": "防治"},
                                 "theory_window": ["20260708", "20260710"],
+                                "prescription": {"product": "新增第二轮药剂", "dose": "80ml/亩"},
                             },
                         ],
                     },
@@ -703,11 +705,13 @@ def test_adjust_disease_pest_review_supports_adding_rounds() -> None:
                         "round": 1,
                         "targets": {"二化螟": "防治"},
                         "theory_window": ["20260629", "20260701"],
+                        "prescription": {"product": "第一轮药剂", "dose": "100ml/亩"},
                     },
                     {
                         "round": 2,
                         "targets": {"纹枯病": "防治"},
                         "theory_window": ["20260708", "20260710"],
+                        "prescription": {"product": "新增第二轮药剂", "dose": "80ml/亩"},
                     },
                 ],
             },
@@ -730,11 +734,13 @@ def test_adjust_disease_pest_review_supports_adding_rounds() -> None:
             "round": 1,
             "targets": {"二化螟": "防治"},
             "theory_window": ["20260629", "20260701"],
+            "prescription": {"product": "第一轮药剂", "dose": "100ml/亩"},
         },
         {
             "round": 2,
             "targets": {"纹枯病": "防治"},
             "theory_window": ["20260708", "20260710"],
+            "prescription": {"product": "新增第二轮药剂", "dose": "80ml/亩"},
         },
     ]
 
@@ -775,11 +781,13 @@ def test_adjust_disease_pest_review_supports_deleting_rounds_and_renumbers_remai
                         "round": 1,
                         "targets": {"二化螟": "防治"},
                         "theory_window": ["20260629", "20260701"],
+                        "prescription": {"product": "第一轮药剂", "dose": "100ml/亩"},
                     },
                     {
                         "round": 2,
                         "targets": {"纹枯病": "防治"},
                         "theory_window": ["20260708", "20260710"],
+                        "prescription": {"product": "第二轮药剂", "dose": "80ml/亩"},
                     },
                 ],
             },
@@ -792,19 +800,13 @@ def test_adjust_disease_pest_review_supports_deleting_rounds_and_renumbers_remai
             decision="adjust",
             decision_payload={
                 "proposedPlan": {
-                    "controlPlan": {
-                        "rounds": [
-                            {
-                                "_action": "delete",
-                                "round": 1,
-                            },
-                        ],
-                    },
                     "theoryPlan": {
                         "rounds": [
                             {
-                                "_action": "delete",
                                 "round": 1,
+                                "targets": {"纹枯病": "防治"},
+                                "theory_window": ["20260708", "20260710"],
+                                "prescription": {"product": "第二轮药剂", "dose": "80ml/亩"},
                             },
                         ],
                     },
@@ -827,6 +829,7 @@ def test_adjust_disease_pest_review_supports_deleting_rounds_and_renumbers_remai
                         "round": 1,
                         "targets": {"纹枯病": "防治"},
                         "theory_window": ["20260708", "20260710"],
+                        "prescription": {"product": "第二轮药剂", "dose": "80ml/亩"},
                     },
                 ],
             },
@@ -844,13 +847,14 @@ def test_adjust_disease_pest_review_supports_deleting_rounds_and_renumbers_remai
             "round": 1,
             "targets": {"纹枯病": "防治"},
             "theory_window": ["20260708", "20260710"],
+            "prescription": {"product": "第二轮药剂", "dose": "80ml/亩"},
         },
     ]
     assert review_request.status == "resolved"
     assert farming_task_repo.items[0].review_request_id == 20
 
 
-def test_adjust_disease_pest_review_rejects_unaligned_round_changes() -> None:
+def test_adjust_disease_pest_review_rejects_control_plan_overrides() -> None:
     adjustment_service = FakePestDiseaseControlPlanningService()
     service, task_intent, review_request, farming_task_repo, operation_plan_repo, _ = make_service_with_adjustment_service(
         adjustment_service,
@@ -895,14 +899,14 @@ def test_adjust_disease_pest_review_rejects_unaligned_round_changes() -> None:
                         },
                     },
                 },
-                decision_note="只新增处方轮次",
+                decision_note="尝试直接提交实际处方方案",
                 resolved_by="agronomist-1",
             ),
         )
     except ValueError as exc:
-        assert str(exc) == "Disease pest control review requires controlPlan.rounds and theoryPlan.rounds to have the same number of rounds."
+        assert str(exc) == "Disease pest control review adjustments must submit proposedPlan.theoryPlan only; unsupported fields: controlPlan."
     else:
-        raise AssertionError("Expected unaligned disease pest round change to fail.")
+        raise AssertionError("Expected disease pest controlPlan override to fail.")
 
     assert review_request.status == "resolved"
     assert farming_task_repo.items == []
