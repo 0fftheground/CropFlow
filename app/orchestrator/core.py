@@ -1595,12 +1595,14 @@ class ReviewRequestResolvedHandler:
         farming_task_repository: FarmingTaskRepository,
         operation_plan_repository: OperationPlanRepository,
         event_record_repository: EventRecordRepository,
+        pest_disease_control_planning_service: PestDiseaseControlPlanningService | None = None,
     ) -> None:
         self.task_intent_repository = task_intent_repository
         self.review_request_repository = review_request_repository
         self.farming_task_repository = farming_task_repository
         self.operation_plan_repository = operation_plan_repository
         self.event_record_repository = event_record_repository
+        self.pest_disease_control_planning_service = pest_disease_control_planning_service
 
     def handle(self, event_record: EventRecord) -> OrchestratorResult:
         review_request_id = int(event_record.payload["reviewRequestId"])
@@ -1639,8 +1641,10 @@ class ReviewRequestResolvedHandler:
         proposed_task = dict(task_intent.rule_result.get("proposedTask") or {})
         proposed_plan = dict(task_intent.rule_result.get("proposedPlan") or {})
         overrides = dict(event_record.payload.get("decisionPayload") or {})
-        proposed_task.update(dict(overrides.get("proposedTask") or {}))
-        proposed_plan.update(dict(overrides.get("proposedPlan") or {}))
+        proposed_task = _merge_review_override(proposed_task, dict(overrides.get("proposedTask") or {}))
+        proposed_plan = _merge_review_override(proposed_plan, dict(overrides.get("proposedPlan") or {}))
+        if _has_disease_pest_theory_window_override(overrides):
+            self._refresh_disease_pest_adjusted_plan(task_intent, proposed_task, proposed_plan)
 
         farming_task = FarmingTask(
             planting_plan_id=task_intent.planting_plan_id,
@@ -1703,6 +1707,42 @@ class ReviewRequestResolvedHandler:
             review_requests=[review_request],
             operation_plans=operation_plans,
         )
+
+    def _refresh_disease_pest_adjusted_plan(
+        self,
+        task_intent: TaskIntent,
+        proposed_task: dict[str, Any],
+        proposed_plan: dict[str, Any],
+    ) -> None:
+        if task_intent.task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
+            return
+        if self.pest_disease_control_planning_service is None:
+            raise ValueError("Pest disease control planning service is required to adjust theory window.")
+        theory_plan = dict(proposed_plan.get("theoryPlan") or {})
+        control_type = str(proposed_plan.get("controlType") or theory_plan.get("control_type") or "").strip()
+        if not control_type:
+            raise ValueError("Pest disease control type is required to adjust theory window.")
+
+        review_adjustment = self.pest_disease_control_planning_service.adjust_theory_plan_for_review(
+            planting_plan_id=task_intent.planting_plan_id,
+            control_type=control_type,
+            theory_plan=theory_plan,
+        )
+        adjusted_result = review_adjustment.adjusted_result
+        operation_window = _format_date_range(_resolve_adjusted_control_operation_window(adjusted_result))
+
+        proposed_task["recommendedControlDate"] = operation_window
+        proposed_plan["operationWindow"] = operation_window
+        proposed_plan["controlMode"] = adjusted_result.control_mode
+        proposed_plan["status"] = adjusted_result.status
+        proposed_plan["rounds"] = [_serialize_adjusted_round_payload(item) for item in adjusted_result.rounds]
+        proposed_plan["targets"] = _merge_adjusted_round_targets(adjusted_result)
+        proposed_plan["adjustedPlan"] = dict(adjusted_result.raw_data)
+        proposed_plan["spraySuitabilityRequiredRange"] = _format_date_range(
+            review_adjustment.spray_suitability_required_range,
+        )
+        proposed_plan["spraySuitabilityData"] = [dict(item) for item in review_adjustment.spray_suitability_data]
+        proposed_plan["weatherAdjust"] = dict(adjusted_result.weather_adjust)
 
     def _create_operation_plan_if_needed(
         self,
@@ -1900,6 +1940,7 @@ def build_plan_orchestrator(
                 farming_task_repository=farming_task_repository,
                 operation_plan_repository=operation_plan_repository,
                 event_record_repository=event_record_repository,
+                pest_disease_control_planning_service=pest_disease_control_planning_service,
             ),
             EVENT_TYPE_EXECUTION_COMPLETED: ExecutionCompletedHandler(
                 farming_task_repository=farming_task_repository,
@@ -2054,6 +2095,62 @@ def _format_date_range(raw_value: tuple[date, date] | None) -> list[str] | None:
     if raw_value is None:
         return None
     return [raw_value[0].isoformat(), raw_value[1].isoformat()]
+
+
+def _merge_review_override(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        existing_value = merged.get(key)
+        if isinstance(existing_value, dict) and isinstance(value, dict):
+            merged[key] = _merge_review_override(existing_value, value)
+        elif key == "rounds" and isinstance(existing_value, list) and isinstance(value, list):
+            merged[key] = _merge_round_overrides(existing_value, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _merge_round_overrides(base_rounds: list[Any], override_rounds: list[Any]) -> list[Any]:
+    merged_rounds = list(base_rounds)
+    round_index_by_number = {
+        item.get("round"): index
+        for index, item in enumerate(merged_rounds)
+        if isinstance(item, dict) and item.get("round") is not None
+    }
+    for override_index, override_round in enumerate(override_rounds):
+        if not isinstance(override_round, dict):
+            if override_index >= len(merged_rounds):
+                raise ValueError(f"Cannot adjust round index {override_index}; existing round does not exist.")
+            merged_rounds[override_index] = override_round
+            continue
+
+        target_index = None
+        if override_round.get("round") is not None:
+            target_index = round_index_by_number.get(override_round.get("round"))
+        elif override_index < len(merged_rounds):
+            target_index = override_index
+        if target_index is None:
+            raise ValueError(f"Cannot adjust round {override_round.get('round')!r}; existing round does not exist.")
+
+        existing_round = merged_rounds[target_index]
+        if isinstance(existing_round, dict):
+            merged_rounds[target_index] = _merge_review_override(existing_round, override_round)
+        else:
+            merged_rounds[target_index] = override_round
+    return merged_rounds
+
+
+def _has_disease_pest_theory_window_override(overrides: dict[str, Any]) -> bool:
+    proposed_plan = overrides.get("proposedPlan")
+    if not isinstance(proposed_plan, dict):
+        return False
+    theory_plan = proposed_plan.get("theoryPlan")
+    if not isinstance(theory_plan, dict):
+        return False
+    rounds = theory_plan.get("rounds")
+    if not isinstance(rounds, list):
+        return False
+    return any(isinstance(item, dict) and "theory_window" in item for item in rounds)
 
 
 def _parse_optional_datetime_or_date_range_start(raw_value: Any) -> datetime | None:

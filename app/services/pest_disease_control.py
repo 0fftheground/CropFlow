@@ -198,6 +198,13 @@ class PestDiseaseMergePlanningResult:
     merged_result: PestDiseaseMergedControlResult
 
 
+@dataclass(slots=True)
+class PestDiseaseReviewAdjustmentResult:
+    spray_suitability_required_range: tuple[date, date]
+    spray_suitability_data: list[dict[str, Any]]
+    adjusted_result: PestDiseaseAdjustedControlResult
+
+
 class HttpPestDiseaseControlClient:
     def __init__(self, base_url: str, timeout_seconds: float = 10.0) -> None:
         self.base_url = base_url.rstrip("/")
@@ -792,6 +799,36 @@ class PestDiseaseControlPlanningService:
             merged_result=merged_result,
         )
 
+    def adjust_theory_plan_for_review(
+        self,
+        *,
+        planting_plan_id: int,
+        control_type: str,
+        theory_plan: dict[str, Any],
+    ) -> PestDiseaseReviewAdjustmentResult:
+        planting_plan = self._get_plan(planting_plan_id)
+        context = self.context_resolver.resolve(planting_plan)
+        plant_info = self._build_plant_info(planting_plan, context.cultivation_system, context.cultivation_pattern)
+        normalized_theory_plan = _unwrap_theory_plan_payload(theory_plan)
+        spray_suitability_required_range = _resolve_review_spray_suitability_required_range(normalized_theory_plan)
+        weather_rows = self.weather_provider.get_spray_suitability_weather(
+            planting_plan,
+            spray_suitability_required_range[0],
+            spray_suitability_required_range[1],
+        )
+        spray_suitability_data = build_spray_suitability_data(weather_rows)
+        adjusted_result = self.control_client.adjust_control_window(
+            control_type=control_type,
+            theory_plan=dict(normalized_theory_plan),
+            spray_suitability_data=spray_suitability_data,
+            plant_info=plant_info if control_type == "emergency" else None,
+        )
+        return PestDiseaseReviewAdjustmentResult(
+            spray_suitability_required_range=spray_suitability_required_range,
+            spray_suitability_data=spray_suitability_data,
+            adjusted_result=adjusted_result,
+        )
+
     def _get_plan(self, planting_plan_id: int) -> PlantingPlan:
         planting_plan = self.planting_plan_repository.get(planting_plan_id)
         if planting_plan is None:
@@ -1082,6 +1119,21 @@ def _parse_adjusted_control_result(
         weather_adjust=dict(raw_result.get("weather_adjust") or {}),
         raw_data=dict(raw_result),
         raw_response=raw_response,
+    )
+
+
+def _resolve_review_spray_suitability_required_range(theory_plan: dict[str, Any]) -> tuple[date, date]:
+    raw_rounds = theory_plan.get("rounds")
+    if not isinstance(raw_rounds, list) or not raw_rounds:
+        raise ValueError("Review adjusted theory plan does not contain rounds.")
+    theory_windows = []
+    for raw_round in raw_rounds:
+        if not isinstance(raw_round, dict):
+            raise ValueError("Review adjusted theory plan contains invalid round item.")
+        theory_windows.append(_parse_api_date_range(raw_round.get("theory_window"), "theory_window"))
+    return (
+        min(item[0] for item in theory_windows) - timedelta(days=3),
+        max(item[1] for item in theory_windows) + timedelta(days=15),
     )
 
 

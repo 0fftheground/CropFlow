@@ -1212,6 +1212,119 @@ Query 参数：
 4. `no_action`
 5. `need_more_info`
 
+审核时如需修改候选任务或作业方案，使用 `decision=adjust`。`decision_payload` 支持部分提交，只传发生变化的字段即可，前端不需要把完整 `source_task_intent.rule_result.proposedPlan` 原样回传。
+
+最小示例：只调整病虫害第 1 轮处方：
+
+```json
+{
+  "decision": "adjust",
+  "decision_payload": {
+    "proposedPlan": {
+      "controlPlan": {
+        "rounds": [
+          {
+            "round": 1,
+            "prescription": {
+              "product": "人工调整后的药剂",
+              "dose": "按标签推荐剂量"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "decision_note": "调整第 1 轮处方",
+  "resolved_by": "agronomist-1"
+}
+```
+
+只调整病虫害第 1 轮理论防治对象和理论窗口：
+
+```json
+{
+  "decision": "adjust",
+  "decision_payload": {
+    "proposedPlan": {
+      "theoryPlan": {
+        "rounds": [
+          {
+            "round": 1,
+            "targets": {
+              "二化螟": "重点防治",
+              "稻纵卷叶螟": "兼治"
+            },
+            "theory_window": ["20260630", "20260702"]
+          }
+        ]
+      }
+    }
+  },
+  "decision_note": "调整第 1 轮理论防治窗口",
+  "resolved_by": "agronomist-1"
+}
+```
+
+完整示例：同时调整任务时间、处方、理论窗口、作业区域和验收标准：
+
+```json
+{
+  "decision": "adjust",
+  "decision_payload": {
+    "proposedTask": {
+      "recommendedControlDate": ["2026-06-30", "2026-07-01"],
+      "executionMode": "manual"
+    },
+    "proposedPlan": {
+      "operationWindow": ["2026-06-30", "2026-07-01"],
+      "controlPlan": {
+        "rounds": [
+          {
+            "round": 1,
+            "prescription": {
+              "product": "人工调整后的药剂",
+              "dose": "按标签推荐剂量"
+            }
+          }
+        ]
+      },
+      "theoryPlan": {
+        "rounds": [
+          {
+            "round": 1,
+            "targets": {
+              "二化螟": "重点防治",
+              "稻纵卷叶螟": "兼治"
+            },
+            "theory_window": ["20260630", "20260702"]
+          }
+        ]
+      },
+      "operationArea": {
+        "plotCodes": ["A-01"]
+      },
+      "acceptanceCriteria": {
+        "coverage": ">=90%"
+      }
+    }
+  },
+  "decision_note": "调整作业窗口和处方",
+  "resolved_by": "agronomist-1"
+}
+```
+
+说明：
+
+1. `proposedTask` 会影响生成的 `FarmingTask`，例如标题、计划时间和执行方式。
+2. `proposedPlan` 会影响生成的 `OperationPlan`，例如 `parameters`、`operation_window_start/end`、`operation_area`、`prescription_map`、`acceptance_criteria`。
+3. `decision_payload` 是覆盖补丁，不是完整替换。对象字段递归合并；未提交字段保留候选方案原值。
+4. 普通数组字段整体替换，例如 `operationWindow`。
+5. `rounds` 数组不支持新增或合并轮次数，只支持修改已有轮次。前端可传 `round` 定位轮次；不传 `round` 时按数组下标定位。
+6. 病虫害防治审核当前支持修改 `proposedPlan.controlPlan.rounds[].prescription`、`proposedPlan.theoryPlan.rounds[].targets`、`proposedPlan.theoryPlan.rounds[].theory_window`。
+7. 如果提交了 `proposedPlan.theoryPlan.rounds[].theory_window`，后端会重新调用 `/pestDisease/control/adjust-control-window` 更新实际防治时间。`spray_suitability_data` 的气象数据范围按所有理论轮次汇总：最早理论窗口开始日期减 3 天，到最晚理论窗口结束日期加 15 天。
+8. 理论窗口重算后，后端会更新生成方案中的 `operationWindow`、`rounds`、`adjustedPlan`、`spraySuitabilityRequiredRange`、`spraySuitabilityData`、`weatherAdjust`，并同步更新生成任务的 `recommendedControlDate`。
+9. 对病虫害防治建议，前端默认从详情接口的 `source_task_intent.rule_result.proposedPlan` 读取候选方案，用户修改后只需提交发生变化的字段。
+
 成功响应：
 
 | field | type | notes |

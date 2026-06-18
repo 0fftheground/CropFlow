@@ -729,6 +729,70 @@ service_effect_survey
 }
 ```
 
+如果审核时只修改病虫害作业方案的一部分，`decision_payload` 只传变化字段即可，不需要回传完整候选方案。后端会把提交内容合并到 `source_task_intent.rule_result.proposedPlan` 后生成正式 `OperationPlan`。
+
+只修改第 1 轮处方：
+
+```json
+{
+  "decision": "adjust",
+  "decision_payload": {
+    "proposedPlan": {
+      "controlPlan": {
+        "rounds": [
+          {
+            "round": 1,
+            "prescription": {
+              "product": "人工调整后的药剂",
+              "dose": "按标签推荐剂量"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "decision_note": "调整第 1 轮处方",
+  "resolved_by": "agronomist_001"
+}
+```
+
+只修改第 1 轮理论防治对象和理论窗口：
+
+```json
+{
+  "decision": "adjust",
+  "decision_payload": {
+    "proposedPlan": {
+      "theoryPlan": {
+        "rounds": [
+          {
+            "round": 1,
+            "targets": {
+              "二化螟": "重点防治",
+              "稻纵卷叶螟": "兼治"
+            },
+            "theory_window": ["20260630", "20260702"]
+          }
+        ]
+      }
+    }
+  },
+  "decision_note": "调整第 1 轮理论防治窗口",
+  "resolved_by": "agronomist_001"
+}
+```
+
+提交规则：
+
+1. `decision=adjust` 表示审核通过但有人工调整；会生成正式 `FarmingTask / OperationPlan`
+2. `decision_payload` 是补丁，不是完整替换；对象字段递归合并，未提交字段保留原候选值
+3. 普通数组字段整体替换，例如 `operationWindow`
+4. `rounds` 只支持修改已有轮次，不支持新增或合并轮次数；建议始终传 `round` 定位
+5. 当前病虫害审核支持修改 `proposedPlan.controlPlan.rounds[].prescription`、`proposedPlan.theoryPlan.rounds[].targets`、`proposedPlan.theoryPlan.rounds[].theory_window`
+6. 如果提交了 `theory_window`，后端会重新调用 `/pestDisease/control/adjust-control-window` 更新实际防治时间
+7. 重算气象数据范围为所有理论轮次的最早开始日期减 3 天，到最晚结束日期加 15 天
+8. 审核提交成功后，前端应按返回的 `farming_task_ids` / `operation_plan_ids` 刷新正式任务详情，不要继续用审核页旧草稿作为最终方案
+
 成功响应格式：
 
 ```json

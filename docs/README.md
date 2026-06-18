@@ -40,6 +40,7 @@ Use $cropflow-wrap-up to summarize today, update memory, and prepare commit acti
 8. model/data-model.md
 9. workflow/task-workflow-matrix.md
 10. workflow/background-job-matrix.md
+11. architecture/data-integration.md
 ```
 
 说明：
@@ -88,6 +89,7 @@ docs/
 │   ├── system-function.md
 │   ├── modules.md
 │   ├── events.md
+│   ├── data-integration.md
 │   └── orchestration-design.md
 ├── model/
 │   ├── domain-model.md

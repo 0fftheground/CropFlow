@@ -69,6 +69,7 @@ docs/architecture/system-function.md
 docs/architecture/architecture.md
 docs/architecture/modules.md
 docs/architecture/events.md
+docs/architecture/data-integration.md
 docs/architecture/orchestration-design.md
 docs/decisions/
 ```
@@ -87,6 +88,9 @@ docs/architecture/modules.md
 
 docs/architecture/events.md
   适合处理事件接入、事件命名、事件来源和事件驱动链路。
+
+docs/architecture/data-integration.md
+  适合处理外部数据、算法接口、文件、设备和第三方系统的接入边界、快照、质量检查和血缘追溯。
 
 docs/architecture/orchestration-design.md
   适合处理 Plan Orchestrator、Stage Orchestrator、回编排逻辑和状态推进。
