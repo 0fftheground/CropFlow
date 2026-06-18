@@ -39,6 +39,13 @@ TASK_SUBTYPE_SERVICE_EFFECT_SURVEY = "plant_protection.service_effect_survey"
 TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY = "plant_protection.regular_disease_pest_survey"
 TASK_SUBTYPE_SUDDEN_DISEASE_PEST_SURVEY = "plant_protection.sudden_disease_pest_survey"
 TASK_SUBTYPE_DISEASE_PEST_CONTROL = "plant_protection.disease_pest_control"
+PEST_DISEASE_CONTROL_AVAILABLE_TARGETS = (
+    "二化螟",
+    "稻纵卷叶螟",
+    "稻飞虱",
+    "稻瘟病",
+    "纹枯病",
+)
 
 CALENDAR_STATUS_ACTIVE = "active"
 CALENDAR_STATUS_GENERATED = "generated"

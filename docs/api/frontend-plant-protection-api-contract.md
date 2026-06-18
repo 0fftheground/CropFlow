@@ -1129,12 +1129,16 @@ Query 参数：
 7. `sourceExecutionRecordId`
 8. `inputExecutionRecordIds`
 9. `rawResponse`
+10. `reviewContext`
 
 病虫害防治审核页读取建议：
 
 1. 对 `review_type=disease_pest_control_recommendation`，优先从 `source_task_intent.rule_result.proposedPlan` 读取候选防治方案
 2. 当前常见关键字段包括 `operationWindow`、`targets`、`rounds`、`controlPlan`、`theoryPlan`、`adjustedPlan`、`basis`
-3. 审核通过前通常还没有正式 `OperationPlan`，因此 `operation_plans` 为空属于正常
+3. `proposedPlan.targets` 表示当前候选方案已命中的防治对象，不是完整候选全集
+4. 审核页如需支持人工补选新增防治对象，应读取 `source_task_intent.rule_result.reviewContext.availableTargets`
+5. 当前 `availableTargets` 返回固定完整对象集：`二化螟`、`稻纵卷叶螟`、`稻飞虱`、`稻瘟病`、`纹枯病`
+6. 审核通过前通常还没有正式 `OperationPlan`，因此 `operation_plans` 为空属于正常
 
 #### `ReviewRequestFarmingTaskResponse`
 
@@ -1261,6 +1265,77 @@ Query 参数：
     }
   },
   "decision_note": "调整第 1 轮理论防治窗口",
+  "resolved_by": "agronomist-1"
+}
+```
+
+病虫害新增第 2 轮防治：
+
+```json
+{
+  "decision": "adjust",
+  "decision_payload": {
+    "proposedPlan": {
+      "controlPlan": {
+        "rounds": [
+          {
+            "_action": "add",
+            "round": 2,
+            "targets": {
+              "纹枯病": "防治"
+            },
+            "prescription": {
+              "product": "新增第二轮药剂",
+              "dose": "80ml/亩"
+            }
+          }
+        ]
+      },
+      "theoryPlan": {
+        "rounds": [
+          {
+            "_action": "add",
+            "round": 2,
+            "targets": {
+              "纹枯病": "防治"
+            },
+            "theory_window": ["20260708", "20260710"]
+          }
+        ]
+      }
+    }
+  },
+  "decision_note": "新增第 2 轮病虫害防治",
+  "resolved_by": "agronomist-1"
+}
+```
+
+病虫害删除第 1 轮防治：
+
+```json
+{
+  "decision": "adjust",
+  "decision_payload": {
+    "proposedPlan": {
+      "controlPlan": {
+        "rounds": [
+          {
+            "_action": "delete",
+            "round": 1
+          }
+        ]
+      },
+      "theoryPlan": {
+        "rounds": [
+          {
+            "_action": "delete",
+            "round": 1
+          }
+        ]
+      }
+    }
+  },
+  "decision_note": "删除第 1 轮病虫害防治",
   "resolved_by": "agronomist-1"
 }
 ```
@@ -1396,13 +1471,15 @@ Query 参数：
 3. `decision_payload` 是覆盖补丁，不是完整替换。对象字段递归合并；未提交字段保留候选方案原值。
 4. 普通数组字段整体替换，例如 `operationWindow`。
 5. 对 `plant_protection.disease_pest_control`、`plant_protection.soil_sealing_weed_control`、`plant_protection.stem_leaf_weed_control`，如果只提交 `proposedTask.recommendedControlDate` 或只提交 `proposedPlan.operationWindow`，后端会自动同步另一边，保证生成后的任务时间和作业窗口一致。
-6. `rounds` 数组不支持新增或合并轮次数，只支持修改已有轮次。前端可传 `round` 定位轮次；不传 `round` 时按数组下标定位。
+6. `rounds` 默认支持按已有轮次做局部修改。前端可传 `round` 定位轮次；不传 `round` 时按数组下标定位。
 7. `plant_protection.soil_sealing_weed_control` 审核当前常见可改字段是 `proposedPlan.operationAction`、`proposedPlan.controlPlan`。
 8. `plant_protection.stem_leaf_weed_control` 审核当前常见可改字段是 `proposedPlan.controlTarget`、`proposedPlan.controlPlan`。
 9. 病虫害防治审核当前支持修改 `proposedPlan.controlPlan.rounds[].prescription`、`proposedPlan.theoryPlan.rounds[].targets`、`proposedPlan.theoryPlan.rounds[].theory_window`。
-10. 如果提交了 `proposedPlan.theoryPlan.rounds[].theory_window`，后端会重新调用 `/pestDisease/control/adjust-control-window` 更新实际防治时间。`spray_suitability_data` 的气象数据范围按所有理论轮次汇总：最早理论窗口开始日期减 3 天，到最晚理论窗口结束日期加 30 天。
-11. 理论窗口重算后，后端会更新生成方案中的 `operationWindow`、`rounds`、`adjustedPlan`、`spraySuitabilityRequiredRange`、`spraySuitabilityData`、`weatherAdjust`，并同步更新生成任务的 `recommendedControlDate`。
-12. 对病虫害防治建议，前端默认从详情接口的 `source_task_intent.rule_result.proposedPlan` 读取候选方案，用户修改后只需提交发生变化的字段。
+10. 病虫害防治审核支持对 `proposedPlan.controlPlan.rounds` 和 `proposedPlan.theoryPlan.rounds` 做轮次新增、删除。轮次操作使用 `rounds[]._action`：`add` 表示按 `round` 位置插入新轮次，`delete` 表示删除该轮次；删除后后端会自动把剩余轮次重新编号为 `1..N`。
+11. 对病虫害防治，如果新增或删除轮次，前端需要同时提交 `controlPlan.rounds` 和 `theoryPlan.rounds` 的对应变更；两边轮次数不一致时后端会拒绝。
+12. 如果提交了 `proposedPlan.theoryPlan` 的任何轮次变更，例如 `theory_window`、`targets`、新增轮次、删除轮次，后端会重新调用 `/pestDisease/control/adjust-control-window` 更新实际防治时间。`spray_suitability_data` 的气象数据范围按所有理论轮次汇总：最早理论窗口开始日期减 3 天，到最晚理论窗口结束日期加 30 天。
+13. 理论轮次重算后，后端会更新生成方案中的 `operationWindow`、`rounds`、`adjustedPlan`、`spraySuitabilityRequiredRange`、`spraySuitabilityData`、`weatherAdjust`，并同步更新生成任务的 `recommendedControlDate`。
+14. 对病虫害防治建议，前端默认从详情接口的 `source_task_intent.rule_result.proposedPlan` 读取候选方案，用户修改后只需提交发生变化的字段。
 
 成功响应：
 

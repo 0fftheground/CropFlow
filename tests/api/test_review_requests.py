@@ -158,6 +158,52 @@ class FakeReviewRequestQueryService:
         )
 
 
+@dataclass
+class FakeDiseasePestReviewRequestQueryService:
+    def get_detail(self, review_request_id: int) -> ReviewRequestDetail:
+        review_request = ReviewRequest(
+            id=review_request_id,
+            planting_plan_id=1,
+            review_type="disease_pest_control_recommendation",
+            status="open",
+            source_entity_type="task_intent",
+            source_entity_id=11,
+            title="病虫害防治待审核",
+            idempotency_key=f"review:{review_request_id}",
+        )
+        return ReviewRequestDetail(
+            review_request=review_request,
+            source_task_intent=TaskIntent(
+                id=11,
+                planting_plan_id=1,
+                task_category="plant_protection",
+                task_subtype="plant_protection.disease_pest_control",
+                status="pending",
+                trigger_type="SurveyResultRecorded",
+                trigger_summary="病虫害调查触发",
+                rule_result={
+                    "proposedPlan": {
+                        "targets": {"二化螟": "防治"},
+                        "theoryPlan": {
+                            "rounds": [
+                                {
+                                    "round": 1,
+                                    "targets": {"二化螟": "防治"},
+                                    "theory_window": ["20260629", "20260701"],
+                                },
+                            ],
+                        },
+                    },
+                },
+                idempotency_key="intent:11",
+            ),
+            linked_farming_task=None,
+            operation_plans=[],
+            source_execution_record=None,
+            event_records=[],
+        )
+
+
 class DummySession:
     def get(self, model, key):
         if model is User and key == "agronomist-1":
@@ -270,5 +316,26 @@ def test_get_review_request_detail_route_returns_context() -> None:
     assert body["operation_plans"][0]["id"] == 50
     assert body["source_execution_record"]["id"] == 99
     assert body["event_records"][0]["event_type"] == "ReviewRequestCreated"
+
+    app.dependency_overrides.clear()
+
+
+def test_get_review_request_detail_route_adds_available_targets_for_disease_pest_review() -> None:
+    app.dependency_overrides[get_review_request_query_service] = lambda: FakeDiseasePestReviewRequestQueryService()
+    client = TestClient(app)
+
+    response = client.get("/api/review-requests/21")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source_task_intent"]["task_subtype"] == "plant_protection.disease_pest_control"
+    assert body["source_task_intent"]["rule_result"]["proposedPlan"]["targets"] == {"二化螟": "防治"}
+    assert body["source_task_intent"]["rule_result"]["reviewContext"]["availableTargets"] == [
+        "二化螟",
+        "稻纵卷叶螟",
+        "稻飞虱",
+        "稻瘟病",
+        "纹枯病",
+    ]
 
     app.dependency_overrides.clear()

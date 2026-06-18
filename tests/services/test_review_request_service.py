@@ -623,10 +623,258 @@ def test_adjust_disease_pest_review_updates_specific_round_fields_only() -> None
     ]
 
 
-def test_adjust_review_request_rejects_new_round_override() -> None:
-    service, task_intent, review_request, farming_task_repo, operation_plan_repo, _ = make_service()
-    task_intent.rule_result["proposedPlan"]["controlPlan"] = {
-        "rounds": [{"round": 1, "prescription": {"product": "原方案药剂"}}],
+def test_adjust_disease_pest_review_supports_adding_rounds() -> None:
+    adjustment_service = FakePestDiseaseControlPlanningService()
+    service, task_intent, _, _, operation_plan_repo, _ = make_service_with_adjustment_service(adjustment_service)
+    task_intent.task_subtype = "plant_protection.disease_pest_control"
+    task_intent.rule_result = {
+        "algorithmCode": "pest_disease.generate_theory_control_plan",
+        "proposedTask": {
+            "title": "病虫常规防治",
+            "recommendedControlDate": ["2026-06-29", "2026-06-29"],
+        },
+        "proposedPlan": {
+            "planType": "plant_protection_control",
+            "controlType": "regular",
+            "operationWindow": ["2026-06-29", "2026-06-29"],
+            "controlPlan": {
+                "rounds": [
+                    {
+                        "round": 1,
+                        "targets": {"二化螟": "防治"},
+                        "prescription": {"product": "第一轮药剂", "dose": "100ml/亩"},
+                    },
+                ],
+            },
+            "theoryPlan": {
+                "rounds": [
+                    {
+                        "round": 1,
+                        "targets": {"二化螟": "防治"},
+                        "theory_window": ["20260629", "20260701"],
+                    },
+                ],
+            },
+        },
+    }
+
+    service.resolve(
+        20,
+        ReviewRequestResolveInput(
+            decision="adjust",
+            decision_payload={
+                "proposedPlan": {
+                    "controlPlan": {
+                        "rounds": [
+                            {
+                                "_action": "add",
+                                "round": 2,
+                                "targets": {"纹枯病": "防治"},
+                                "prescription": {"product": "新增第二轮药剂", "dose": "80ml/亩"},
+                            },
+                        ],
+                    },
+                    "theoryPlan": {
+                        "rounds": [
+                            {
+                                "_action": "add",
+                                "round": 2,
+                                "targets": {"纹枯病": "防治"},
+                                "theory_window": ["20260708", "20260710"],
+                            },
+                        ],
+                    },
+                },
+            },
+            decision_note="新增第二轮防治",
+            resolved_by="agronomist-1",
+        ),
+    )
+
+    proposed_plan = operation_plan_repo.items[0].parameters
+
+    assert adjustment_service.calls == [
+        {
+            "planting_plan_id": 1,
+            "control_type": "regular",
+            "theory_plan": {
+                "rounds": [
+                    {
+                        "round": 1,
+                        "targets": {"二化螟": "防治"},
+                        "theory_window": ["20260629", "20260701"],
+                    },
+                    {
+                        "round": 2,
+                        "targets": {"纹枯病": "防治"},
+                        "theory_window": ["20260708", "20260710"],
+                    },
+                ],
+            },
+        },
+    ]
+    assert proposed_plan["controlPlan"]["rounds"] == [
+        {
+            "round": 1,
+            "targets": {"二化螟": "防治"},
+            "prescription": {"product": "第一轮药剂", "dose": "100ml/亩"},
+        },
+        {
+            "round": 2,
+            "targets": {"纹枯病": "防治"},
+            "prescription": {"product": "新增第二轮药剂", "dose": "80ml/亩"},
+        },
+    ]
+    assert proposed_plan["theoryPlan"]["rounds"] == [
+        {
+            "round": 1,
+            "targets": {"二化螟": "防治"},
+            "theory_window": ["20260629", "20260701"],
+        },
+        {
+            "round": 2,
+            "targets": {"纹枯病": "防治"},
+            "theory_window": ["20260708", "20260710"],
+        },
+    ]
+
+
+def test_adjust_disease_pest_review_supports_deleting_rounds_and_renumbers_remaining_rounds() -> None:
+    adjustment_service = FakePestDiseaseControlPlanningService()
+    service, task_intent, review_request, farming_task_repo, operation_plan_repo, _ = make_service_with_adjustment_service(
+        adjustment_service,
+    )
+    task_intent.task_subtype = "plant_protection.disease_pest_control"
+    task_intent.rule_result = {
+        "algorithmCode": "pest_disease.generate_theory_control_plan",
+        "proposedTask": {
+            "title": "病虫常规防治",
+            "recommendedControlDate": ["2026-06-29", "2026-06-29"],
+        },
+        "proposedPlan": {
+            "planType": "plant_protection_control",
+            "controlType": "regular",
+            "operationWindow": ["2026-06-29", "2026-06-29"],
+            "controlPlan": {
+                "rounds": [
+                    {
+                        "round": 1,
+                        "targets": {"二化螟": "防治"},
+                        "prescription": {"product": "第一轮药剂", "dose": "100ml/亩"},
+                    },
+                    {
+                        "round": 2,
+                        "targets": {"纹枯病": "防治"},
+                        "prescription": {"product": "第二轮药剂", "dose": "80ml/亩"},
+                    },
+                ],
+            },
+            "theoryPlan": {
+                "rounds": [
+                    {
+                        "round": 1,
+                        "targets": {"二化螟": "防治"},
+                        "theory_window": ["20260629", "20260701"],
+                    },
+                    {
+                        "round": 2,
+                        "targets": {"纹枯病": "防治"},
+                        "theory_window": ["20260708", "20260710"],
+                    },
+                ],
+            },
+        },
+    }
+
+    service.resolve(
+        20,
+        ReviewRequestResolveInput(
+            decision="adjust",
+            decision_payload={
+                "proposedPlan": {
+                    "controlPlan": {
+                        "rounds": [
+                            {
+                                "_action": "delete",
+                                "round": 1,
+                            },
+                        ],
+                    },
+                    "theoryPlan": {
+                        "rounds": [
+                            {
+                                "_action": "delete",
+                                "round": 1,
+                            },
+                        ],
+                    },
+                },
+            },
+            decision_note="删除第一轮防治",
+            resolved_by="agronomist-1",
+        ),
+    )
+
+    proposed_plan = operation_plan_repo.items[0].parameters
+
+    assert adjustment_service.calls == [
+        {
+            "planting_plan_id": 1,
+            "control_type": "regular",
+            "theory_plan": {
+                "rounds": [
+                    {
+                        "round": 1,
+                        "targets": {"纹枯病": "防治"},
+                        "theory_window": ["20260708", "20260710"],
+                    },
+                ],
+            },
+        },
+    ]
+    assert proposed_plan["controlPlan"]["rounds"] == [
+        {
+            "round": 1,
+            "targets": {"纹枯病": "防治"},
+            "prescription": {"product": "第二轮药剂", "dose": "80ml/亩"},
+        },
+    ]
+    assert proposed_plan["theoryPlan"]["rounds"] == [
+        {
+            "round": 1,
+            "targets": {"纹枯病": "防治"},
+            "theory_window": ["20260708", "20260710"],
+        },
+    ]
+    assert review_request.status == "resolved"
+    assert farming_task_repo.items[0].review_request_id == 20
+
+
+def test_adjust_disease_pest_review_rejects_unaligned_round_changes() -> None:
+    adjustment_service = FakePestDiseaseControlPlanningService()
+    service, task_intent, review_request, farming_task_repo, operation_plan_repo, _ = make_service_with_adjustment_service(
+        adjustment_service,
+    )
+    task_intent.task_subtype = "plant_protection.disease_pest_control"
+    task_intent.rule_result["proposedPlan"] = {
+        "controlType": "regular",
+        "controlPlan": {
+            "rounds": [
+                {
+                    "round": 1,
+                    "prescription": {"product": "第一轮药剂"},
+                },
+            ],
+        },
+        "theoryPlan": {
+            "rounds": [
+                {
+                    "round": 1,
+                    "targets": {"二化螟": "防治"},
+                    "theory_window": ["20260629", "20260701"],
+                },
+            ],
+        },
     }
 
     try:
@@ -637,22 +885,29 @@ def test_adjust_review_request_rejects_new_round_override() -> None:
                 decision_payload={
                     "proposedPlan": {
                         "controlPlan": {
-                            "rounds": [{"round": 2, "prescription": {"product": "新增轮次药剂"}}],
+                            "rounds": [
+                                {
+                                    "_action": "add",
+                                    "round": 2,
+                                    "prescription": {"product": "新增第二轮药剂"},
+                                },
+                            ],
                         },
                     },
                 },
-                decision_note="尝试新增轮次",
+                decision_note="只新增处方轮次",
                 resolved_by="agronomist-1",
             ),
         )
     except ValueError as exc:
-        assert str(exc) == "Cannot adjust round 2; existing round does not exist."
+        assert str(exc) == "Disease pest control review requires controlPlan.rounds and theoryPlan.rounds to have the same number of rounds."
     else:
-        raise AssertionError("Expected missing round override to fail.")
+        raise AssertionError("Expected unaligned disease pest round change to fail.")
 
     assert review_request.status == "resolved"
     assert farming_task_repo.items == []
     assert operation_plan_repo.items == []
+    assert adjustment_service.calls == []
 
 
 def test_no_action_review_request_marks_task_intent_no_action() -> None:

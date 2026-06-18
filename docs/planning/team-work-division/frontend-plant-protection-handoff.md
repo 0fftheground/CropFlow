@@ -715,8 +715,10 @@ service_effect_survey
 2. 进入审核详情页后，使用 `GET /api/review-requests/{reviewRequestId}` 拉取完整上下文
 3. 对 `review_type=disease_pest_control_recommendation`，前端应优先从 `source_task_intent.rule_result.proposedPlan` 读取候选防治方案
 4. 当前病虫害审核建议稿的关键字段通常在 `proposedPlan.operationWindow`、`proposedPlan.targets`、`proposedPlan.rounds`、`proposedPlan.controlPlan`、`proposedPlan.theoryPlan`、`proposedPlan.adjustedPlan`、`proposedPlan.basis`
-5. `operation_plans` 只有在审核已生成正式 `FarmingTask / OperationPlan` 后才会有值；对处于 `open` 状态的病虫害审核，`operation_plans` 为空通常是正常表现
-6. 审核通过后，前端应优先使用返回的 `farming_task_ids` 或 `operation_plan_ids` 刷新任务详情页；正式方案再从 `GET /api/tasks/{taskId}` 的 `operation_plans` 读取
+5. `proposedPlan.targets` 表示当前候选方案已经命中的对象，不表示完整可选全集
+6. 如审核页需要支持人工补选新增防治对象，应同时读取 `source_task_intent.rule_result.reviewContext.availableTargets`
+7. `operation_plans` 只有在审核已生成正式 `FarmingTask / OperationPlan` 后才会有值；对处于 `open` 状态的病虫害审核，`operation_plans` 为空通常是正常表现
+8. 审核通过后，前端应优先使用返回的 `farming_task_ids` 或 `operation_plan_ids` 刷新任务详情页；正式方案再从 `GET /api/tasks/{taskId}` 的 `operation_plans` 读取
 
 `POST /api/review-requests/{reviewRequestId}/resolve` 请求格式：
 
@@ -730,6 +732,19 @@ service_effect_survey
 ```
 
 如果审核时只修改病虫害作业方案的一部分，`decision_payload` 只传变化字段即可，不需要回传完整候选方案。后端会把提交内容合并到 `source_task_intent.rule_result.proposedPlan` 后生成正式 `OperationPlan`。
+
+本地联调建议：
+
+1. 若前端需要直接验证“复核页同时修改作业方案和作业时间”，优先使用 `scripts/bootstrap_review_adjustment_demo.py` 生成样板数据
+2. 运行命令：
+   `.venv\Scripts\python.exe scripts/bootstrap_review_adjustment_demo.py`
+3. 脚本会创建 1 个计划，并生成 3 条 `open` 状态待审核事项：
+   `plant_protection.soil_sealing_weed_control`
+   `plant_protection.stem_leaf_weed_control`
+   `plant_protection.disease_pest_control`
+4. 脚本输出会直接打印 `planting_plan_id` 和各 subtype 对应的 `review_request_id`
+5. 前端可先调用 `GET /api/planting-plans/{plantingPlanId}/review-requests` 做列表展示，再进入 `GET /api/review-requests/{reviewRequestId}` 拉取完整审核上下文
+6. `resolved_by` 本地可直接传 `reviewer-demo` 或 `联调复核员`
 
 只修改第 1 轮处方：
 
@@ -864,13 +879,15 @@ service_effect_survey
 2. `decision_payload` 是补丁，不是完整替换；对象字段递归合并，未提交字段保留原候选值
 3. 普通数组字段整体替换，例如 `operationWindow`
 4. 对 `plant_protection.disease_pest_control`、`plant_protection.soil_sealing_weed_control`、`plant_protection.stem_leaf_weed_control`，如果只提交 `proposedTask.recommendedControlDate` 或只提交 `proposedPlan.operationWindow`，后端会自动同步另一边
-5. `rounds` 只支持修改已有轮次，不支持新增或合并轮次数；建议始终传 `round` 定位
+5. `rounds` 默认支持修改已有轮次；病虫害防治额外支持新增和删除轮次，建议始终传 `round` 定位
 6. `plant_protection.soil_sealing_weed_control` 当前常见可改字段是 `proposedPlan.operationAction`、`proposedPlan.controlPlan`
 7. `plant_protection.stem_leaf_weed_control` 当前常见可改字段是 `proposedPlan.controlTarget`、`proposedPlan.controlPlan`
 8. 当前病虫害审核支持修改 `proposedPlan.controlPlan.rounds[].prescription`、`proposedPlan.theoryPlan.rounds[].targets`、`proposedPlan.theoryPlan.rounds[].theory_window`
-9. 如果提交了 `theory_window`，后端会重新调用 `/pestDisease/control/adjust-control-window` 更新实际防治时间
-10. 重算气象数据范围为所有理论轮次的最早开始日期减 3 天，到最晚结束日期加 30 天
-11. 审核提交成功后，前端应按返回的 `farming_task_ids` / `operation_plan_ids` 刷新正式任务详情，不要继续用审核页旧草稿作为最终方案
+9. 病虫害防治新增或删除轮次时，使用 `proposedPlan.controlPlan.rounds[]._action` 和 `proposedPlan.theoryPlan.rounds[]._action`，支持 `add` / `delete`
+10. 病虫害防治做轮次增删时，需要同时提交 `controlPlan.rounds` 和 `theoryPlan.rounds` 的对应变更；删除后后端会自动把剩余轮次重排为 `1..N`
+11. 如果提交了病虫害 `theoryPlan` 的轮次变更，例如 `theory_window`、`targets`、新增轮次、删除轮次，后端会重新调用 `/pestDisease/control/adjust-control-window` 更新实际防治时间
+12. 重算气象数据范围为所有理论轮次的最早开始日期减 3 天，到最晚结束日期加 30 天
+13. 审核提交成功后，前端应按返回的 `farming_task_ids` / `operation_plan_ids` 刷新正式任务详情，不要继续用审核页旧草稿作为最终方案
 
 成功响应格式：
 
@@ -1216,6 +1233,7 @@ service_effect_survey
 3. 服务评价当前不是独立 `Evaluation` 对象，而是服务评价任务的调查结果录入
 4. `service_effect_survey` 当前录入后链路直接结束
 5. 若要演示后台自动把 `CalendarItem` 转为正式调查任务，需要本地启用 scheduler 或使用已有 seed / trace 流程
+6. 若要直接联调复核修改链路，不必手工创建全套调查数据；可直接运行 `scripts/bootstrap_review_adjustment_demo.py`
 
 ---
 

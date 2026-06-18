@@ -74,6 +74,35 @@ curl http://127.0.0.1:8000/api/health
 3. 同步导入 `pp_rice_control_window_level_1.csv`
 4. 同步导入 `cf_crop_stage_dict_20260601.csv`
 
+如果需要直接生成“审核修改作业方案和时间”的本地联调样板，执行：
+
+```powershell
+.venv\Scripts\python.exe scripts/bootstrap_review_adjustment_demo.py
+```
+
+用途：
+
+1. 生成 1 个用于复核联调的 `PlantingPlan`
+2. 自动补齐 3 条 `open` 状态的 `ReviewRequest`
+3. 覆盖以下正式防治 subtype：
+   `plant_protection.soil_sealing_weed_control`
+   `plant_protection.stem_leaf_weed_control`
+   `plant_protection.disease_pest_control`
+4. 自动准备必要的前置调查和建议态数据，前端可直接测试 `GET /api/review-requests/{reviewRequestId}` 和 `POST /api/review-requests/{reviewRequestId}/resolve`
+
+脚本输出会打印：
+
+1. `planting_plan_id`
+2. `generated_task_ids`
+3. 3 条待审核记录的 `review_request_id`
+4. 可用于 `resolved_by` 的示例值：`reviewer-demo`、`联调复核员`
+
+使用说明：
+
+1. 先确保本地库已完成 migration 且已有基础参考数据；若未初始化，先执行 `scripts/seed_local_dev_data.py` 或 `scripts/seed_reference_data.py`
+2. 启动本地 API 后，可用 `GET /api/planting-plans/{plantingPlanId}/review-requests` 校验脚本生成结果
+3. 如需重复生成干净样板，建议先清理本地测试计划数据，再重新执行脚本
+
 如果只需要最小必需参考数据，不要演示农场 / 计划 / 任务数据，执行：
 
 ```powershell

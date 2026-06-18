@@ -9,6 +9,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_review_request_query_service, get_review_request_service
+from app.core.constants import PEST_DISEASE_CONTROL_AVAILABLE_TARGETS, TASK_SUBTYPE_DISEASE_PEST_CONTROL
 from app.db.session import get_db
 from app.models import EventRecord, ExecutionRecord, FarmingTask, OperationPlan, ReviewRequest, TaskIntent, User
 from app.services import (
@@ -224,6 +225,7 @@ def _serialize_review_request_detail(result: ReviewRequestDetail) -> ReviewReque
 
 
 def _serialize_task_intent(task_intent: TaskIntent) -> ReviewRequestTaskIntentResponse:
+    rule_result = _build_review_request_rule_result(task_intent)
     return ReviewRequestTaskIntentResponse(
         id=task_intent.id,
         task_subtype=task_intent.task_subtype,
@@ -231,10 +233,21 @@ def _serialize_task_intent(task_intent: TaskIntent) -> ReviewRequestTaskIntentRe
         trigger_type=task_intent.trigger_type,
         trigger_summary=task_intent.trigger_summary,
         suggested_action=task_intent.suggested_action,
-        rule_result=task_intent.rule_result or {},
+        rule_result=rule_result,
         converted_task_id=task_intent.converted_task_id,
         source_execution_record_id=task_intent.source_execution_record_id,
     )
+
+
+def _build_review_request_rule_result(task_intent: TaskIntent) -> dict[str, Any]:
+    rule_result = dict(task_intent.rule_result or {})
+    if task_intent.task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
+        return rule_result
+
+    review_context = dict(rule_result.get("reviewContext") or {})
+    review_context["availableTargets"] = list(PEST_DISEASE_CONTROL_AVAILABLE_TARGETS)
+    rule_result["reviewContext"] = review_context
+    return rule_result
 
 
 def _serialize_farming_task(farming_task: FarmingTask) -> ReviewRequestFarmingTaskResponse:

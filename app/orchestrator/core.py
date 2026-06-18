@@ -1643,7 +1643,8 @@ class ReviewRequestResolvedHandler:
         overrides = dict(event_record.payload.get("decisionPayload") or {})
         proposed_task = _merge_review_override(proposed_task, dict(overrides.get("proposedTask") or {}))
         proposed_plan = _merge_review_override(proposed_plan, dict(overrides.get("proposedPlan") or {}))
-        if _has_disease_pest_theory_window_override(overrides):
+        _validate_disease_pest_review_rounds(task_intent.task_subtype, proposed_plan)
+        if _has_disease_pest_theory_plan_override(task_intent.task_subtype, overrides):
             self._refresh_disease_pest_adjusted_plan(task_intent, proposed_task, proposed_plan)
         self._sync_supported_control_schedule(task_intent, proposed_task, proposed_plan, overrides)
 
@@ -2139,45 +2140,128 @@ def _merge_review_override(base: dict[str, Any], override: dict[str, Any]) -> di
 
 def _merge_round_overrides(base_rounds: list[Any], override_rounds: list[Any]) -> list[Any]:
     merged_rounds = list(base_rounds)
-    round_index_by_number = {
-        item.get("round"): index
-        for index, item in enumerate(merged_rounds)
-        if isinstance(item, dict) and item.get("round") is not None
-    }
+    _renumber_round_list(merged_rounds)
     for override_index, override_round in enumerate(override_rounds):
         if not isinstance(override_round, dict):
             if override_index >= len(merged_rounds):
                 raise ValueError(f"Cannot adjust round index {override_index}; existing round does not exist.")
             merged_rounds[override_index] = override_round
+            _renumber_round_list(merged_rounds)
             continue
 
-        target_index = None
-        if override_round.get("round") is not None:
-            target_index = round_index_by_number.get(override_round.get("round"))
-        elif override_index < len(merged_rounds):
-            target_index = override_index
-        if target_index is None:
-            raise ValueError(f"Cannot adjust round {override_round.get('round')!r}; existing round does not exist.")
+        action = _normalize_round_override_action(override_round.get("_action"))
+        if action == "add":
+            insert_index = _resolve_round_insert_index(merged_rounds, override_round)
+            round_payload = _strip_round_override_metadata(override_round, include_round=False)
+            merged_rounds.insert(insert_index, round_payload)
+            _renumber_round_list(merged_rounds)
+            continue
+
+        target_index = _resolve_round_target_index(
+            merged_rounds,
+            override_round,
+            override_index,
+            action=action,
+        )
+        if action == "delete":
+            del merged_rounds[target_index]
+            _renumber_round_list(merged_rounds)
+            continue
 
         existing_round = merged_rounds[target_index]
+        override_payload = _strip_round_override_metadata(override_round, include_round=False)
         if isinstance(existing_round, dict):
-            merged_rounds[target_index] = _merge_review_override(existing_round, override_round)
+            merged_rounds[target_index] = _merge_review_override(existing_round, override_payload)
         else:
-            merged_rounds[target_index] = override_round
+            merged_rounds[target_index] = override_payload
+        _renumber_round_list(merged_rounds)
     return merged_rounds
 
 
-def _has_disease_pest_theory_window_override(overrides: dict[str, Any]) -> bool:
+def _normalize_round_override_action(raw_action: Any) -> str:
+    if raw_action is None:
+        return "update"
+    normalized = str(raw_action).strip().lower()
+    if normalized in {"update", "replace"}:
+        return "update"
+    if normalized in {"add", "append", "insert"}:
+        return "add"
+    if normalized in {"delete", "remove"}:
+        return "delete"
+    raise ValueError(f"Unsupported round override action: {raw_action!r}.")
+
+
+def _resolve_round_insert_index(merged_rounds: list[Any], override_round: dict[str, Any]) -> int:
+    raw_round = override_round.get("round")
+    if raw_round is None:
+        return len(merged_rounds)
+    round_number = int(raw_round)
+    if round_number < 1 or round_number > len(merged_rounds) + 1:
+        raise ValueError(f"Cannot add round {round_number}; insert position is out of range.")
+    return round_number - 1
+
+
+def _resolve_round_target_index(
+    merged_rounds: list[Any],
+    override_round: dict[str, Any],
+    override_index: int,
+    *,
+    action: str,
+) -> int:
+    raw_round = override_round.get("round")
+    if raw_round is not None:
+        round_number = int(raw_round)
+        target_index = round_number - 1
+        if round_number < 1 or target_index >= len(merged_rounds):
+            raise ValueError(f"Cannot {action} round {round_number}; existing round does not exist.")
+        return target_index
+    if override_index >= len(merged_rounds):
+        raise ValueError(f"Cannot {action} round index {override_index}; existing round does not exist.")
+    return override_index
+
+
+def _strip_round_override_metadata(override_round: dict[str, Any], *, include_round: bool) -> dict[str, Any]:
+    stripped = {key: value for key, value in override_round.items() if key != "_action"}
+    if not include_round:
+        stripped.pop("round", None)
+    return stripped
+
+
+def _renumber_round_list(rounds: list[Any]) -> None:
+    for index, item in enumerate(rounds, start=1):
+        if isinstance(item, dict):
+            item["round"] = index
+
+
+def _has_disease_pest_theory_plan_override(task_subtype: str, overrides: dict[str, Any]) -> bool:
+    if task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
+        return False
     proposed_plan = overrides.get("proposedPlan")
     if not isinstance(proposed_plan, dict):
         return False
     theory_plan = proposed_plan.get("theoryPlan")
     if not isinstance(theory_plan, dict):
         return False
-    rounds = theory_plan.get("rounds")
-    if not isinstance(rounds, list):
-        return False
-    return any(isinstance(item, dict) and "theory_window" in item for item in rounds)
+    return bool(theory_plan)
+
+
+def _validate_disease_pest_review_rounds(task_subtype: str, proposed_plan: dict[str, Any]) -> None:
+    if task_subtype != TASK_SUBTYPE_DISEASE_PEST_CONTROL:
+        return
+    control_plan = proposed_plan.get("controlPlan")
+    theory_plan = proposed_plan.get("theoryPlan")
+    control_rounds = control_plan.get("rounds") if isinstance(control_plan, dict) else None
+    theory_rounds = theory_plan.get("rounds") if isinstance(theory_plan, dict) else None
+    if control_rounds is None and theory_rounds is None:
+        return
+    if not isinstance(control_rounds, list) or not isinstance(theory_rounds, list):
+        raise ValueError("Disease pest control review requires both controlPlan.rounds and theoryPlan.rounds.")
+    if len(control_rounds) != len(theory_rounds):
+        raise ValueError("Disease pest control review requires controlPlan.rounds and theoryPlan.rounds to have the same number of rounds.")
+    control_round_numbers = [int(item.get("round") or index + 1) for index, item in enumerate(control_rounds) if isinstance(item, dict)]
+    theory_round_numbers = [int(item.get("round") or index + 1) for index, item in enumerate(theory_rounds) if isinstance(item, dict)]
+    if control_round_numbers != theory_round_numbers:
+        raise ValueError("Disease pest control review requires controlPlan.rounds and theoryPlan.rounds to stay aligned by round.")
 
 
 def _resolve_control_schedule_task_key(task_subtype: str) -> str | None:
