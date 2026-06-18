@@ -801,9 +801,9 @@ def test_regular_disease_pest_survey_creates_control_task_intent_and_review_requ
     }
     assert task_intent_repo.items[0].rule_result["proposedTask"]["recommendedControlDate"] == ["2026-06-29", "2026-06-29"]
     assert task_intent_repo.items[0].rule_result["proposedPlan"]["operationWindow"] == ["2026-06-29", "2026-06-29"]
-    assert task_intent_repo.items[0].rule_result["proposedPlan"]["spraySuitabilityRequiredRange"] == ["2026-06-29", "2026-07-10"]
+    assert task_intent_repo.items[0].rule_result["proposedPlan"]["spraySuitabilityRequiredRange"] == ["2026-06-26", "2026-07-30"]
     assert task_intent_repo.items[0].rule_result["proposedPlan"]["spraySuitabilityData"][0] == {
-        "date": "20260629",
+        "date": "20260626",
         "dy_ws": 1.0,
     }
     assert task_intent_repo.items[0].rule_result["proposedPlan"]["adjustedPlan"]["rounds"][0]["final_window"] == ["20260629"]

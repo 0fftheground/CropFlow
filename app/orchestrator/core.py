@@ -980,8 +980,8 @@ class SurveyResultRecordedHandler:
             "theoryPlan": dict(theory_result.raw_data),
             "adjustedPlan": dict(adjusted_result.raw_data),
             "spraySuitabilityRequiredRange": (
-                _format_date_range(theory_result.spray_suitability_required_range)
-                if theory_result.spray_suitability_required_range
+                _format_date_range(planning_result.spray_suitability_required_range)
+                if planning_result.spray_suitability_required_range
                 else []
             ),
             "spraySuitabilityData": [dict(item) for item in planning_result.spray_suitability_data],
@@ -1645,6 +1645,7 @@ class ReviewRequestResolvedHandler:
         proposed_plan = _merge_review_override(proposed_plan, dict(overrides.get("proposedPlan") or {}))
         if _has_disease_pest_theory_window_override(overrides):
             self._refresh_disease_pest_adjusted_plan(task_intent, proposed_task, proposed_plan)
+        self._sync_supported_control_schedule(task_intent, proposed_task, proposed_plan, overrides)
 
         farming_task = FarmingTask(
             planting_plan_id=task_intent.planting_plan_id,
@@ -1743,6 +1744,32 @@ class ReviewRequestResolvedHandler:
         )
         proposed_plan["spraySuitabilityData"] = [dict(item) for item in review_adjustment.spray_suitability_data]
         proposed_plan["weatherAdjust"] = dict(adjusted_result.weather_adjust)
+
+    def _sync_supported_control_schedule(
+        self,
+        task_intent: TaskIntent,
+        proposed_task: dict[str, Any],
+        proposed_plan: dict[str, Any],
+        overrides: dict[str, Any],
+    ) -> None:
+        control_date_key = _resolve_control_schedule_task_key(task_intent.task_subtype)
+        if control_date_key is None:
+            return
+
+        proposed_task_overrides = dict(overrides.get("proposedTask") or {})
+        proposed_plan_overrides = dict(overrides.get("proposedPlan") or {})
+
+        task_time_overridden = control_date_key in proposed_task_overrides
+        plan_time_overridden = "operationWindow" in proposed_plan_overrides
+        if not task_time_overridden and not plan_time_overridden:
+            return
+
+        task_time = proposed_task.get(control_date_key)
+        plan_time = proposed_plan.get("operationWindow")
+        if task_time_overridden and not plan_time_overridden:
+            proposed_plan["operationWindow"] = task_time
+        elif plan_time_overridden and not task_time_overridden:
+            proposed_task[control_date_key] = plan_time
 
     def _create_operation_plan_if_needed(
         self,
@@ -2151,6 +2178,16 @@ def _has_disease_pest_theory_window_override(overrides: dict[str, Any]) -> bool:
     if not isinstance(rounds, list):
         return False
     return any(isinstance(item, dict) and "theory_window" in item for item in rounds)
+
+
+def _resolve_control_schedule_task_key(task_subtype: str) -> str | None:
+    if task_subtype in {
+        TASK_SUBTYPE_DISEASE_PEST_CONTROL,
+        TASK_SUBTYPE_SOIL_SEALING_WEED_CONTROL,
+        TASK_SUBTYPE_STEM_LEAF_WEED_CONTROL,
+    }:
+        return "recommendedControlDate"
+    return None
 
 
 def _parse_optional_datetime_or_date_range_start(raw_value: Any) -> datetime | None:

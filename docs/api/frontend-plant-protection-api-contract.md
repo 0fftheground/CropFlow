@@ -1265,6 +1265,82 @@ Query 参数：
 }
 ```
 
+只调整土壤封闭除草时间：
+
+```json
+{
+  "decision": "adjust",
+  "decision_payload": {
+    "proposedTask": {
+      "recommendedControlDate": ["2026-04-24", "2026-04-25"]
+    }
+  },
+  "decision_note": "调整土壤封闭除草时间",
+  "resolved_by": "agronomist-1"
+}
+```
+
+只调整土壤封闭除草作业方案：
+
+```json
+{
+  "decision": "adjust",
+  "decision_payload": {
+    "proposedPlan": {
+      "operationAction": "苗后封闭",
+      "controlPlan": {
+        "prescriptions": [
+          {
+            "product": "人工调整后的封闭药剂",
+            "dose": "按标签推荐剂量"
+          }
+        ]
+      }
+    }
+  },
+  "decision_note": "调整土壤封闭除草方案",
+  "resolved_by": "agronomist-1"
+}
+```
+
+只调整茎叶除草作业窗口：
+
+```json
+{
+  "decision": "adjust",
+  "decision_payload": {
+    "proposedPlan": {
+      "operationWindow": ["2026-04-26", "2026-04-27"]
+    }
+  },
+  "decision_note": "调整茎叶除草窗口",
+  "resolved_by": "agronomist-1"
+}
+```
+
+只调整茎叶除草作业方案：
+
+```json
+{
+  "decision": "adjust",
+  "decision_payload": {
+    "proposedPlan": {
+      "controlTarget": "稗草",
+      "controlPlan": {
+        "prescriptions": [
+          {
+            "product": "人工调整后的茎叶除草剂",
+            "dose": "按标签推荐剂量"
+          }
+        ]
+      }
+    }
+  },
+  "decision_note": "调整茎叶除草方案",
+  "resolved_by": "agronomist-1"
+}
+```
+
 完整示例：同时调整任务时间、处方、理论窗口、作业区域和验收标准：
 
 ```json
@@ -1319,11 +1395,14 @@ Query 参数：
 2. `proposedPlan` 会影响生成的 `OperationPlan`，例如 `parameters`、`operation_window_start/end`、`operation_area`、`prescription_map`、`acceptance_criteria`。
 3. `decision_payload` 是覆盖补丁，不是完整替换。对象字段递归合并；未提交字段保留候选方案原值。
 4. 普通数组字段整体替换，例如 `operationWindow`。
-5. `rounds` 数组不支持新增或合并轮次数，只支持修改已有轮次。前端可传 `round` 定位轮次；不传 `round` 时按数组下标定位。
-6. 病虫害防治审核当前支持修改 `proposedPlan.controlPlan.rounds[].prescription`、`proposedPlan.theoryPlan.rounds[].targets`、`proposedPlan.theoryPlan.rounds[].theory_window`。
-7. 如果提交了 `proposedPlan.theoryPlan.rounds[].theory_window`，后端会重新调用 `/pestDisease/control/adjust-control-window` 更新实际防治时间。`spray_suitability_data` 的气象数据范围按所有理论轮次汇总：最早理论窗口开始日期减 3 天，到最晚理论窗口结束日期加 15 天。
-8. 理论窗口重算后，后端会更新生成方案中的 `operationWindow`、`rounds`、`adjustedPlan`、`spraySuitabilityRequiredRange`、`spraySuitabilityData`、`weatherAdjust`，并同步更新生成任务的 `recommendedControlDate`。
-9. 对病虫害防治建议，前端默认从详情接口的 `source_task_intent.rule_result.proposedPlan` 读取候选方案，用户修改后只需提交发生变化的字段。
+5. 对 `plant_protection.disease_pest_control`、`plant_protection.soil_sealing_weed_control`、`plant_protection.stem_leaf_weed_control`，如果只提交 `proposedTask.recommendedControlDate` 或只提交 `proposedPlan.operationWindow`，后端会自动同步另一边，保证生成后的任务时间和作业窗口一致。
+6. `rounds` 数组不支持新增或合并轮次数，只支持修改已有轮次。前端可传 `round` 定位轮次；不传 `round` 时按数组下标定位。
+7. `plant_protection.soil_sealing_weed_control` 审核当前常见可改字段是 `proposedPlan.operationAction`、`proposedPlan.controlPlan`。
+8. `plant_protection.stem_leaf_weed_control` 审核当前常见可改字段是 `proposedPlan.controlTarget`、`proposedPlan.controlPlan`。
+9. 病虫害防治审核当前支持修改 `proposedPlan.controlPlan.rounds[].prescription`、`proposedPlan.theoryPlan.rounds[].targets`、`proposedPlan.theoryPlan.rounds[].theory_window`。
+10. 如果提交了 `proposedPlan.theoryPlan.rounds[].theory_window`，后端会重新调用 `/pestDisease/control/adjust-control-window` 更新实际防治时间。`spray_suitability_data` 的气象数据范围按所有理论轮次汇总：最早理论窗口开始日期减 3 天，到最晚理论窗口结束日期加 30 天。
+11. 理论窗口重算后，后端会更新生成方案中的 `operationWindow`、`rounds`、`adjustedPlan`、`spraySuitabilityRequiredRange`、`spraySuitabilityData`、`weatherAdjust`，并同步更新生成任务的 `recommendedControlDate`。
+12. 对病虫害防治建议，前端默认从详情接口的 `source_task_intent.rule_result.proposedPlan` 读取候选方案，用户修改后只需提交发生变化的字段。
 
 成功响应：
 

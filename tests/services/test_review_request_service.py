@@ -99,7 +99,7 @@ class FakePestDiseaseControlPlanningService:
             },
         )
         return PestDiseaseReviewAdjustmentResult(
-            spray_suitability_required_range=(date(2026, 6, 27), date(2026, 7, 17)),
+            spray_suitability_required_range=(date(2026, 6, 27), date(2026, 8, 1)),
             spray_suitability_data=[{"date": "20260701", "dy_ws": 1.0}],
             adjusted_result=PestDiseaseAdjustedControlResult(
                 control_type=control_type,
@@ -167,7 +167,7 @@ class RecordingWeatherProvider:
         self.calls.append((start_date, end_date))
         return [
             {"DATE": "20260627", "wins": 1.0, "pre": 0.0, "rh": 70.0, "tAvg": 25.0},
-            {"DATE": "20260717", "wins": 1.0, "pre": 0.0, "rh": 70.0, "tAvg": 25.0},
+            {"DATE": "20260801", "wins": 1.0, "pre": 0.0, "rh": 70.0, "tAvg": 25.0},
         ]
 
 
@@ -340,11 +340,11 @@ def test_review_theory_window_adjustment_fetches_weather_from_expanded_window() 
         },
     )
 
-    assert weather_provider.calls == [(date(2026, 6, 27), date(2026, 7, 17))]
-    assert result.spray_suitability_required_range == (date(2026, 6, 27), date(2026, 7, 17))
+    assert weather_provider.calls == [(date(2026, 6, 27), date(2026, 8, 1))]
+    assert result.spray_suitability_required_range == (date(2026, 6, 27), date(2026, 8, 1))
     assert control_client.adjust_calls[0]["spray_suitability_data"] == [
         {"date": "20260627", "dy_ws": 1.0},
-        {"date": "20260717", "dy_ws": 1.0},
+        {"date": "20260801", "dy_ws": 1.0},
     ]
 
 
@@ -420,6 +420,66 @@ def test_adjust_review_request_applies_operation_plan_overrides() -> None:
     assert operation_plan.acceptance_criteria == {"coverage": ">=90%"}
     assert operation_plan.prescription_map == operation_plan.parameters["controlPlan"]
     assert result.operation_plans == [operation_plan]
+
+
+def test_adjust_review_request_syncs_task_time_to_operation_window_for_supported_control_subtype() -> None:
+    service, task_intent, _, farming_task_repo, operation_plan_repo, _ = make_service()
+    task_intent.task_subtype = "plant_protection.soil_sealing_weed_control"
+    task_intent.rule_result = {
+        "algorithmCode": "soil_treatment_diagnosis",
+        "proposedTask": {
+            "title": "土壤封闭除草",
+            "recommendedControlDate": ["2026-04-20", "2026-04-20"],
+        },
+        "proposedPlan": {
+            "controlPlan": {"prescriptions": [{"pesticide": "封闭药剂"}]},
+            "operationAction": "苗后封闭",
+        },
+    }
+
+    service.resolve(
+        20,
+        ReviewRequestResolveInput(
+            decision="adjust",
+            decision_payload={
+                "proposedTask": {
+                    "recommendedControlDate": ["2026-04-24", "2026-04-25"],
+                },
+            },
+            decision_note="调整封闭除草时间",
+            resolved_by="agronomist-1",
+        ),
+    )
+
+    assert farming_task_repo.items[0].planned_start_at.date() == date(2026, 4, 24)
+    assert farming_task_repo.items[0].planned_end_at.date() == date(2026, 4, 25)
+    assert operation_plan_repo.items[0].operation_window_start.date() == date(2026, 4, 24)
+    assert operation_plan_repo.items[0].operation_window_end.date() == date(2026, 4, 25)
+    assert operation_plan_repo.items[0].parameters["operationWindow"] == ["2026-04-24", "2026-04-25"]
+
+
+def test_adjust_review_request_syncs_operation_window_to_task_time_for_supported_control_subtype() -> None:
+    service, task_intent, _, farming_task_repo, operation_plan_repo, _ = make_service()
+
+    service.resolve(
+        20,
+        ReviewRequestResolveInput(
+            decision="adjust",
+            decision_payload={
+                "proposedPlan": {
+                    "operationWindow": ["2026-04-26", "2026-04-27"],
+                },
+            },
+            decision_note="调整茎叶除草窗口",
+            resolved_by="agronomist-1",
+        ),
+    )
+
+    assert farming_task_repo.items[0].planned_start_at.date() == date(2026, 4, 26)
+    assert farming_task_repo.items[0].planned_end_at.date() == date(2026, 4, 27)
+    assert operation_plan_repo.items[0].operation_window_start.date() == date(2026, 4, 26)
+    assert operation_plan_repo.items[0].operation_window_end.date() == date(2026, 4, 27)
+    assert operation_plan_repo.items[0].parameters["operationWindow"] == ["2026-04-26", "2026-04-27"]
 
 
 def test_adjust_disease_pest_review_updates_specific_round_fields_only() -> None:
@@ -534,7 +594,7 @@ def test_adjust_disease_pest_review_updates_specific_round_fields_only() -> None
             "finalWindow": ["2026-07-01", "2026-07-01"],
         },
     ]
-    assert proposed_plan["spraySuitabilityRequiredRange"] == ["2026-06-27", "2026-07-17"]
+    assert proposed_plan["spraySuitabilityRequiredRange"] == ["2026-06-27", "2026-08-01"]
     assert proposed_plan["spraySuitabilityData"] == [{"date": "20260701", "dy_ws": 1.0}]
     assert proposed_plan["adjustedPlan"]["rounds"][0]["final_window"] == ["20260701"]
     assert proposed_plan["controlPlan"]["rounds"] == [

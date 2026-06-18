@@ -76,7 +76,7 @@ class PestDiseaseControlClient(Protocol):
         control_type: str,
         theory_plan: dict[str, Any],
         spray_suitability_data: list[dict[str, Any]],
-        plant_info: dict[str, Any] | None = None,
+        plant_info: dict[str, Any],
     ) -> "PestDiseaseAdjustedControlResult": ...
 
     def get_merge_spray_suitability_range(
@@ -180,6 +180,7 @@ class PestDiseaseTheoryPlanningResult:
     review_description: str
     request_payload: dict[str, Any]
     theory_result: PestDiseaseTheoryControlResult
+    spray_suitability_required_range: tuple[date, date] | None
     spray_suitability_data: list[dict[str, Any]]
     adjusted_result: PestDiseaseAdjustedControlResult
 
@@ -249,15 +250,14 @@ class HttpPestDiseaseControlClient:
         control_type: str,
         theory_plan: dict[str, Any],
         spray_suitability_data: list[dict[str, Any]],
-        plant_info: dict[str, Any] | None = None,
+        plant_info: dict[str, Any],
     ) -> PestDiseaseAdjustedControlResult:
         payload: dict[str, Any] = {
             "control_type": control_type,
             "theory_plan": theory_plan,
             "spray_suitability_data": spray_suitability_data,
+            "plant_info": plant_info,
         }
-        if plant_info is not None:
-            payload["plant_info"] = plant_info
         response = self._post_json("/pestDisease/control/adjust-control-window", payload)
         data = self._get_response_data(response, "adjust-control-window")
         return _parse_adjusted_control_result(data, response)
@@ -397,7 +397,6 @@ class MockPestDiseaseControlClient:
                 "control_mode": "无需防治",
                 "status": None,
                 "rounds": [],
-                "spray_suitability_required_range": [],
                 "flags": {"mock": True},
             }
             response = {"mock": True, "code": 200, "msg": "无需防治", "data": data}
@@ -419,10 +418,6 @@ class MockPestDiseaseControlClient:
             "control_mode": "单次防治",
             "status": "normal",
             "rounds": [round_payload],
-            "spray_suitability_required_range": [
-                start_date.strftime("%Y%m%d"),
-                (end_date + timedelta(days=10)).strftime("%Y%m%d"),
-            ],
             "flags": {
                 "mock": True,
                 "province": province,
@@ -442,7 +437,7 @@ class MockPestDiseaseControlClient:
         control_type: str,
         theory_plan: dict[str, Any],
         spray_suitability_data: list[dict[str, Any]],
-        plant_info: dict[str, Any] | None = None,
+        plant_info: dict[str, Any],
     ) -> PestDiseaseAdjustedControlResult:
         normalized_theory_plan = _unwrap_theory_plan_payload(theory_plan)
         if str(normalized_theory_plan.get("mock_mode") or "") == "cancel_after_adjust":
@@ -716,21 +711,32 @@ class PestDiseaseControlPlanningService:
             herb_control_date=herb_control_date,
             harvest_date=harvest_date,
         )
-        if theory_result.spray_suitability_required_range is not None:
+        if theory_result.rounds:
+            spray_suitability_required_range = _resolve_adjust_spray_suitability_required_range(theory_result.raw_data)
             weather_rows = self.weather_provider.get_spray_suitability_weather(
                 planting_plan,
-                theory_result.spray_suitability_required_range[0],
-                theory_result.spray_suitability_required_range[1],
+                spray_suitability_required_range[0],
+                spray_suitability_required_range[1],
             )
             spray_suitability_data = build_spray_suitability_data(weather_rows)
+            adjusted_result = self.control_client.adjust_control_window(
+                control_type=control_type,
+                theory_plan=dict(theory_result.raw_data),
+                spray_suitability_data=spray_suitability_data,
+                plant_info=plant_info,
+            )
         else:
+            spray_suitability_required_range = None
             spray_suitability_data = []
-        adjusted_result = self.control_client.adjust_control_window(
-            control_type=control_type,
-            theory_plan=dict(theory_result.raw_data),
-            spray_suitability_data=spray_suitability_data,
-            plant_info=plant_info if control_type == "emergency" else None,
-        )
+            adjusted_result = PestDiseaseAdjustedControlResult(
+                control_type=control_type,
+                control_mode=theory_result.control_mode,
+                status=theory_result.status,
+                rounds=[],
+                weather_adjust={},
+                raw_data={},
+                raw_response={},
+            )
         title = "病虫常规防治" if control_type == "regular" else "病虫突发防治"
         title_rounds = adjusted_result.rounds or theory_result.rounds
         if title_rounds:
@@ -750,6 +756,7 @@ class PestDiseaseControlPlanningService:
             review_description="病虫调查结果已生成理论防治方案，需审核后再生成正式防治任务。",
             request_payload=request_payload,
             theory_result=theory_result,
+            spray_suitability_required_range=spray_suitability_required_range,
             spray_suitability_data=spray_suitability_data,
             adjusted_result=adjusted_result,
         )
@@ -810,7 +817,7 @@ class PestDiseaseControlPlanningService:
         context = self.context_resolver.resolve(planting_plan)
         plant_info = self._build_plant_info(planting_plan, context.cultivation_system, context.cultivation_pattern)
         normalized_theory_plan = _unwrap_theory_plan_payload(theory_plan)
-        spray_suitability_required_range = _resolve_review_spray_suitability_required_range(normalized_theory_plan)
+        spray_suitability_required_range = _resolve_adjust_spray_suitability_required_range(normalized_theory_plan)
         weather_rows = self.weather_provider.get_spray_suitability_weather(
             planting_plan,
             spray_suitability_required_range[0],
@@ -821,7 +828,7 @@ class PestDiseaseControlPlanningService:
             control_type=control_type,
             theory_plan=dict(normalized_theory_plan),
             spray_suitability_data=spray_suitability_data,
-            plant_info=plant_info if control_type == "emergency" else None,
+            plant_info=plant_info,
         )
         return PestDiseaseReviewAdjustmentResult(
             spray_suitability_required_range=spray_suitability_required_range,
@@ -1122,18 +1129,18 @@ def _parse_adjusted_control_result(
     )
 
 
-def _resolve_review_spray_suitability_required_range(theory_plan: dict[str, Any]) -> tuple[date, date]:
+def _resolve_adjust_spray_suitability_required_range(theory_plan: dict[str, Any]) -> tuple[date, date]:
     raw_rounds = theory_plan.get("rounds")
     if not isinstance(raw_rounds, list) or not raw_rounds:
-        raise ValueError("Review adjusted theory plan does not contain rounds.")
+        raise ValueError("Theory plan does not contain rounds.")
     theory_windows = []
     for raw_round in raw_rounds:
         if not isinstance(raw_round, dict):
-            raise ValueError("Review adjusted theory plan contains invalid round item.")
+            raise ValueError("Theory plan contains invalid round item.")
         theory_windows.append(_parse_api_date_range(raw_round.get("theory_window"), "theory_window"))
     return (
         min(item[0] for item in theory_windows) - timedelta(days=3),
-        max(item[1] for item in theory_windows) + timedelta(days=15),
+        max(item[1] for item in theory_windows) + timedelta(days=30),
     )
 
 
