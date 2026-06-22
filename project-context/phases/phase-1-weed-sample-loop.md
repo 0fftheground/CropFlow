@@ -24,10 +24,10 @@
 ## 当前关键交付物
 
 ```text
-1. docs/planning/archive/P1/todo-list.md
-2. docs/planning/directions/plant-protection/task-checklist.md
-3. docs/planning/directions/plant-protection/overview.md
-4. docs/planning/team-work-division/frontend.md
+1. docs/history/P1/todo-list.md
+2. docs/workflow/checklists/plant-protection-task-checklist.md
+3. docs/domain/plant-protection.md
+4. docs/frontend/overview.md
 5. docs/api/weed_diagnosis_api.md
 6. database/sql/20260518_weed_protection_closed_loop.sql
 ```

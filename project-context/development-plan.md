@@ -6,8 +6,8 @@
 
 ```text
 1. 本文件中的 P0/P1/P2/P3 是为了 session 交接而使用的工作相位切片。
-2. docs/planning/development-roadmap.md 中的 T0/T1/T2/T3 仍是正式推进里程碑。
-3. 如两者并存，以 roadmap 的 T 阶段作为对外正式口径；P 阶段只用于仓库内交接和当前推进定位。
+2. 当前不再维护独立 roadmap 文档；phase 定义以 project-context/ 下文档为准。
+3. P 阶段只用于仓库内交接、当前推进定位和阶段范围维护。
 ```
 
 ## Phase Overview

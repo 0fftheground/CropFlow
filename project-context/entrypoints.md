@@ -28,12 +28,24 @@
 
 ```text
 $cropflow-start-work
-  用途：恢复当前 phase、检查 git 状态、总结当前进展、建议下一步。
+  用途：恢复当前 phase、检查 git 状态、回顾最近变更、总结当前进展、建议下一步。
   推荐说法：Use $cropflow-start-work to restore current CropFlow progress
 
+$cropflow-task-planning
+  用途：在非简单功能、复杂 bug、重构或业务规则变更前，分析影响范围、实现取舍、测试和文档更新。
+  推荐说法：Use $cropflow-task-planning to analyze a non-trivial CropFlow change before editing code
+
+$cropflow-task-closing
+  用途：在单个任务完成后收口测试、文档、ADR、change-note 和 review checklist。
+  推荐说法：Use $cropflow-task-closing to close one completed CropFlow task with tests and doc updates
+
 $cropflow-wrap-up
-  用途：扫尾当天工作、更新 current-memory、生成 commit message，并在明确要求时 commit / push。
+  用途：扫尾当天工作、更新 current-memory、生成 handoff 和 commit message，并在明确要求时 commit / push。
   推荐说法：Use $cropflow-wrap-up to summarize today, update memory, and prepare commit actions
+
+$cropflow-wiki-maintenance
+  用途：低频审查 wiki 漂移、缺失、重叠和索引问题。
+  推荐说法：Use $cropflow-wiki-maintenance to audit CropFlow docs for drift, gaps, and overlap
 ```
 
 ## 全局上下文文件说明
@@ -43,6 +55,7 @@ $cropflow-wrap-up
 | `project-context/development-plan.md` | 全局开发计划、phase 划分、阶段状态 |
 | `project-context/current-memory.md` | 当前 phase 的压缩进展快照 |
 | `project-context/phases/` | 每个 phase 的目标、范围、验收标准和关键任务 |
+| `docs/wiki-index.md` | 正式文档导航页，帮助定位长期知识和 change-notes |
 
 ## 按任务类型的文档入口
 
@@ -179,63 +192,57 @@ docs/workflow/background-job-matrix.md
 
 docs/workflow/flows/
   适合看比矩阵更细的链路拆解，用于讨论具体步骤和时序。
+  当前已补植保细流程：
+  - plant-protection-weed-loop.md
+  - plant-protection-disease-pest-loop.md
 ```
 
-### 团队分工 / 当前阶段交付物
+### 方向知识 / FDE / 前端 handoff / 历史记录
 
 适用场景：
 
 ```text
-1. 判断当前 phase 要交什么，而不是要实现什么未来理想形态。
-2. 确认某个方向该提交哪些表、样例、字段草案或页面材料。
-3. 判断当前阶段还缺哪些非代码交付物。
+1. 按业务方向阅读长期领域知识。
+2. 了解 FDE 如何采访、梳理并沉淀业务逻辑。
+3. 查前端页面构建和联调 handoff。
+4. 回看历史阶段材料或旧拆解证据。
 ```
 
 阅读收益：
 
 ```text
-1. 明确当前 phase 的目标、已确认项、待产出项和完成判定。
-2. 明确各方向的职责边界、交付模板和当前优先级。
-3. 明确样板闭环当前已推进到哪，后续应该先补什么。
+1. 明确各方向已经沉淀下来的业务事实、规则和待补点。
+2. 明确 FDE 文档与正式系统知识文档的边界。
+3. 明确前端如何理解页面和接口展示。
+4. 明确哪些历史材料只保留为证据，不再作为默认入口。
 ```
 
 ```text
-docs/planning/development-roadmap.md
-docs/planning/team-work-division.md
-docs/planning/team-work-division/
-docs/planning/directions/
-docs/planning/archive/P1/
+docs/domain/
+docs/fde/
+docs/frontend/
+docs/history/
 ```
 
 简要说明：
 
 ```text
-docs/planning/development-roadmap.md
-  适合快速判断当前处于哪个阶段、下一阶段进入条件是什么。
+docs/domain/
+  适合按业务方向阅读长期领域知识：
+  - calendar-stage.md
+  - plant-protection.md
+  - irrigation.md
+  - fertilization.md
+  - remote-sensing.md
 
-docs/planning/team-work-division.md
-  适合看全局分工原则、统一提交模板和通用职责边界。
+docs/fde/
+  适合看 FDE 的工作方式、访谈模板和沉淀策略；它描述的是沟通与梳理方法，不是系统正式事实源。
 
-docs/planning/team-work-division/
-  适合按具体角色定向阅读，不必每次看完整总文档。
-  建议按当前任务直接进入对应子文档：
-  - 范围冻结、规则拍板、跨方向收口：product-architecture-owner.md
-  - 核心对象、API contract、编排骨架：core-backend.md
-  - 页面范围和联调：frontend.md / frontend-plant-protection-handoff.md
+docs/frontend/
+  适合前端同学理解页面范围、联调展示和方向 handoff。
 
-docs/planning/directions/
-  适合按业务方向定向阅读 FDE 沉淀的接入材料：
-  - calendar-stage/overview.md
-  - plant-protection/overview.md
-  - irrigation/overview.md
-  - fertilization/overview.md
-  - remote-sensing/overview.md
-
-docs/planning/directions/plant-protection/task-checklist.md
-  适合作为 FDE 主链路任务清单样板，或回看杂草样板闭环的业务语义。
-
-docs/planning/archive/P1/
-  适合需要历史证据时回看 P1 收口计划和 todo，不作为默认阅读入口。
+docs/history/
+  适合需要历史证据时回看 P1 / P2 阶段计划、runbook 和拆解材料，不作为默认阅读入口。
 ```
 
 ### 算法接口 / 契约

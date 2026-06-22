@@ -3,6 +3,13 @@
 > 本文档基于 `docs/workflow/raw/total-workflow.pdf` 整理农事项、执行步骤、算法服务、人工录入点和条件分支。
 > PDF 当前是图片流程图，本文先按可识别节点结构化整理；标记为 `needs_check` 的内容需要后续和业务/算法负责人复核。
 
+当前已补的植保细流程文档：
+
+```text
+docs/workflow/flows/plant-protection-weed-loop.md
+docs/workflow/flows/plant-protection-disease-pest-loop.md
+```
+
 ---
 
 # 1. 建模原则

@@ -30,15 +30,31 @@
 
 ```text
 1. 开始新一天或恢复上下文时，优先使用 $cropflow-start-work。
-2. 结束当天工作、更新 memory 或准备提交时，优先使用 $cropflow-wrap-up。
-3. 如果只是普通代码实现，不必强制调用 skill；但只要涉及 session 恢复或扫尾，优先走 skill。
+2. 开始非简单功能、复杂 bug、重构或业务规则变更前，优先使用 $cropflow-task-planning。
+3. 单个任务完成后需要收口测试、文档、change-note 或 ADR 时，优先使用 $cropflow-task-closing。
+4. 结束当天工作、更新 memory 或准备 handoff / 提交时，优先使用 $cropflow-wrap-up。
+5. 定期整理 wiki、排查文档漂移和缺口时，优先使用 $cropflow-wiki-maintenance。
+6. 很小的实现任务不必机械调用 skill；但涉及 session 恢复、复杂任务规划、任务收尾或 wiki 整理时，优先走对应 skill。
+```
+
+仓库内镜像定义位置：
+
+```text
+skills/cropflow-start-work/SKILL.md
+skills/cropflow-task-planning/SKILL.md
+skills/cropflow-task-closing/SKILL.md
+skills/cropflow-wrap-up/SKILL.md
+skills/cropflow-wiki-maintenance/SKILL.md
 ```
 
 推荐触发方式：
 
 ```text
 Use $cropflow-start-work to restore current CropFlow progress
+Use $cropflow-task-planning to analyze a non-trivial CropFlow change before editing code
+Use $cropflow-task-closing to close one completed CropFlow task with tests and doc updates
 Use $cropflow-wrap-up to summarize today, update memory, and prepare commit actions
+Use $cropflow-wiki-maintenance to audit CropFlow docs for drift, gaps, and overlap
 ```
 
 ## 项目背景
@@ -155,20 +171,21 @@ ExecutionModule
 
 ```text
 docs/ai/README.md
+docs/wiki-index.md
 project-context/entrypoints.md
 project-context/development-plan.md
 project-context/current-memory.md
 docs/README.md
 docs/architecture/system-function.md
 docs/architecture/architecture.md
+docs/domain/README.md
 docs/model/domain-model.md
 docs/model/data-model.md
 docs/model/data-model-validation.md
 docs/workflow/task-workflow-matrix.md
 docs/workflow/background-job-matrix.md
-docs/planning/development-roadmap.md
-docs/planning/team-work-division.md
-docs/planning/guides/agent-development-guidelines.md
+docs/fde/README.md
+docs/change-notes/
 docs/architecture/modules.md
 docs/architecture/events.md
 docs/architecture/orchestration-design.md
@@ -197,7 +214,38 @@ docs/decisions/
 4. 不让 Execution Module 反向创建业务任务。
 5. 不让 Feedback 直接跳过 Plan Orchestrator。
 6. 不新增与现有核心对象语义重复的对象。
-7. 如新增核心对象或流程，先更新 docs/。
+7. 如新增核心对象、流程或长期规则，先更新 docs/ 中对应事实源。
+8. 完成功能需求开发、重要修复或联调收口后，必须按影响范围同步更新项目知识文档。
+9. 如形成长期设计取舍或冻结口径，同步补充 docs/decisions/。
+10. 如一个已完成工作项值得后续回看影响范围，同步补充 docs/change-notes/。
+```
+
+## 非简单任务的处理要求
+
+对于非简单功能、复杂 bug、重构或明显会影响业务逻辑的改动，不应直接盲改代码。
+
+```text
+1. 先恢复当前 phase 和相关文档上下文。
+2. 先识别受影响的对象、流程、接口、任务链路和测试范围。
+3. 如需求存在多种实现路径或业务口径未冻结，先向用户说明当前理解、实现取舍和验证方式。
+4. 在没有把影响范围说清楚前，不把复杂改动伪装成“小修小补”直接落代码。
+```
+
+## 功能完成后的知识回写要求
+
+为满足 LLM wiki 的核心目标，功能完成后不能只停留在代码、commit 或 current-memory。
+
+```text
+1. 对象、字段、状态变化：更新 docs/model/。
+2. 模块职责、边界变化：更新 docs/architecture/。
+3. workflow、job、事件链路变化：更新 docs/workflow/。
+4. API 请求、响应、字段口径变化：更新 docs/api/。
+5. 长期业务方向知识变化：更新 docs/domain/。
+6. 前端页面构建、展示、联调口径变化：更新 docs/frontend/。
+7. FDE 方法、访谈模板或知识沉淀策略变化：更新 docs/fde/。
+8. 形成长期设计取舍：更新 docs/decisions/。
+9. 一个工作项已经完成且需要保留可读演进摘要：更新 docs/change-notes/。
+10. 不把重要结论只留在 current-memory、聊天记录、PR 描述或 commit message 中。
 ```
 
 ## 通用编码行为要求
@@ -299,4 +347,3 @@ docs/decisions/
 部署：Docker
 前端：由前端负责人确定，但需遵循统一 API contract
 ```
-

@@ -1,0 +1,4 @@
+interface:
+  display_name: "CropFlow Task Planning"
+  short_description: "Plan non-trivial CropFlow changes safely."
+  default_prompt: "Use $cropflow-task-planning to analyze scope, options, and validation before changing CropFlow code."

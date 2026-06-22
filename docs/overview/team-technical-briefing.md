@@ -1,7 +1,7 @@
 # CropFlow 技术策略与团队工作说明
 
 > 本文档用于向开发团队说明 CropFlow MVP 的技术方案、系统架构、核心对象关系和运行流转。  
-> 方向分工见 `docs/planning/team-work-division.md`，推进节奏见 `docs/planning/development-roadmap.md`。
+> 业务方向知识见 `docs/domain/`，当前推进状态见 `project-context/development-plan.md`，FDE 方法见 `docs/fde/README.md`。
 
 ---
 
@@ -430,9 +430,9 @@ EventRecord.payload
 | 文档 | 适合阅读对象 | 内容 |
 |---|---|---|
 | `project-context/entrypoints.md` | 新 session、AI agent、需要按任务定向阅读的人 | 仓库级稳定入口、阅读顺序和按任务分类的文档索引 |
-| `docs/planning/team-work-division.md` | 产品 / 架构负责人、后端、前端、各业务方向负责人 | 各方向职责、近期任务、交付物 |
-| `docs/planning/development-roadmap.md` | 全体开发人员和项目协作人员 | 当前阶段、开工前契约、第一条垂直闭环、后续扩展节奏 |
-| `docs/planning/guides/agent-development-guidelines.md` | 使用 AI agent 分工开发的人员 | Agent 任务模板、代码交付形态、禁止事项和验收清单 |
+| `docs/domain/` | 产品 / 架构负责人、后端、前端、各业务方向负责人 | 各方向长期业务知识、规则和待补点 |
+| `project-context/development-plan.md` | 全体开发人员和项目协作人员 | 当前 phase、阶段目标和状态 |
+| `docs/fde/README.md` | 负责采访、梳理和沉淀业务逻辑的开发人员 | FDE 工作方式和相关文档入口 |
 
 ---
 
@@ -510,7 +510,7 @@ EventRecord.payload
 3. 核心对象关系：CalendarItem / FarmingTask / OperationPlan 的区别。
 4. 关键流转：计划创建、任务生成、运行期事件、执行反馈、人工复核。
 5. 技术栈建议：Python + FastAPI + PostgreSQL。
-6. 分工方式：详见 docs/planning/team-work-division.md。
+6. 业务方向知识：详见 docs/domain/。
 7. 当前已确认：植保接口、库存、后台任务、人工确认边界。
-8. 下一步产出：详见 docs/planning/development-roadmap.md。
+8. 下一步产出：详见 project-context/development-plan.md。
 ```

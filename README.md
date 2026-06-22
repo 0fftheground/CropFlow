@@ -100,15 +100,16 @@ ReviewRequest
 
 ```text
 docs/README.md
+docs/wiki-index.md
 ```
 
 建议先读：
 
 ```text
 docs/overview/team-technical-briefing.md     团队技术说明、系统架构、核心对象和关键流转
-docs/planning/development-roadmap.md         当前阶段、开工前契约和推进节奏
-docs/planning/team-work-division.md          各方向分工、职责和交付物
-docs/planning/guides/agent-development-guidelines.md AI agent 分工开发规范、任务模板和验收清单
+docs/domain/README.md                        业务方向长期知识入口
+docs/fde/README.md                           FDE 访谈、梳理和文档沉淀方式
+docs/frontend/README.md                      前端 handoff 和联调说明入口
 ```
 
 数据模型和流程：
@@ -138,6 +139,7 @@ docs/model/glossary.md
 docs/api/                           外部算法接口文档
 docs/workflow/flows/                         关键流程拆解
 docs/decisions/                     设计决策记录
+docs/change-notes/                  已完成工作项的可读变更摘要
 docs/workflow/raw/total-workflow.pdf         农事项总流程图原始来源
 ```
 
@@ -174,8 +176,10 @@ REST API + OpenAPI
 
 ```text
 AGENTS.md
-docs/planning/guides/agent-development-guidelines.md
+docs/fde/README.md
+skills/
 ```
 
 `AGENTS.md` 记录项目核心边界、命名规则、文档优先级和编码约束。  
-`docs/planning/guides/agent-development-guidelines.md` 记录 agent 任务模板、代码交付形态和验收清单。
+`docs/fde/README.md` 记录 FDE 工作方式和业务梳理相关文档入口。  
+`skills/` 保存仓库内可继承的 session workflow skill 定义。

@@ -20,11 +20,14 @@ project-context/current-memory.md
 3. project-context/current-memory.md 只负责当前 phase 的压缩进展快照。
 ```
 
-如果当前动作属于 session 恢复或当天扫尾，推荐先显式调用：
+如果当前动作属于 session 恢复、复杂任务规划、单任务收尾、当天扫尾或定期 wiki 整理，推荐先显式调用：
 
 ```text
 Use $cropflow-start-work to restore current CropFlow progress
+Use $cropflow-task-planning to analyze a non-trivial CropFlow change before editing code
+Use $cropflow-task-closing to close one completed CropFlow task with tests and doc updates
 Use $cropflow-wrap-up to summarize today, update memory, and prepare commit actions
+Use $cropflow-wiki-maintenance to audit CropFlow docs for drift, gaps, and overlap
 ```
 
 ## 推荐阅读顺序
@@ -34,13 +37,13 @@ Use $cropflow-wrap-up to summarize today, update memory, and prepare commit acti
 2. ../project-context/development-plan.md
 3. ../project-context/current-memory.md
 4. overview/team-technical-briefing.md
-5. planning/development-roadmap.md
-6. planning/team-work-division.md
-7. planning/guides/agent-development-guidelines.md
-8. model/data-model.md
-9. workflow/task-workflow-matrix.md
-10. workflow/background-job-matrix.md
-11. architecture/data-integration.md
+5. domain/README.md
+6. model/data-model.md
+7. workflow/task-workflow-matrix.md
+8. workflow/background-job-matrix.md
+9. architecture/data-integration.md
+10. fde/README.md
+11. frontend/README.md
 ```
 
 说明：
@@ -48,7 +51,7 @@ Use $cropflow-wrap-up to summarize today, update memory, and prepare commit acti
 ```text
 1. 一次性会议议程、历史 session 记录和重复二级入口已经移除或并入稳定入口。
 2. 如果只是恢复当前工作，不要顺着 docs/ 目录逐个打开，先看 project-context/ 下的稳定入口。
-3. docs/planning/directions/ 保存 FDE 沉淀的业务方向材料；docs/planning/team-work-division/ 只保留角色协作边界和前端 handoff；P1/P2 历史阶段材料已迁入 docs/planning/archive/。
+3. docs/domain/ 保存长期业务方向知识；docs/fde/ 保存沟通与梳理方法；docs/frontend/ 保存前端 handoff；P1/P2 历史阶段材料已迁入 docs/history/。
 ```
 
 ## 目录结构
@@ -56,34 +59,19 @@ Use $cropflow-wrap-up to summarize today, update memory, and prepare commit acti
 ```text
 docs/
 ├── README.md
+├── wiki-index.md
+├── ai/
+│   ├── README.md
+│   └── codex-skill-workflow.md
+├── change-notes/
+├── domain/
 ├── development/
+├── fde/
+├── frontend/
+├── history/
+├── maintenance/
 ├── overview/
 │   └── team-technical-briefing.md
-├── planning/
-│   ├── README.md
-│   ├── archive/
-│   │   ├── P1/
-│   │   └── P2/
-│   ├── development-roadmap.md
-│   ├── guides/
-│   │   ├── agent-development-guidelines.md
-│   │   ├── fde-standard-workflow.md
-│   │   ├── agri-task-integration-doc-requirements.md
-│   │   └── docs-hygiene-plan.md
-│   ├── directions/
-│   │   ├── calendar-stage/
-│   │   ├── plant-protection/
-│   │   │   ├── overview.md
-│   │   │   └── task-checklist.md
-│   │   ├── irrigation/
-│   │   ├── fertilization/
-│   │   └── remote-sensing/
-│   ├── team-work-division.md
-│   ├── team-work-division/
-│   │   ├── product-architecture-owner.md
-│   │   ├── core-backend.md
-│   │   ├── frontend.md
-│   │   └── frontend-plant-protection-handoff.md
 ├── architecture/
 │   ├── architecture.md
 │   ├── system-function.md
@@ -99,6 +87,7 @@ docs/
 ├── workflow/
 │   ├── task-workflow-matrix.md
 │   ├── background-job-matrix.md
+│   ├── checklists/
 │   ├── raw/
 │   │   └── total-workflow.pdf
 │   └── flows/
@@ -113,14 +102,20 @@ docs/
 
 | 目录 | 用途 |
 |---|---|
+| `ai/` | AI / agent 共用入口和 skill 工作流说明 |
 | `development/` | 仓库级本地启动、迁移、seed、联调环境说明 |
+| `domain/` | 长期业务方向知识和领域事实 |
+| `fde/` | FDE 工作方式、访谈模板和文档沉淀方法 |
+| `frontend/` | 前端页面构建、联调与展示 handoff |
+| `history/` | 历史阶段计划、runbook 和拆解材料，仅作证据 |
+| `maintenance/` | 文档治理和知识库维护说明 |
 | `overview/` | 给团队说明项目目标、系统架构、核心对象和关键流转 |
-| `planning/` | 推进节奏、团队角色分工、FDE 接入材料、AI agent 开发规范 |
 | `architecture/` | 系统架构、模块边界、事件、编排器设计 |
 | `model/` | 领域模型、数据模型、模型核对和术语表 |
 | `workflow/` | 农事项流程、后台任务、流程图来源和流程拆解 |
 | `api/` | 外部算法接口、后续 OpenAPI / API contract |
 | `decisions/` | 设计决策记录 |
+| `change-notes/` | 已完成工作项的可读变更摘要 |
 
 ## API 文档入口
 
@@ -154,6 +149,10 @@ docs/
 3. 新增后台任务：先更新 workflow/background-job-matrix.md。
 4. 新增算法接口：放入 api/。
 5. 新增设计取舍：放入 decisions/。
-6. 新增面向团队协作或 agent 的执行规则：放入 planning/。
-7. 文档整理、归档和合并建议：先更新 planning/guides/docs-hygiene-plan.md，不直接删除历史材料。
+6. 新增业务方向长期知识：放入 domain/。
+7. 新增 FDE 工作方式或访谈模板：放入 fde/。
+8. 新增前端联调和页面构建 handoff：放入 frontend/。
+9. 完成功能需求开发、重要修复或联调收口后，按影响范围回写对应正式文档，不把重要结论只留在代码或 current-memory。
+10. 一个工作项已经完成且需要保留可读演进摘要：放入 change-notes/。
+11. 文档整理、归档和合并建议：先更新 maintenance/docs-hygiene-plan.md，不直接删除历史材料。
 ```

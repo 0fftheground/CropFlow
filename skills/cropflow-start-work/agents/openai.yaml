@@ -1,0 +1,4 @@
+interface:
+  display_name: "CropFlow Start Work"
+  short_description: "Restore CropFlow session context safely."
+  default_prompt: "Use $cropflow-start-work to restore current CropFlow progress and suggest the next tasks."

@@ -33,6 +33,8 @@ project-context/phases/phase-2-core-implementation.md
 
 ```text
 docs/README.md
+docs/wiki-index.md
+docs/ai/codex-skill-workflow.md
 docs/architecture/system-function.md
 docs/architecture/architecture.md
 docs/architecture/modules.md
@@ -46,9 +48,12 @@ docs/workflow/task-workflow-matrix.md
 docs/workflow/background-job-matrix.md
 docs/workflow/flows/
 docs/decisions/
-docs/planning/development-roadmap.md
-docs/planning/team-work-division.md
-docs/planning/guides/agent-development-guidelines.md
+docs/change-notes/
+docs/domain/
+docs/fde/
+docs/frontend/
+docs/history/
+docs/maintenance/
 ```
 
 ## 工具入口职责
@@ -59,13 +64,20 @@ docs/planning/guides/agent-development-guidelines.md
 
 两者都应指向本文件，并避免重复维护架构、数据模型、流程矩阵和当前进度。
 
+关于 skill 和 Codex 工作流的集中说明，见：
+
+```text
+docs/ai/codex-skill-workflow.md
+```
+
 ## 文档维护规则
 
 ```text
 1. 新增或修改核心对象、模块边界、流程时，优先更新 docs/ 下的正式文档。
 2. 当前阶段进度、阻塞和下一步只更新 project-context/current-memory.md。
 3. 本文件只在入口顺序、共享索引或跨工具规则变化时更新。
-4. 不在本文件复制长篇架构说明，避免与正式文档漂移。
+4. 完成功能需求开发、重要修复或联调收口后，要按影响范围同步更新 docs/change-notes/、docs/decisions/ 和相关正式文档。
+5. 不在本文件复制长篇架构说明，避免与正式文档漂移。
 ```
 
 ## 当前项目硬约束摘要
