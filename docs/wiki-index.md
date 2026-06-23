@@ -85,6 +85,8 @@
 - `docs/change-notes/2026-06-11-remote-db-bootstrap-and-docker-deploy.md`
 - `docs/change-notes/2026-06-18-disease-pest-review-theory-plan-adjustments.md`
 - `docs/change-notes/2026-06-22-docs-knowledge-structure-reorganization.md`
+- `docs/change-notes/2026-06-23-farm-field-management-api.md`
+- `docs/change-notes/2026-06-23-models-module-split.md`
 
 ## Development Guides
 

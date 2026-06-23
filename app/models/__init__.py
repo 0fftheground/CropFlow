@@ -1,26 +1,30 @@
 from app.models.base import Base
-from app.models.core import (
-    CalendarItem,
+from app.models.execution import Execution, ExecutionRecord
+from app.models.master_data import (
     CodeDict,
     CropStageDict,
-    CropStageState,
-    CropThermalTimeState,
-    EventRecord,
-    Execution,
-    ExecutionRecord,
-    Field,
     Farm,
-    FarmingTask,
-    OperationPlan,
-    PlantingPlan,
-    PlantingPlanFieldRelation,
+    FarmFieldRelation,
+    Field,
     RiceControlWindowLevel1,
     RiceVariety,
-    ReviewRequest,
-    StagePredictionSnapshot,
-    TaskIntent,
     User,
+)
+from app.models.planning import (
+    CropStageState,
+    CropThermalTimeState,
+    PlantingPlan,
+    PlantingPlanFieldRelation,
+    StagePredictionSnapshot,
     WeatherSnapshot,
+)
+from app.models.tasks import (
+    CalendarItem,
+    EventRecord,
+    FarmingTask,
+    OperationPlan,
+    ReviewRequest,
+    TaskIntent,
 )
 
 __all__ = [
@@ -35,6 +39,7 @@ __all__ = [
     "ExecutionRecord",
     "Field",
     "Farm",
+    "FarmFieldRelation",
     "FarmingTask",
     "OperationPlan",
     "PlantingPlan",

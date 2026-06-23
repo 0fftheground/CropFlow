@@ -18,6 +18,7 @@ from app.repositories import (
     ExecutionRecordRepository,
     ExecutionRepository,
     FarmRepository,
+    FarmFieldRelationRepository,
     FieldRepository,
     FarmingTaskRepository,
     OperationPlanRepository,
@@ -31,6 +32,8 @@ from app.repositories import (
 )
 from app.services import (
     CodeDictQueryService,
+    FarmFieldQueryService,
+    FarmFieldService,
     FarmQueryService,
     FarmService,
     FarmingTaskQueryService,
@@ -273,6 +276,7 @@ def get_planting_plan_service(
     yield PlantingPlanService(
         planting_plan_repository=PlantingPlanRepository(db),
         field_repository=FieldRepository(db),
+        farm_field_relation_repository=FarmFieldRelationRepository(db),
         planting_plan_field_relation_repository=PlantingPlanFieldRelationRepository(db),
         rice_variety_repository=RiceVarietyRepository(db),
         farm_repository=FarmRepository(db),
@@ -303,11 +307,34 @@ def get_code_dict_query_service(db: Session = Depends(get_db)) -> Generator[Code
 
 
 def get_farm_service(db: Session = Depends(get_db)) -> Generator[FarmService, None, None]:
-    yield FarmService(farm_repository=FarmRepository(db))
+    yield FarmService(
+        farm_repository=FarmRepository(db),
+        field_repository=FieldRepository(db),
+        farm_field_relation_repository=FarmFieldRelationRepository(db),
+        planting_plan_repository=PlantingPlanRepository(db),
+        planting_plan_field_relation_repository=PlantingPlanFieldRelationRepository(db),
+    )
 
 
 def get_farm_query_service(db: Session = Depends(get_db)) -> Generator[FarmQueryService, None, None]:
     yield FarmQueryService(farm_repository=FarmRepository(db))
+
+
+def get_farm_field_service(db: Session = Depends(get_db)) -> Generator[FarmFieldService, None, None]:
+    yield FarmFieldService(
+        field_repository=FieldRepository(db),
+        farm_repository=FarmRepository(db),
+        farm_field_relation_repository=FarmFieldRelationRepository(db),
+        planting_plan_field_relation_repository=PlantingPlanFieldRelationRepository(db),
+    )
+
+
+def get_farm_field_query_service(db: Session = Depends(get_db)) -> Generator[FarmFieldQueryService, None, None]:
+    yield FarmFieldQueryService(
+        field_repository=FieldRepository(db),
+        farm_repository=FarmRepository(db),
+        farm_field_relation_repository=FarmFieldRelationRepository(db),
+    )
 
 
 def get_rice_variety_query_service(db: Session = Depends(get_db)) -> Generator[RiceVarietyQueryService, None, None]:

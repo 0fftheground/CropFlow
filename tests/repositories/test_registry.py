@@ -11,6 +11,7 @@ def test_core_models_registered_in_metadata() -> None:
         "cf_crop_stage_dict",
         "cf_field",
         "cf_farm",
+        "cf_farm_field_relation",
         "cf_planting_plan",
         "cf_planting_plan_field_relation",
         "cf_event_record",
@@ -35,7 +36,7 @@ def test_metadata_can_sort_tables() -> None:
     with pytest.warns(SAWarning, match="unresolvable cycles"):
         sorted_tables = Base.metadata.sorted_tables
 
-    assert len(sorted_tables) >= 19
+    assert len(sorted_tables) >= 20
 
 
 def test_review_request_source_entity_mapping_covers_core_entities() -> None:

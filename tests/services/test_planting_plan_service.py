@@ -64,6 +64,14 @@ class FakeFarmRepository:
 
 
 @dataclass
+class FakeFarmFieldRelationRepository:
+    mapping: dict[int, list[int]] = field(default_factory=dict)
+
+    def list_field_ids_by_farm(self, farm_id: int) -> list[int]:
+        return self.mapping.get(farm_id, [])
+
+
+@dataclass
 class FakePlanFieldRelationRepository:
     mapping: dict[int, list[int]] = field(default_factory=dict)
 
@@ -119,6 +127,7 @@ def test_create_plan_derives_variety_name_and_field_relations() -> None:
         ),
         planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
         rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        farm_field_relation_repository=FakeFarmFieldRelationRepository({1: [10, 11]}),
         farm_repository=FakeFarmRepository({1: Farm(id=1, farm_name="测试农场")}),
         event_record_repository=FakeEventRecordRepository(),
         plan_orchestrator=plan_orchestrator,
@@ -154,6 +163,8 @@ def test_create_plan_allows_empty_field_relations() -> None:
         field_repository=FakeFieldRepository({}),
         planting_plan_field_relation_repository=relation_repository,
         rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        farm_field_relation_repository=FakeFarmFieldRelationRepository({1: []}),
+        farm_repository=FakeFarmRepository({1: Farm(id=1, farm_name="测试农场")}),
         event_record_repository=FakeEventRecordRepository(),
         plan_orchestrator=plan_orchestrator,
         plan_code_factory=lambda: "PLAN-AUTO-EMPTY",
@@ -205,6 +216,8 @@ def test_update_plan_replaces_field_relations_and_refreshes_calendar_on_key_chan
         field_repository=FakeFieldRepository({10: Field(id=10, field_name="田块 A"), 12: Field(id=12, field_name="田块 C")}),
         planting_plan_field_relation_repository=relation_repository,
         rice_variety_repository=FakeRiceVarietyRepository({4: RiceVariety(id=4, name="新优品种")}),
+        farm_field_relation_repository=FakeFarmFieldRelationRepository({1: [10, 12]}),
+        farm_repository=FakeFarmRepository({1: Farm(id=1, farm_name="测试农场")}),
         event_record_repository=FakeEventRecordRepository(),
         plan_orchestrator=plan_orchestrator,
     )
@@ -263,6 +276,8 @@ def test_update_plan_to_active_triggers_task_due_check_event() -> None:
         field_repository=FakeFieldRepository({}),
         planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
         rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        farm_field_relation_repository=FakeFarmFieldRelationRepository({1: []}),
+        farm_repository=FakeFarmRepository({1: Farm(id=1, farm_name="测试农场")}),
         event_record_repository=event_repository,
         plan_orchestrator=plan_orchestrator,
     )
@@ -316,6 +331,8 @@ def test_update_plan_without_effective_changes_does_not_record_plan_updated_even
         field_repository=FakeFieldRepository({}),
         planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
         rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        farm_field_relation_repository=FakeFarmFieldRelationRepository({1: []}),
+        farm_repository=FakeFarmRepository({1: Farm(id=1, farm_name="测试农场")}),
         event_record_repository=event_repository,
         plan_orchestrator=plan_orchestrator,
     )
@@ -330,6 +347,89 @@ def test_update_plan_without_effective_changes_does_not_record_plan_updated_even
     assert result.planting_plan.plan_name == "原计划"
     assert event_repository.items == []
     assert plan_orchestrator.handled_events == []
+
+
+def test_create_plan_rejects_missing_farm() -> None:
+    service = PlantingPlanService(
+        planting_plan_repository=FakePlantingPlanRepository(),
+        field_repository=FakeFieldRepository({10: Field(id=10, field_name="田块 A")}),
+        planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
+        rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        farm_field_relation_repository=FakeFarmFieldRelationRepository({}),
+        farm_repository=FakeFarmRepository({}),
+    )
+
+    with pytest.raises(ValueError, match="Farm 99 does not exist"):
+        service.create(
+            PlantingPlanCreateInput(
+                plan_name="早稻计划",
+                farm_id=99,
+                field_ids=[10],
+                culti_type_code=5,
+                planting_method_code=1,
+                crop_name="水稻",
+                variety_id=3,
+                sowing_date=date(2026, 4, 10),
+            ),
+        )
+
+
+def test_create_plan_rejects_fields_not_belonging_to_farm() -> None:
+    service = PlantingPlanService(
+        planting_plan_repository=FakePlantingPlanRepository(),
+        field_repository=FakeFieldRepository({10: Field(id=10, field_name="田块 A")}),
+        planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
+        rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        farm_field_relation_repository=FakeFarmFieldRelationRepository({2: [10]}),
+        farm_repository=FakeFarmRepository({1: Farm(id=1, farm_name="测试农场"), 2: Farm(id=2, farm_name="其他农场")}),
+    )
+
+    with pytest.raises(ValueError, match="do not belong to farm 1"):
+        service.create(
+            PlantingPlanCreateInput(
+                plan_name="早稻计划",
+                farm_id=1,
+                field_ids=[10],
+                culti_type_code=5,
+                planting_method_code=1,
+                crop_name="水稻",
+                variety_id=3,
+                sowing_date=date(2026, 4, 10),
+            ),
+        )
+
+
+def test_update_plan_rejects_switching_farm_when_existing_fields_do_not_belong() -> None:
+    repository = FakePlantingPlanRepository(
+        {
+            1: PlantingPlan(
+                id=1,
+                plan_code="PLAN-001",
+                plan_name="原计划",
+                farm_id=1,
+                culti_type_code=5,
+                planting_method_code=1,
+                crop_name="水稻",
+                variety_id=3,
+                variety_name="黄广农占",
+                sowing_date=date(2026, 4, 10),
+                status="draft",
+                task_generation_window_days=14,
+                metadata_payload={},
+            ),
+        },
+    )
+    service = PlantingPlanService(
+        planting_plan_repository=repository,
+        field_repository=FakeFieldRepository({10: Field(id=10, field_name="田块 A")}),
+        planting_plan_field_relation_repository=FakePlanFieldRelationRepository({1: [10]}),
+        rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        farm_field_relation_repository=FakeFarmFieldRelationRepository({1: [10], 2: []}),
+        farm_repository=FakeFarmRepository({1: Farm(id=1, farm_name="测试农场"), 2: Farm(id=2, farm_name="其他农场")}),
+    )
+
+    with pytest.raises(ValueError, match="do not belong to farm 2"):
+        service.update(1, PlantingPlanUpdateInput(farm_id=2))
 
 
 def test_list_by_statuses_filters_plans() -> None:
@@ -389,6 +489,8 @@ def test_create_plan_records_plan_created_event_before_orchestration() -> None:
         field_repository=FakeFieldRepository({10: Field(id=10, field_name="田块 A")}),
         planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
         rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        farm_field_relation_repository=FakeFarmFieldRelationRepository({1: [10]}),
+        farm_repository=FakeFarmRepository({1: Farm(id=1, farm_name="测试农场")}),
         event_record_repository=event_repository,
         plan_orchestrator=plan_orchestrator,
         plan_code_factory=lambda: "PLAN-AUTO-002",

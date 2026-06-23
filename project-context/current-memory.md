@@ -35,6 +35,17 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
   - `docs/planning/` 已退出默认入口，方向知识、FDE、前端 handoff、历史材料分别沉淀到 `docs/domain/`、`docs/fde/`、`docs/frontend/`、`docs/history/`
   - 已补 `docs/change-notes/`、`docs/decisions/`、`docs/wiki-index.md` 和 `docs/ai/codex-skill-workflow.md`
   - 已补并同步本地可用 skill：`cropflow-start-work`、`cropflow-task-planning`、`cropflow-task-closing`、`cropflow-wrap-up`、`cropflow-wiki-maintenance`
+- 农场 / 地块基础管理能力已补齐一轮后端实现：
+  - 新增 `Field.external_field_id` 作为外部系统映射字段
+  - 补齐农场删除接口，以及农场下地块单条和批量 `GET/POST/PATCH/DELETE` 接口
+  - `Field.id` 继续作为系统内部主键和 `PlantingPlan.field_ids` 的引用 id
+  - `PlantingPlan` 创建 / 更新时会校验 `farm_id` 存在，且 `field_ids` 全部属于该农场
+  - 农场 / 地块可选字段支持在 `PATCH` 中显式传 `null` 清空，并新增经纬度 / 面积基础校验
+  - 删除农场 / 地块时会阻止删除已被 `PlantingPlan` / `PlantingPlanFieldRelation` 引用的数据
+- `app/models/core.py` 已完成一次文件级拆分：
+  - 新增 `master_data / planning / tasks / execution` 四个模型模块
+  - `app.models` 和 `app.models.core` 继续保留兼容导出，避免全仓导入路径大范围改动
+  - 当前拆分只处理文件组织，不改变 ORM 注册结果和业务语义
 
 ## Remaining
 
@@ -43,6 +54,7 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 - 如需正式修复历史脏数据，在目标环境执行 `scripts/repair_merged_disease_pest_controls.py --apply` 并核对生成的 repair event。
 - 气象运行期管理还没完全产品化，缓存、版本审计、异常展示和前端状态细化仍待补齐。
 - DeviceCommand、InventoryItem / InventoryTransaction 仍按 deferred 处理。
+- 农场 / 地块接口还未经过真实前端联调，尤其要确认前端创建计划时继续使用内部 `field_id`，只把 `external_field_id` 当外部映射字段展示或透传。
 
 ## Blockers
 
@@ -58,4 +70,4 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 
 ## Last Updated
 
-`2026-06-22`
+`2026-06-23`

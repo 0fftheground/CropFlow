@@ -20,6 +20,7 @@ from app.core.constants import (
 from app.models import EventRecord, Field, PlantingPlan, RiceVariety
 from app.repositories import (
     EventRecordRepository,
+    FarmFieldRelationRepository,
     FarmRepository,
     FieldRepository,
     PlantingPlanFieldRelationRepository,
@@ -108,6 +109,7 @@ class PlantingPlanService:
         field_repository: FieldRepository,
         planting_plan_field_relation_repository: PlantingPlanFieldRelationRepository,
         rice_variety_repository: RiceVarietyRepository,
+        farm_field_relation_repository: FarmFieldRelationRepository | None = None,
         farm_repository: FarmRepository | None = None,
         event_record_repository: EventRecordRepository | None = None,
         plan_orchestrator: PlanEventDispatcher | None = None,
@@ -115,6 +117,7 @@ class PlantingPlanService:
     ) -> None:
         self.planting_plan_repository = planting_plan_repository
         self.field_repository = field_repository
+        self.farm_field_relation_repository = farm_field_relation_repository
         self.planting_plan_field_relation_repository = planting_plan_field_relation_repository
         self.rice_variety_repository = rice_variety_repository
         self.farm_repository = farm_repository
@@ -129,7 +132,9 @@ class PlantingPlanService:
             raise ValueError(f"Planting plan code {plan_code} already exists.")
 
         variety = self._get_variety(payload.variety_id)
+        self._ensure_farm_exists(payload.farm_id)
         self._ensure_fields_exist(payload.field_ids)
+        self._ensure_fields_belong_to_farm(payload.farm_id, payload.field_ids)
 
         planting_plan = PlantingPlan(
             plan_code=plan_code,
@@ -222,6 +227,7 @@ class PlantingPlanService:
         if payload.plan_name is not None:
             planting_plan.plan_name = payload.plan_name
         if payload.farm_id is not None:
+            self._ensure_farm_exists(payload.farm_id)
             planting_plan.farm_id = payload.farm_id
         if payload.year is not None:
             planting_plan.year = payload.year
@@ -264,7 +270,10 @@ class PlantingPlanService:
         if payload.field_ids is not None:
             self._validate_field_ids(payload.field_ids)
             self._ensure_fields_exist(payload.field_ids)
+            self._ensure_fields_belong_to_farm(planting_plan.farm_id, payload.field_ids)
             self.planting_plan_field_relation_repository.replace_for_plan(planting_plan_id, payload.field_ids)
+        elif payload.farm_id is not None:
+            self._ensure_fields_belong_to_farm(payload.farm_id, before_field_ids)
 
         planting_plan.updated_at = _utcnow()
         self.planting_plan_repository.flush()
@@ -485,6 +494,25 @@ class PlantingPlanService:
             missing_ids = sorted(set(field_ids) - existing_ids)
             raise ValueError(f"Fields {missing_ids} do not exist.")
         return fields
+
+    def _ensure_farm_exists(self, farm_id: int) -> None:
+        if self.farm_repository is None:
+            raise RuntimeError("PlantingPlanService requires FarmRepository to validate farm_id.")
+        farm = self.farm_repository.get(farm_id)
+        if farm is None:
+            raise ValueError(f"Farm {farm_id} does not exist.")
+
+    def _ensure_fields_belong_to_farm(self, farm_id: int, field_ids: list[int]) -> None:
+        if not field_ids:
+            return
+        if self.farm_field_relation_repository is None:
+            raise RuntimeError(
+                "PlantingPlanService requires FarmFieldRelationRepository to validate field ownership.",
+            )
+        farm_field_ids = set(self.farm_field_relation_repository.list_field_ids_by_farm(farm_id))
+        invalid_field_ids = sorted(set(field_ids) - farm_field_ids)
+        if invalid_field_ids:
+            raise ValueError(f"Fields {invalid_field_ids} do not belong to farm {farm_id}.")
 
     def _validate_field_ids(self, field_ids: list[int]) -> None:
         return None

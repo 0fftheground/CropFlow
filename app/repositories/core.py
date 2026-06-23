@@ -17,6 +17,7 @@ from app.models import (
     ExecutionRecord,
     Farm,
     Field,
+    FarmFieldRelation,
     FarmingTask,
     OperationPlan,
     PlantingPlan,
@@ -44,6 +45,9 @@ class Repository:
     def add_all(self, entities: list[Any]) -> None:
         self.session.add_all(entities)
 
+    def delete(self, entity: Any) -> None:
+        self.session.delete(entity)
+
 
 class PlantingPlanRepository(Repository):
     def get(self, planting_plan_id: int) -> PlantingPlan | None:
@@ -60,10 +64,18 @@ class PlantingPlanRepository(Repository):
         stmt = stmt.order_by(PlantingPlan.created_at.desc(), PlantingPlan.id.desc())
         return list(self.session.scalars(stmt))
 
+    def exists_by_farm_id(self, farm_id: int) -> bool:
+        stmt = select(PlantingPlan.id).where(PlantingPlan.farm_id == farm_id).limit(1)
+        return self.session.scalar(stmt) is not None
+
 
 class FarmRepository(Repository):
     def get(self, farm_id: int) -> Farm | None:
         return self.session.get(Farm, farm_id)
+
+    def get_by_external_farm_id(self, external_farm_id: str) -> Farm | None:
+        stmt = select(Farm).where(Farm.external_farm_id == external_farm_id)
+        return self.session.scalar(stmt)
 
     def list_all(self) -> list[Farm]:
         stmt = select(Farm).order_by(Farm.created_at.desc(), Farm.id.desc())
@@ -133,11 +145,55 @@ class RiceControlWindowLevel1Repository(Repository):
 
 
 class FieldRepository(Repository):
+    def get(self, field_id: int) -> Field | None:
+        return self.session.get(Field, field_id)
+
+    def get_by_external_field_id(self, external_field_id: str) -> Field | None:
+        stmt = select(Field).where(Field.external_field_id == external_field_id)
+        return self.session.scalar(stmt)
+
     def list_by_ids(self, field_ids: list[int]) -> list[Field]:
         if not field_ids:
             return []
         stmt = select(Field).where(Field.id.in_(field_ids)).order_by(Field.id.asc())
         return list(self.session.scalars(stmt))
+
+
+class FarmFieldRelationRepository(Repository):
+    def get_by_farm_field(self, farm_id: int, field_id: int) -> FarmFieldRelation | None:
+        stmt = (
+            select(FarmFieldRelation)
+            .where(FarmFieldRelation.farm_id == farm_id)
+            .where(FarmFieldRelation.field_id == field_id)
+        )
+        return self.session.scalar(stmt)
+
+    def list_field_ids_by_farm(self, farm_id: int) -> list[int]:
+        stmt = (
+            select(FarmFieldRelation.field_id)
+            .where(FarmFieldRelation.farm_id == farm_id)
+            .order_by(FarmFieldRelation.field_id.asc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def count_by_field(self, field_id: int) -> int:
+        stmt = select(FarmFieldRelation).where(FarmFieldRelation.field_id == field_id)
+        return len(list(self.session.scalars(stmt)))
+
+    def create(self, farm_id: int, field_id: int) -> FarmFieldRelation:
+        relation = FarmFieldRelation(
+            farm_id=farm_id,
+            field_id=field_id,
+            created_by_type="user",
+            created_by_id="api",
+        )
+        self.add(relation)
+        return relation
+
+    def delete_by_farm(self, farm_id: int) -> None:
+        stmt = select(FarmFieldRelation).where(FarmFieldRelation.farm_id == farm_id)
+        for relation in self.session.scalars(stmt):
+            self.delete(relation)
 
 
 class PlantingPlanFieldRelationRepository(Repository):
@@ -165,6 +221,17 @@ class PlantingPlanFieldRelationRepository(Repository):
         for planting_plan_id, field_id in self.session.execute(stmt):
             mapping.setdefault(planting_plan_id, []).append(field_id)
         return mapping
+
+    def list_linked_field_ids(self, field_ids: list[int]) -> list[int]:
+        if not field_ids:
+            return []
+        stmt = (
+            select(PlantingPlanFieldRelation.field_id)
+            .where(PlantingPlanFieldRelation.field_id.in_(field_ids))
+            .distinct()
+            .order_by(PlantingPlanFieldRelation.field_id.asc())
+        )
+        return list(self.session.scalars(stmt))
 
     def replace_for_plan(self, planting_plan_id: int, field_ids: list[int]) -> None:
         existing_stmt = select(PlantingPlanFieldRelation).where(

@@ -116,6 +116,21 @@ Content-Type: application/json
 | `created_at` | `datetime \| null` | 创建时间 |
 | `updated_at` | `datetime \| null` | 更新时间 |
 
+### 2.2.1 `FieldResponse`
+
+| field | type | notes |
+|---|---|---|
+| `id` | `int` | 地块主键 |
+| `farm_id` | `int` | 所属农场 id |
+| `field_name` | `string` | 地块名称 |
+| `external_field_id` | `string \| null` | 外部地块 id；用于外部系统映射 |
+| `boundary_wkt` | `string \| null` | 地块边界 WKT |
+| `centroid_lat` | `decimal \| null` | 中心点纬度 |
+| `centroid_lon` | `decimal \| null` | 中心点经度 |
+| `area_ha` | `decimal \| null` | 地块面积，单位公顷 |
+| `created_at` | `datetime \| null` | 创建时间 |
+| `updated_at` | `datetime \| null` | 更新时间 |
+
 ### 2.3 `CalendarItemResponse`
 
 | field | type | notes |
@@ -300,6 +315,7 @@ Content-Type: application/json
 ```text
 1. `plan_code` 已改为后端自动生成。
 2. 前端创建计划时不再传这个字段。
+3. `field_ids` 中的地块必须真实存在，且全部属于 `farm_id` 指定的农场。
 ```
 
 请求体：
@@ -390,10 +406,134 @@ Content-Type: application/json
 
 请求体字段与创建农场一致，但全部可选。
 
+补充说明：
+
+1. 对 `external_farm_id`、`boundary_wkt`、`centroid_lat`、`centroid_lon`，请求体中显式传 `null` 表示清空该字段
+2. `centroid_lat` 必须在 `-90..90`，`centroid_lon` 必须在 `-180..180`
+
 成功响应：
 
 1. `200 OK`
 2. 响应体为 `FarmResponse`
+
+##### 删除农场
+
+`DELETE /api/farms/{farmId}`
+
+成功响应：
+
+1. `204 No Content`
+
+失败约束：
+
+1. 如果农场已被 `PlantingPlan` 引用，返回 `409 Conflict`
+2. 如果农场下存在已被 `PlantingPlanFieldRelation` 引用的地块，返回 `409 Conflict`
+
+##### 地块列表
+
+`GET /api/farms/{farmId}/fields`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `FieldResponse[]`
+
+##### 地块详情
+
+`GET /api/farms/{farmId}/fields/{fieldId}`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `FieldResponse`
+
+##### 创建地块
+
+`POST /api/farms/{farmId}/fields`
+
+请求体：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `field_name` | `string` | yes | 地块名称 |
+| `external_field_id` | `string \| null` | no | 外部地块 id |
+| `boundary_wkt` | `string \| null` | no | 地块边界 WKT |
+| `centroid_lat` | `decimal \| null` | no | 中心点纬度 |
+| `centroid_lon` | `decimal \| null` | no | 中心点经度 |
+| `area_ha` | `decimal \| null` | no | 地块面积，单位公顷 |
+
+补充说明：
+
+1. `centroid_lat` 必须在 `-90..90`，`centroid_lon` 必须在 `-180..180`
+2. `area_ha` 如果提供，必须大于 `0`
+
+成功响应：
+
+1. `201 Created`
+2. 响应体为 `FieldResponse`
+
+##### 批量创建地块
+
+`POST /api/farms/{farmId}/fields/batch`
+
+请求体：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `fields` | `FieldCreateRequest[]` | yes | 待创建地块列表；整批成功或整批失败 |
+
+成功响应：
+
+1. `201 Created`
+2. 响应体为 `FieldResponse[]`
+
+##### 更新地块
+
+`PATCH /api/farms/{farmId}/fields/{fieldId}`
+
+请求体字段与创建地块一致，但全部可选。
+
+补充说明：
+
+1. 对 `external_field_id`、`boundary_wkt`、`centroid_lat`、`centroid_lon`、`area_ha`，请求体中显式传 `null` 表示清空该字段
+2. `centroid_lat` 必须在 `-90..90`，`centroid_lon` 必须在 `-180..180`
+3. `area_ha` 如果提供非空值，必须大于 `0`
+
+成功响应：
+
+1. `200 OK`
+2. 响应体为 `FieldResponse`
+
+##### 删除地块
+
+`DELETE /api/farms/{farmId}/fields/{fieldId}`
+
+成功响应：
+
+1. `204 No Content`
+
+失败约束：
+
+1. 如果地块已被 `PlantingPlanFieldRelation` 引用，返回 `409 Conflict`
+
+##### 批量删除地块
+
+`POST /api/farms/{farmId}/fields/batch-delete`
+
+请求体：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `field_ids` | `int[]` | yes | 待删除地块 id 列表；整批成功或整批失败 |
+
+成功响应：
+
+1. `204 No Content`
+
+失败约束：
+
+1. 如果任一地块不存在于当前农场，返回 `404 Not Found`
+2. 如果任一地块已被 `PlantingPlanFieldRelation` 引用，返回 `409 Conflict`
 
 #### 3.0.1 字典查询
 
@@ -488,6 +628,11 @@ Query 参数：
 `PATCH /api/planting-plans/{plantingPlanId}`
 
 请求体字段与创建计划一致，但全部可选。
+
+补充说明：
+
+1. 如果更新了 `farm_id`，后端会校验现有或提交的 `field_ids` 是否仍全部属于该农场
+2. 如果 `field_ids` 中存在不属于当前 `farm_id` 的地块，后端返回 `400`
 
 成功响应：
 

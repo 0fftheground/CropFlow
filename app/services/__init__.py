@@ -1,9 +1,14 @@
 from app.services.code_dict_queries import CodeDictOption, CodeDictQueryService
 from app.services.farms import (
+    ConflictError,
     FarmCreateInput,
+    FarmFieldQueryService,
+    FarmFieldService,
     FarmQueryService,
     FarmService,
     FarmUpdateInput,
+    FieldCreateInput,
+    FieldUpdateInput,
 )
 from app.services.calendar_tasks import (
     AdditionalTreatmentDiagnosisResult,
@@ -90,10 +95,15 @@ __all__ = [
     "ActualStageRecordedInput",
     "CodeDictOption",
     "CodeDictQueryService",
+    "ConflictError",
     "FarmCreateInput",
+    "FarmFieldQueryService",
+    "FarmFieldService",
     "FarmQueryService",
     "FarmService",
     "FarmUpdateInput",
+    "FieldCreateInput",
+    "FieldUpdateInput",
     "HttpWeatherProvider",
     "HttpPestDiseaseSurveyWindowClient",
     "HttpPestDiseaseControlClient",

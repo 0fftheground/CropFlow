@@ -36,6 +36,7 @@ Farm:
 
 Field:
   fieldName
+  externalFieldId
   boundaryWkt
   centroidLat
   centroidLon

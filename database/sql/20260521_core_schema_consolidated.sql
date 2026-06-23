@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS cf_farm (
 CREATE TABLE IF NOT EXISTS cf_field (
   id bigserial PRIMARY KEY,
   field_name varchar(100) NOT NULL,
+  external_field_id varchar(50) UNIQUE,
   boundary_wkt text,
   centroid_lat numeric(9, 6),
   centroid_lon numeric(9, 6),
