@@ -1017,11 +1017,14 @@ class HttpWeatherProvider:
             return []
 
         effective_as_of_date = as_of_date or date.today()
+        forecast_anchor_date = min(effective_as_of_date, date.today())
         farm = self._get_farm(planting_plan.farm_id)
         external_farm_id = self._resolve_external_farm_id(farm)
         weather_data: list[dict[str, Any]] = []
 
-        observed_end_date = min(end_date, effective_as_of_date - timedelta(days=1))
+        # Observed rows can never extend past the real current day, even when
+        # business flows replay or record future dates through as_of_date.
+        observed_end_date = min(end_date, forecast_anchor_date - timedelta(days=1))
         if start_date <= observed_end_date:
             weather_data.extend(
                 self._load_observed_daily_weather(
@@ -1031,9 +1034,9 @@ class HttpWeatherProvider:
                 ),
             )
 
-        forecast_start_date = max(start_date, effective_as_of_date)
+        forecast_start_date = max(start_date, forecast_anchor_date)
         # The upstream API returns current day plus the next 14 calendar days.
-        forecast_end_date = min(end_date, effective_as_of_date + timedelta(days=self.FORECAST_DAILY_LOOKAHEAD_DAYS))
+        forecast_end_date = min(end_date, forecast_anchor_date + timedelta(days=self.FORECAST_DAILY_LOOKAHEAD_DAYS))
         if forecast_start_date <= forecast_end_date:
             weather_data.extend(
                 self._load_forecast_daily_weather(
@@ -1045,7 +1048,7 @@ class HttpWeatherProvider:
 
         climatology_start_date = max(
             start_date,
-            effective_as_of_date + timedelta(days=self.FORECAST_DAILY_LOOKAHEAD_DAYS + 1),
+            forecast_anchor_date + timedelta(days=self.FORECAST_DAILY_LOOKAHEAD_DAYS + 1),
         )
         if climatology_start_date <= end_date:
             weather_data.extend(

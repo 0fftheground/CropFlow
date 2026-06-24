@@ -155,6 +155,93 @@ def test_http_weather_provider_imputes_missing_observed_temavg_from_neighboring_
     assert {item["source_type"] for item in weather_data} == {"observed"}
 
 
+def test_http_weather_provider_caps_observed_window_at_real_today_when_as_of_date_is_future(
+    monkeypatch,
+) -> None:
+    provider = HttpWeatherProvider(
+        farm_repository=FakeFarmRepository(_make_farm()),
+        base_url="http://weather.local",
+        auth_token="token",
+    )
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    class FrozenDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 6, 24)
+
+    monkeypatch.setattr("app.services.calendar_tasks.date", FrozenDate)
+
+    def fake_post_json(path: str, payload: dict[str, str]) -> list[dict[str, object]]:
+        calls.append((path, payload))
+        if path.endswith("getAvgTemAndPre"):
+            assert payload == {
+                "farmId": "84911829811210",
+                "startDate": "2026-06-23",
+                "endDate": "2026-06-23",
+            }
+            return [{"dt": "06-23", "temAvg": 26.0, "preAvg": 0.0}]
+        if path.endswith("getForecast10DaysBeforeAnd15DaysAfter"):
+            return [
+                {"datatime": "2026-06-24", "tAvg": 27.0, "tMin": 22.0, "tMax": 31.0, "pre": 1.2},
+                {"datatime": "2026-06-25", "tAvg": 28.0, "tMin": 23.0, "tMax": 32.0, "pre": 0.4},
+            ]
+        raise AssertionError(f"Unexpected weather API call: {path} {payload}")
+
+    provider._post_json = fake_post_json  # type: ignore[method-assign]
+
+    weather_data = provider.get_daily_weather(
+        _make_plan(),
+        FrozenDate(2026, 6, 23),
+        FrozenDate(2026, 6, 25),
+        as_of_date=FrozenDate(2026, 6, 25),
+    )
+
+    assert weather_data == [
+        {
+            "date": "2026-06-23",
+            "avg_temp": 26.0,
+            "precipitation": 0.0,
+            "source_type": "observed",
+            "data_version": "weather-observed:2026-06-23:2026-06-23",
+        },
+        {
+            "date": "2026-06-24",
+            "avg_temp": 27.0,
+            "min_temp": 22.0,
+            "max_temp": 31.0,
+            "precipitation": 1.2,
+            "source_type": "forecast",
+            "data_version": f"weather-forecast:{FrozenDate.today().isoformat()}",
+        },
+        {
+            "date": "2026-06-25",
+            "avg_temp": 28.0,
+            "min_temp": 23.0,
+            "max_temp": 32.0,
+            "precipitation": 0.4,
+            "source_type": "forecast",
+            "data_version": f"weather-forecast:{FrozenDate.today().isoformat()}",
+        },
+    ]
+    assert calls == [
+        (
+            "/weather/v1/getAvgTemAndPre",
+            {
+                "farmId": "84911829811210",
+                "startDate": "2026-06-23",
+                "endDate": "2026-06-23",
+            },
+        ),
+        (
+            "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter",
+            {
+                "farmID": "84911829811210",
+            },
+        ),
+    ]
+
+
 def test_http_weather_provider_builds_pest_disease_daily_weather_from_farm_daily_forecast() -> None:
     provider = HttpWeatherProvider(
         farm_repository=FakeFarmRepository(_make_farm()),
