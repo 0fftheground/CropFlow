@@ -1,6 +1,7 @@
 from app.models.base import Base
 from app.models.execution import Execution, ExecutionRecord
 from app.models.master_data import (
+    AdministrativeDivision,
     CodeDict,
     CropStageDict,
     Farm,
@@ -28,6 +29,7 @@ from app.models.tasks import (
 )
 
 __all__ = [
+    "AdministrativeDivision",
     "Base",
     "CalendarItem",
     "CodeDict",

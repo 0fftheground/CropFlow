@@ -1,3 +1,7 @@
+from app.services.administrative_divisions import (
+    AdministrativeDivisionNode,
+    AdministrativeDivisionQueryService,
+)
 from app.services.code_dict_queries import CodeDictOption, CodeDictQueryService
 from app.services.farms import (
     ConflictError,
@@ -93,6 +97,8 @@ __all__ = [
     "AdditionalTreatmentDiagnosisResult",
     "ALLOWED_REVIEW_DECISIONS",
     "ActualStageRecordedInput",
+    "AdministrativeDivisionNode",
+    "AdministrativeDivisionQueryService",
     "CodeDictOption",
     "CodeDictQueryService",
     "ConflictError",

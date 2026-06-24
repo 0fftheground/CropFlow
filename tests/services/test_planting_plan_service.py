@@ -51,8 +51,24 @@ class FakePlantingPlanRepository:
 class FakeFieldRepository:
     fields: dict[int, Field]
 
+    def list_existing_ids(self, field_ids: list[int]) -> list[int]:
+        return [field_id for field_id in field_ids if field_id in self.fields]
+
     def list_by_ids(self, field_ids: list[int]) -> list[Field]:
         return [self.fields[field_id] for field_id in field_ids if field_id in self.fields]
+
+
+@dataclass
+class FakeFieldIdOnlyRepository:
+    existing_ids: set[int]
+    list_by_ids_called: bool = False
+
+    def list_existing_ids(self, field_ids: list[int]) -> list[int]:
+        return [field_id for field_id in field_ids if field_id in self.existing_ids]
+
+    def list_by_ids(self, field_ids: list[int]) -> list[Field]:
+        self.list_by_ids_called = True
+        raise AssertionError("list_by_ids should not be called when list_existing_ids is available")
 
 
 @dataclass
@@ -514,6 +530,35 @@ def test_create_plan_records_plan_created_event_before_orchestration() -> None:
     assert event_repository.items[-1].event_type == "PlanCreated"
     assert event_repository.items[-1].processing_status == "received"
     assert plan_orchestrator.triggered_plan_ids == [result.planting_plan.id]
+
+
+def test_create_plan_checks_field_existence_by_id_only_when_supported() -> None:
+    field_repository = FakeFieldIdOnlyRepository({10})
+    service = PlantingPlanService(
+        planting_plan_repository=FakePlantingPlanRepository(),
+        field_repository=field_repository,
+        planting_plan_field_relation_repository=FakePlanFieldRelationRepository(),
+        rice_variety_repository=FakeRiceVarietyRepository({3: RiceVariety(id=3, name="黄广农占")}),
+        farm_field_relation_repository=FakeFarmFieldRelationRepository({1: [10]}),
+        farm_repository=FakeFarmRepository({1: Farm(id=1, farm_name="测试农场")}),
+        plan_code_factory=lambda: "PLAN-AUTO-ID-ONLY",
+    )
+
+    result = service.create(
+        PlantingPlanCreateInput(
+            plan_name="早稻计划",
+            farm_id=1,
+            field_ids=[10],
+            culti_type_code=5,
+            planting_method_code=1,
+            crop_name="水稻",
+            variety_id=3,
+            sowing_date=date(2026, 4, 10),
+        ),
+    )
+
+    assert result.planting_plan.plan_code == "PLAN-AUTO-ID-ONLY"
+    assert field_repository.list_by_ids_called is False
 
 
 def test_record_actual_stages_creates_events_in_effective_date_order() -> None:

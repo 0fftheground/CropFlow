@@ -7,6 +7,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.models import (
+    AdministrativeDivision,
     CalendarItem,
     CodeDict,
     CropStageDict,
@@ -97,6 +98,37 @@ class CodeDictRepository(Repository):
         return list(self.session.scalars(stmt))
 
 
+class AdministrativeDivisionRepository(Repository):
+    def get_by_code_and_level(self, code: str, level: int) -> AdministrativeDivision | None:
+        stmt = (
+            select(AdministrativeDivision)
+            .where(AdministrativeDivision.code == code)
+            .where(AdministrativeDivision.level == level)
+            .limit(1)
+        )
+        return self.session.scalar(stmt)
+
+    def list_roots(self) -> list[AdministrativeDivision]:
+        stmt = (
+            select(AdministrativeDivision)
+            .where(AdministrativeDivision.parent_code.is_(None))
+            .order_by(AdministrativeDivision.sort_order.asc(), AdministrativeDivision.id.asc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def list_by_parent_code(self, parent_code: str) -> list[AdministrativeDivision]:
+        stmt = (
+            select(AdministrativeDivision)
+            .where(AdministrativeDivision.parent_code == parent_code)
+            .order_by(AdministrativeDivision.sort_order.asc(), AdministrativeDivision.id.asc())
+        )
+        return list(self.session.scalars(stmt))
+
+    def has_children(self, code: str) -> bool:
+        stmt = select(AdministrativeDivision.id).where(AdministrativeDivision.parent_code == code).limit(1)
+        return self.session.scalar(stmt) is not None
+
+
 class CropStageDictRepository(Repository):
     def get_by_stage_code(self, stage_code: str) -> CropStageDict | None:
         stmt = select(CropStageDict).where(CropStageDict.stage_code == stage_code)
@@ -147,6 +179,12 @@ class RiceControlWindowLevel1Repository(Repository):
 class FieldRepository(Repository):
     def get(self, field_id: int) -> Field | None:
         return self.session.get(Field, field_id)
+
+    def list_existing_ids(self, field_ids: list[int]) -> list[int]:
+        if not field_ids:
+            return []
+        stmt = select(Field.id).where(Field.id.in_(field_ids)).order_by(Field.id.asc())
+        return list(self.session.scalars(stmt))
 
     def get_by_external_field_id(self, external_field_id: str) -> Field | None:
         stmt = select(Field).where(Field.external_field_id == external_field_id)

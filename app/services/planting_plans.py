@@ -487,13 +487,15 @@ class PlantingPlanService:
             raise ValueError(f"Rice variety {variety_id} does not exist.")
         return variety
 
-    def _ensure_fields_exist(self, field_ids: list[int]) -> list[Field]:
-        fields = self.field_repository.list_by_ids(field_ids)
-        if len(fields) != len(set(field_ids)):
-            existing_ids = {field.id for field in fields}
+    def _ensure_fields_exist(self, field_ids: list[int]) -> list[int]:
+        if hasattr(self.field_repository, "list_existing_ids"):
+            existing_ids = set(self.field_repository.list_existing_ids(field_ids))
+        else:
+            existing_ids = {field.id for field in self.field_repository.list_by_ids(field_ids)}
+        if len(existing_ids) != len(set(field_ids)):
             missing_ids = sorted(set(field_ids) - existing_ids)
             raise ValueError(f"Fields {missing_ids} do not exist.")
-        return fields
+        return sorted(existing_ids)
 
     def _ensure_farm_exists(self, farm_id: int) -> None:
         if self.farm_repository is None:

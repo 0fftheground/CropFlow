@@ -102,6 +102,23 @@ class CropStageDict(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
 
 
+class AdministrativeDivision(Base):
+    __tablename__ = "cf_administrative_division"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    code: Mapped[str] = mapped_column(String(12), unique=True)
+    adcode: Mapped[str] = mapped_column(String(6))
+    name: Mapped[str] = mapped_column(String(100))
+    division_type: Mapped[str] = mapped_column(String(50))
+    level: Mapped[int] = mapped_column(Integer)
+    parent_code: Mapped[str | None] = mapped_column(String(12))
+    sort_order: Mapped[int] = mapped_column(Integer)
+    created_by_type: Mapped[str] = mapped_column(String(20), server_default=text("'system'"))
+    created_by_id: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
+
+
 class User(Base):
     __tablename__ = "cf_user"
 
@@ -155,6 +172,7 @@ class RiceVariety(Base):
 
 
 __all__ = [
+    "AdministrativeDivision",
     "CodeDict",
     "CropStageDict",
     "Farm",

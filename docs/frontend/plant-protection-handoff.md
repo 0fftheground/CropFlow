@@ -545,6 +545,7 @@ service_effect_survey
 | 查询稻作类型 | `GET` | `/api/code-dicts?category=culti_type` | 读取稻作类型选项 |
 | 查询种植方式 | `GET` | `/api/code-dicts?category=sowingmtd` | 读取种植方式选项 |
 | 查询品种 | `GET` | `/api/rice-varieties?query={keyword}&limit=20` | 读取品种选项 |
+| 查询行政区划 | `GET` | `/api/administrative-divisions` | 读取农场省 / 市 / 区县级联选项 |
 | 创建计划 | `POST` | `/api/planting-plans` | 创建 `PlantingPlan` |
 
 创建成功后建议前端：

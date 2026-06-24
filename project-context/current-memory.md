@@ -42,6 +42,15 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
   - `PlantingPlan` 创建 / 更新时会校验 `farm_id` 存在，且 `field_ids` 全部属于该农场
   - 农场 / 地块可选字段支持在 `PATCH` 中显式传 `null` 清空，并新增经纬度 / 面积基础校验
   - 删除农场 / 地块时会阻止删除已被 `PlantingPlan` / `PlantingPlanFieldRelation` 引用的数据
+- 农场创建联调所需的行政区划查询能力已补齐：
+  - 新增 `GET /api/administrative-divisions`，支持按 `parent_code + parent_level` 查询子节点
+  - 行政区划数据已从仓库内 `docs/references/raw/china_administrative.xlsx` 导入 `cf_administrative_division`
+  - 运行期接口只查数据库，不再逐次读取 xlsx
+  - 对直辖市补充虚拟二级节点，保证前端仍可按“省 -> 市 -> 区县”统一级联交互
+- 杂草防治外部接口兼容口径已修正：
+  - 系统内部 `PlantProtectionPlanContext` 保留 `PlantingPlan` 的原始种植制度，不再提前归一化
+  - 仅在调用杂草防治外部接口时，如种植制度为 `再生稻`，请求参数里的 `cultivation_system` 映射为 `早稻`
+  - `PlantingPlan` 创建时的地块存在性校验优先走 `Field.id` 轻量查询，避免仅校验 id 时加载完整地块对象
 - `app/models/core.py` 已完成一次文件级拆分：
   - 新增 `master_data / planning / tasks / execution` 四个模型模块
   - `app.models` 和 `app.models.core` 继续保留兼容导出，避免全仓导入路径大范围改动
@@ -55,6 +64,8 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 - 气象运行期管理还没完全产品化，缓存、版本审计、异常展示和前端状态细化仍待补齐。
 - DeviceCommand、InventoryItem / InventoryTransaction 仍按 deferred 处理。
 - 农场 / 地块接口还未经过真实前端联调，尤其要确认前端创建计划时继续使用内部 `field_id`，只把 `external_field_id` 当外部映射字段展示或透传。
+- 行政区划接口还需要和前端一起确认级联选择细节，重点看直辖市虚拟二级节点和最终 `adcode` 回填是否符合页面预期。
+- 杂草防治接口仍需在真实联调环境再确认一次 `再生稻 -> 早稻` 的外部映射是否已覆盖土壤封闭、药前调查、茎叶除草和补防四条调用链。
 
 ## Blockers
 
@@ -64,10 +75,10 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 
 下个 session 优先做三件事：
 
-1. 和前端一起实跑病虫害复核场景，重点验 `/api/review-requests/{id}` 的中文 `targets` 回显、`theoryPlan.rounds` 的增删改提交流程，以及 `/api/review-requests/{id}/resolve` 返回后的正式任务刷新。
-2. 继续抽查植保任务详情与执行反馈流转，确认 `operation_plans.parameters / prescription_map` 的中文对象名口径不会影响现有页面逻辑。
-3. 视联调环境需要决定是否执行 `repair_merged_disease_pest_controls.py --apply`，并继续补天气异常展示、前端状态表达和真实计划脏数据清理策略。
+1. 和前端一起实跑农场创建页，重点验 `/api/administrative-divisions` 的根节点、省下城市、直辖市虚拟节点和最终 `adcode` 回填。
+2. 继续和前端实跑病虫害复核场景，重点验 `/api/review-requests/{id}` 的中文 `targets` 回显、`theoryPlan.rounds` 的增删改提交流程，以及 `/api/review-requests/{id}/resolve` 返回后的正式任务刷新。
+3. 继续抽查植保任务详情与执行反馈流转，并视联调环境决定是否执行 `repair_merged_disease_pest_controls.py --apply`，继续补天气异常展示、前端状态表达和真实计划脏数据清理策略。
 
 ## Last Updated
 
-`2026-06-23`
+`2026-06-24`

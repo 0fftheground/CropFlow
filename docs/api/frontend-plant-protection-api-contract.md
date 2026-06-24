@@ -40,6 +40,7 @@ Content-Type: application/json
 | 用途 | method | path |
 |---|---|---|
 | 健康检查 | `GET` | `/health` |
+| 行政区划查询 | `GET` | `/administrative-divisions` |
 | 字典查询 | `GET` | `/code-dicts` |
 | 品种模糊查询 | `GET` | `/rice-varieties` |
 | 农场创建 | `POST` | `/farms` |
@@ -535,7 +536,61 @@ Content-Type: application/json
 1. 如果任一地块不存在于当前农场，返回 `404 Not Found`
 2. 如果任一地块已被 `PlantingPlanFieldRelation` 引用，返回 `409 Conflict`
 
-#### 3.0.1 字典查询
+#### 3.0.1 行政区划查询
+
+`GET /api/administrative-divisions`
+
+用途：
+
+1. 为农场创建 / 编辑页提供省、市、区县逐级下拉选项。
+2. 前端首次加载时不传参数，返回全部一级节点（省 / 直辖市 / 自治区 / 特别行政区）。
+3. 继续查询子节点时，传入当前节点的 `parent_code` 和 `parent_level`。
+4. 对直辖市，后端会返回一个 `is_virtual=true` 的二级“城市”节点，前端仍可按“省 -> 市 -> 区县”统一交互。
+
+Query 参数：
+
+| field | type | required | notes |
+|---|---|---|---|
+| `parent_code` | `string \| null` | no | 父节点的 12 位行政区划代码；根节点查询时不传 |
+| `parent_level` | `int \| null` | no | 父节点层级；传了 `parent_code` 时必传，范围 `1~4` |
+
+根节点响应体示例：
+
+```json
+[
+  {
+    "code": "430000000000",
+    "adcode": "430000",
+    "name": "湖南省",
+    "division_type": "省",
+    "level": 1,
+    "parent_code": null,
+    "has_children": true,
+    "is_virtual": false
+  }
+]
+```
+
+字段说明：
+
+| field | type | notes |
+|---|---|---|
+| `code` | `string` | 原始 12 位行政区划代码 |
+| `adcode` | `string` | 6 位行政区划编码，前端可用于回填农场 `adcode` |
+| `name` | `string` | 展示名称 |
+| `division_type` | `string` | 原始类型，例如 `省`、`地级市`、`县`、`市辖区` |
+| `level` | `int` | 当前节点层级，和源表保持一致；直辖市兼容节点返回 `2` |
+| `parent_code` | `string \| null` | 父节点 12 位代码；一级节点返回 `null` |
+| `has_children` | `boolean` | 是否还有下一级节点 |
+| `is_virtual` | `boolean` | 是否为后端为直辖市补出的兼容节点 |
+
+失败约束：
+
+1. 传了 `parent_code` 但没传 `parent_level`，返回 `400 Bad Request`
+2. `parent_level` 不在 `1~4` 范围内，返回 `400 Bad Request`
+3. 指定的父节点不存在，返回 `404 Not Found`
+
+#### 3.0.2 字典查询
 
 `GET /api/code-dicts?category={category}`
 
@@ -564,7 +619,7 @@ Content-Type: application/json
 | `name` | `string` | 展示名称 |
 | `category` | `string` | 字典分类 |
 
-#### 3.0.2 品种模糊查询
+#### 3.0.3 品种模糊查询
 
 `GET /api/rice-varieties?query={keyword}&limit=20`
 

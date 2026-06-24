@@ -9,6 +9,7 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.orchestrator import PlanOrchestrator, build_plan_orchestrator
 from app.repositories import (
+    AdministrativeDivisionRepository,
     CalendarItemRepository,
     CodeDictRepository,
     CropStageDictRepository,
@@ -31,6 +32,7 @@ from app.repositories import (
     TaskIntentRepository,
 )
 from app.services import (
+    AdministrativeDivisionQueryService,
     CodeDictQueryService,
     FarmFieldQueryService,
     FarmFieldService,
@@ -304,6 +306,14 @@ def get_planting_plan_query_service(db: Session = Depends(get_db)) -> Generator[
 
 def get_code_dict_query_service(db: Session = Depends(get_db)) -> Generator[CodeDictQueryService, None, None]:
     yield CodeDictQueryService(code_dict_repository=CodeDictRepository(db))
+
+
+def get_administrative_division_query_service(
+    db: Session = Depends(get_db),
+) -> Generator[AdministrativeDivisionQueryService, None, None]:
+    yield AdministrativeDivisionQueryService(
+        administrative_division_repository=AdministrativeDivisionRepository(db),
+    )
 
 
 def get_farm_service(db: Session = Depends(get_db)) -> Generator[FarmService, None, None]:

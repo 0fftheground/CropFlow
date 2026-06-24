@@ -9,7 +9,8 @@ from pathlib import Path
 from sqlalchemy import Select, func, select, text
 from sqlalchemy.orm import Session
 
-from app.models import CodeDict, CropStageDict, Field, Farm, RiceControlWindowLevel1, RiceVariety
+from app.models import AdministrativeDivision, CodeDict, CropStageDict, Field, Farm, RiceControlWindowLevel1, RiceVariety
+from app.services.administrative_divisions import load_administrative_division_seed_rows
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CODE_DICT_CSV = REPO_ROOT / "database" / "sql" / "agri_code_dict_202605181653.csv"
@@ -21,6 +22,7 @@ SEED_ACTOR = "seed_reference_data"
 
 @dataclass(slots=True)
 class ReferenceSeedSummary:
+    administrative_division_count: int
     code_dict_count: int
     crop_stage_dict_count: int
     rice_variety_count: int
@@ -31,6 +33,7 @@ class ReferenceSeedSummary:
 
 
 def seed_reference_data(session: Session) -> ReferenceSeedSummary:
+    administrative_division_count = _seed_administrative_divisions(session)
     code_dict_count = _seed_code_dicts(session)
     crop_stage_dict_count = _seed_crop_stage_dict(session)
     rice_variety_count = _seed_rice_varieties(session)
@@ -44,6 +47,7 @@ def seed_reference_data(session: Session) -> ReferenceSeedSummary:
     )
 
     return ReferenceSeedSummary(
+        administrative_division_count=administrative_division_count,
         code_dict_count=code_dict_count,
         crop_stage_dict_count=crop_stage_dict_count,
         rice_variety_count=rice_variety_count,
@@ -52,6 +56,29 @@ def seed_reference_data(session: Session) -> ReferenceSeedSummary:
         field_ids=[field.id for field in fields],
         farm_field_relation_count=farm_field_relation_count,
     )
+
+
+def _seed_administrative_divisions(session: Session) -> int:
+    for row in load_administrative_division_seed_rows():
+        row_id = int(row.code)
+        item = session.get(AdministrativeDivision, row_id)
+        if item is None:
+            item = AdministrativeDivision(id=row_id)
+            session.add(item)
+
+        item.code = row.code
+        item.adcode = row.adcode
+        item.name = row.name
+        item.division_type = row.division_type
+        item.level = row.level
+        item.parent_code = row.parent_code
+        item.sort_order = row.sort_order
+        item.created_by_type = "system"
+        item.created_by_id = SEED_ACTOR
+
+    session.flush()
+    _sync_id_sequence(session, "cf_administrative_division")
+    return _count_rows(session, select(func.count()).select_from(AdministrativeDivision))
 
 
 def _seed_code_dicts(session: Session) -> int:

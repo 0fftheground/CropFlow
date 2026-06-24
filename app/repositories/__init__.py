@@ -1,4 +1,5 @@
 from app.repositories.core import (
+    AdministrativeDivisionRepository,
     CalendarItemRepository,
     CodeDictRepository,
     CropStageDictRepository,
@@ -24,6 +25,7 @@ from app.repositories.core import (
 )
 
 __all__ = [
+    "AdministrativeDivisionRepository",
     "CalendarItemRepository",
     "CodeDictRepository",
     "CropStageDictRepository",

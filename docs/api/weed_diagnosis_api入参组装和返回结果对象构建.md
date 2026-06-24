@@ -6,6 +6,7 @@
 - 只要接口已经返回具体作业方案或处置措施，并附带执行时间窗，就先落 `TaskIntent`。
 - `TaskIntent` 进入人工 `ReviewRequest` 后，审核通过再生成正式 `FarmingTask`。
 - `OperationPlan` 不直接挂在 `TaskIntent` 或 `CalendarItem` 上；它只在正式 `FarmingTask` 创建后，作为该任务的执行依据被创建。
+- 仅在调用杂草防治外部接口时，如 `PlantingPlan` 的种植制度为 `再生稻`，请求参数里的 `cultivation_system` 归一化为 `早稻`；系统内部上下文仍保留 `再生稻` 原值。
 
 ## 1. `soil_treatment_diagnosis`
 

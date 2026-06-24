@@ -262,6 +262,10 @@ class WeatherSnapshotRecordResult:
 
 
 class HttpWeedDiagnosisClient:
+    WEED_CULTIVATION_SYSTEM_NORMALIZATION = {
+        "再生稻": "早稻",
+    }
+
     def __init__(self, base_url: str, timeout_seconds: float = 10.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
@@ -278,7 +282,7 @@ class HttpWeedDiagnosisClient:
             "/api/soil_treatment_diagnosis",
             {
                 "province": province,
-                "cultivation_system": cultivation_system,
+                "cultivation_system": self._normalize_cultivation_system_for_weed_api(cultivation_system),
                 "cultivation_pattern": cultivation_pattern,
                 "cultivation_date": cultivation_date.strftime("%Y%m%d"),
             },
@@ -306,7 +310,7 @@ class HttpWeedDiagnosisClient:
         payload = {
             "weather_data": self._normalize_weather_data(weather_data),
             "rice_type": rice_type,
-            "cultivation_system": cultivation_system,
+            "cultivation_system": self._normalize_cultivation_system_for_weed_api(cultivation_system),
             "cultivation_pattern": cultivation_pattern,
             "cultivation_date": cultivation_date.strftime("%Y%m%d"),
         }
@@ -356,7 +360,7 @@ class HttpWeedDiagnosisClient:
                 "province": province,
                 "weather_data": self._normalize_weather_data(weather_data),
                 "rice_type": rice_type,
-                "cultivation_system": cultivation_system,
+                "cultivation_system": self._normalize_cultivation_system_for_weed_api(cultivation_system),
                 "cultivation_pattern": cultivation_pattern,
                 "cultivation_date": cultivation_date.strftime("%Y%m%d"),
                 "survey_data_before_treatment": survey_data_before_treatment,
@@ -399,6 +403,9 @@ class HttpWeedDiagnosisClient:
             )
         return normalized
 
+    def _normalize_cultivation_system_for_weed_api(self, cultivation_system: str) -> str:
+        return self.WEED_CULTIVATION_SYSTEM_NORMALIZATION.get(cultivation_system, cultivation_system)
+
     def diagnose_injury_mitigation(
         self,
         *,
@@ -436,7 +443,7 @@ class HttpWeedDiagnosisClient:
             "/api/additional_treatment_diagnosis",
             {
                 "province": province,
-                "cultivation_system": cultivation_system,
+                "cultivation_system": self._normalize_cultivation_system_for_weed_api(cultivation_system),
                 "cultivation_pattern": cultivation_pattern,
                 "cultivation_date": cultivation_date.strftime("%Y%m%d"),
                 "control_date": control_date.strftime("%Y%m%d"),
@@ -1689,10 +1696,6 @@ class MockWeatherProvider:
 
 
 class PlantProtectionPlanContextResolver:
-    CULTIVATION_SYSTEM_NORMALIZATION = {
-        "双季晚稻": "晚稻",
-        "一季晚稻": "晚稻",
-    }
     RICE_TYPE_NORMALIZATION = {
         "籼": "籼稻",
         "粳": "粳稻",
@@ -1721,7 +1724,7 @@ class PlantProtectionPlanContextResolver:
 
         return PlantProtectionPlanContext(
             rice_type=self.RICE_TYPE_NORMALIZATION.get(rice_type, rice_type),
-            cultivation_system=self.CULTIVATION_SYSTEM_NORMALIZATION.get(cultivation_system, cultivation_system),
+            cultivation_system=cultivation_system,
             cultivation_pattern=cultivation_pattern,
             cultivation_date=cultivation_date,
         )

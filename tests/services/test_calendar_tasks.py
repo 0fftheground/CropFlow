@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -25,6 +26,7 @@ from app.orchestrator.core import PlanOrchestrator, TaskDueCheckTriggeredHandler
 from app.services.calendar_tasks import (
     HttpWeedDiagnosisClient,
     MockWeatherProvider,
+    PlantProtectionPlanContextResolver,
     PostTreatmentSurveyRecommendation,
     PreTreatmentSurveyRecommendation,
     PestDiseaseRegularSurveyInitResult,
@@ -341,6 +343,7 @@ class FakePestDiseaseSurveyWindowClient:
 
 def make_plan(
     *,
+    culti_type_code: int = 5,
     planting_method_code: int = 1,
     transplant_date: date | None = None,
 ) -> PlantingPlan:
@@ -350,7 +353,7 @@ def make_plan(
         plan_name="Test Plan",
         farm_id=1,
         year=2026,
-        culti_type_code=5,
+        culti_type_code=culti_type_code,
         planting_method_code=planting_method_code,
         crop_name="水稻",
         variety_id=1,
@@ -422,8 +425,20 @@ def make_code_dicts() -> dict[int, CodeDict]:
         3: CodeDict(id=3, code=3, code_name="插秧", category="sowingmtd"),
         4: CodeDict(id=4, code=4, code_name="抛秧", category="sowingmtd"),
         5: CodeDict(id=5, code=5, code_name="早稻", category="culti_type"),
+        11: CodeDict(id=11, code=11, code_name="再生稻", category="culti_type"),
         9: CodeDict(id=9, code=9, code_name="籼", category="sub_type"),
     }
+
+
+def test_plant_protection_context_resolver_keeps_ratoon_cultivation_system_for_internal_context() -> None:
+    resolver = PlantProtectionPlanContextResolver(
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+    )
+
+    context = resolver.resolve(make_plan(culti_type_code=11))
+
+    assert context.cultivation_system == "再生稻"
 
 
 def test_recommend_pre_treatment_survey_creates_calendar_item_and_event() -> None:
@@ -1304,6 +1319,102 @@ def test_http_weed_diagnosis_client_normalizes_internal_weather_rows_for_pre_sur
 
     assert result.recommendation_date == date(2026, 4, 18)
     assert captured_payload["weather_data"] == [{"DATE": "20260409", "TEMP": 24.5}]
+
+
+@pytest.mark.parametrize(
+    ("method_name", "expected_path", "response_body"),
+    [
+        (
+            "diagnose_soil_treatment",
+            "/api/soil_treatment_diagnosis",
+            {"code": 200, "data": {"soil_treatment_recommended_date": ["20260412", "20260415"]}},
+        ),
+        (
+            "recommend_pre_treatment_survey_date",
+            "/api/weed_survey_date_diagnosis",
+            {"code": 200, "data": {"pre_stem_leaf_herbicide_survey_date": "20260418"}},
+        ),
+        (
+            "diagnose_weed_treatment",
+            "/api/weed_treatment_diagnosis",
+            {"code": 200, "data": {"control_target": "稗草", "recommended_control_date": ["20260420", "20260422"]}},
+        ),
+        (
+            "diagnose_additional_treatment",
+            "/api/additional_treatment_diagnosis",
+            {"code": 200, "data": {"need_recontrol": False}},
+        ),
+    ],
+)
+def test_http_weed_diagnosis_client_maps_ratoon_cultivation_system_for_weed_api_calls(
+    monkeypatch: pytest.MonkeyPatch,
+    method_name: str,
+    expected_path: str,
+    response_body: dict[str, Any],
+) -> None:
+    client = HttpWeedDiagnosisClient("http://diagnosis.local")
+    captured_request: dict[str, Any] = {}
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(response_body).encode("utf-8")
+
+    def fake_urlopen(req, timeout):
+        del timeout
+        captured_request["url"] = req.full_url
+        captured_request["payload"] = json.loads(req.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setattr("app.services.calendar_tasks.request.urlopen", fake_urlopen)
+
+    if method_name == "diagnose_soil_treatment":
+        client.diagnose_soil_treatment(
+            province="湖南省",
+            cultivation_system="再生稻",
+            cultivation_pattern="直播",
+            cultivation_date=date(2026, 4, 10),
+        )
+    elif method_name == "recommend_pre_treatment_survey_date":
+        client.recommend_pre_treatment_survey_date(
+            weather_data=[{"DATE": "20260409", "TEMP": 24.5}],
+            rice_type="籼稻",
+            cultivation_system="再生稻",
+            cultivation_pattern="直播",
+            cultivation_date=date(2026, 4, 10),
+        )
+    elif method_name == "diagnose_weed_treatment":
+        client.diagnose_weed_treatment(
+            province="湖南省",
+            weather_data=[{"DATE": "20260409", "TEMP": 24.5}],
+            rice_type="籼稻",
+            cultivation_system="再生稻",
+            cultivation_pattern="直播",
+            cultivation_date=date(2026, 4, 10),
+            survey_data_before_treatment={"weed_density": "high"},
+            last_survey_date=None,
+        )
+    else:
+        client.diagnose_additional_treatment(
+            province="湖南省",
+            cultivation_system="再生稻",
+            cultivation_pattern="直播",
+            cultivation_date=date(2026, 4, 10),
+            control_date=date(2026, 4, 20),
+            previous_injury_level="无",
+            survey_data_before_treatment={"weed_density": "high"},
+            survey_data_after_treatment={"control_effect": "medium"},
+        )
+
+    assert captured_request["url"].endswith(expected_path)
+    assert captured_request["payload"]["cultivation_system"] == "早稻"
 
 
 def test_http_weed_diagnosis_client_surfaces_http_error_body(monkeypatch: pytest.MonkeyPatch) -> None:

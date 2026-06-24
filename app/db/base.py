@@ -1,4 +1,5 @@
 from app.models import (
+    AdministrativeDivision,
     Base,
     CalendarItem,
     CodeDict,
@@ -23,6 +24,7 @@ from app.models import (
 )
 
 __all__ = [
+    "AdministrativeDivision",
     "Base",
     "CalendarItem",
     "CodeDict",

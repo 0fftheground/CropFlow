@@ -347,9 +347,34 @@ Farm.externalFarmId 用于保存外部平台农场标识，供气象等按农场
 Field 不再直接保存 farmId，农场与地块关系通过 FarmFieldRelation 维护。
 Field 第一版对齐 agri_field，保留地块名称、外部地块标识、边界 WKT、中心点和面积。
 土壤类型、土壤肥力、前茬作物等信息当前不在 agri_field 中，第一版先不结构化。
+农场创建 / 编辑页的省、市、区县级联选项由独立参考表 AdministrativeDivision 提供，Farm 本身继续只保存最终选定结果，不冗余维护层级关系。
 ```
 
-## 6.3 PlantingPlan
+## 6.3 AdministrativeDivision
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | id | 参考表主键；当前实现使用 12 位行政区划代码转整数后的稳定值 |
+| code | string | 12 位行政区划代码 |
+| adcode | string | 6 位行政区编码，可直接回填 Farm.adcode |
+| name | string | 行政区名称 |
+| divisionType | string | 行政区类型，例如省、地级市、市辖区、县 |
+| level | integer | 层级，和源参考数据保持一致 |
+| parentCode | string | 父级行政区划代码；一级节点为空 |
+| sortOrder | integer | 导入顺序，用于稳定前端展示顺序 |
+| createdAt | datetime | 创建时间 |
+| updatedAt | datetime | 更新时间 |
+
+说明：
+
+```text
+AdministrativeDivision 是只读参考表，不参与业务编排。
+当前数据源来自仓库内行政区划 xlsx，通过 seed_reference_data 导入数据库。
+运行期接口 GET /api/administrative-divisions 只查库，不再直接读取 xlsx。
+为兼容直辖市页面交互，接口层允许在“省 -> 市 -> 区县”链路中返回虚拟二级节点；虚拟节点不单独落库。
+```
+
+## 6.4 PlantingPlan
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
