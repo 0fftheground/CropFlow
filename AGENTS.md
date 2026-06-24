@@ -26,6 +26,72 @@
 5. docs/ai/README.md 是 Codex 和 Claude Code 的共享入口，只做索引和通用规则，不复制完整项目事实。
 ```
 
+## Before Coding
+
+开始编码前，默认执行以下检查：
+
+```text
+1. 先读 AGENTS.md。
+2. 需要恢复当前状态时，优先读 project-context/current-memory.md；它是当前仓库里 current-state 类信息的主入口。
+3. 开始任何非简单任务前，先判断应该使用哪个 skill；不确定时先用 using-agent-skills。
+4. 非简单任务在写代码前，先给出简短计划：至少说明当前理解、影响范围、实现取舍和验证方式。
+```
+
+## Agent Skills 通用规则
+
+当前环境已安装一组通用 agent-skills，位于 `C:\Users\00778807\.codex\skills\`。这些 skill 不是参考资料，而是带步骤、验证和退出条件的工作流。
+
+使用这些 skill 时，遵循以下原则：
+
+```text
+1. 先判断当前任务所处阶段，再加载对应 skill，不要一次把所有 skill 都塞进上下文。
+2. using-agent-skills 是元 skill；当你不知道该用哪个 skill 时，先用它做路由。
+3. skill 是流程，不是建议；一旦决定使用，就应按其步骤执行，不跳过验证。
+4. 一个任务可以串联多个 skill，但应按阶段逐步加载，而不是一次全部加载。
+5. 如果任务已经有 CropFlow 专用 skill，就优先使用 CropFlow 专用 skill；通用 skill 作为补充，而不是替代。
+```
+
+推荐的通用默认路由：
+
+```text
+unclear requirement -> spec-driven-development
+large task -> planning-and-task-breakdown
+multi-file change -> incremental-implementation
+behavior change -> test-driven-development
+framework/library uncertainty -> source-driven-development
+test/build/runtime failure -> debugging-and-error-recovery
+before merge/final answer -> code-review-and-quality
+```
+
+结合 CropFlow 当前仓库，推荐这样组合：
+
+```text
+1. 恢复今天工作上下文：cropflow-start-work；如还不清楚要做什么，再补 using-agent-skills。
+2. 非简单需求先收口业务影响：cropflow-task-planning；如任务仍然很大，再补 planning-and-task-breakdown。
+3. 多文件实现时：incremental-implementation。
+4. 任何行为变化、bug 修复、边界条件修正：test-driven-development。
+5. 外部框架、第三方接口、库行为不确定：source-driven-development。
+6. 测试失败、构建失败、线上/本地报错排查：debugging-and-error-recovery。
+7. 单个任务完成收口：cropflow-task-closing；提交前再走 code-review-and-quality。
+8. 当天收尾、handoff、memory 更新：cropflow-wrap-up。
+9. 文档漂移、索引缺口、wiki 清理：cropflow-wiki-maintenance。
+```
+
+一个完整但不强制的典型顺序：
+
+```text
+cropflow-start-work
+-> spec-driven-development（需求不清时）
+-> cropflow-task-planning
+-> planning-and-task-breakdown（任务过大时）
+-> incremental-implementation
+-> test-driven-development
+-> debugging-and-error-recovery（遇到异常时插入）
+-> cropflow-task-closing
+-> code-review-and-quality
+-> cropflow-wrap-up
+```
+
 推荐优先使用以下 skill：
 
 ```text
@@ -55,6 +121,14 @@ Use $cropflow-task-planning to analyze a non-trivial CropFlow change before edit
 Use $cropflow-task-closing to close one completed CropFlow task with tests and doc updates
 Use $cropflow-wrap-up to summarize today, update memory, and prepare commit actions
 Use $cropflow-wiki-maintenance to audit CropFlow docs for drift, gaps, and overlap
+Use using-agent-skills when you need to discover which general engineering workflow skill applies
+Use spec-driven-development when the requirement is still unclear or acceptance criteria are missing
+Use planning-and-task-breakdown when the task is too large to start directly
+Use incremental-implementation for multi-file implementation work
+Use test-driven-development when changing behavior or fixing bugs
+Use source-driven-development when framework or library behavior must be verified against sources
+Use debugging-and-error-recovery when tests, build, runtime, or logs reveal an unexpected failure
+Use code-review-and-quality before merge or before claiming work is complete
 ```
 
 ## 项目背景
@@ -226,9 +300,10 @@ docs/decisions/
 
 ```text
 1. 先恢复当前 phase 和相关文档上下文。
-2. 先识别受影响的对象、流程、接口、任务链路和测试范围。
-3. 如需求存在多种实现路径或业务口径未冻结，先向用户说明当前理解、实现取舍和验证方式。
-4. 在没有把影响范围说清楚前，不把复杂改动伪装成“小修小补”直接落代码。
+2. 先给出简短计划，再进入实现。
+3. 先识别受影响的对象、流程、接口、任务链路和测试范围。
+4. 如需求存在多种实现路径或业务口径未冻结，先向用户说明当前理解、实现取舍和验证方式。
+5. 在没有把影响范围说清楚前，不把复杂改动伪装成“小修小补”直接落代码。
 ```
 
 ## 功能完成后的知识回写要求
@@ -289,7 +364,19 @@ docs/decisions/
 2. 新增校验时，优先明确有效和无效输入的检查方式。
 3. 重构时，优先保证重构前后行为一致。
 4. 多步骤任务应给出简短计划，并说明每步如何验证。
-5. 修改完成后应尽量运行与变更范围匹配的检查。
+5. 修改完成后必须给出与变更范围匹配的验证证据；不能因为“改动看起来很小”就跳过测试。
+```
+
+## Never
+
+以下行为默认禁止，除非用户明确要求，或它本身就是本次变更的必要组成部分：
+
+```text
+1. 不做无关重构。
+2. 不因为“改动很简单”就跳过测试、构建或必要的手工验证。
+3. 不在未说明 migration 影响、回滚路径和数据兼容性的情况下修改数据库 schema。
+4. 不删除旧代码或旧注释；如果确需删除，必须说明原因。仅可顺手清理本次改动直接引入的无用内容。
+5. 不在没有测试 / 构建 / 手工验证证据的情况下宣称任务完成。
 ```
 
 ## 本地运行与验证环境
