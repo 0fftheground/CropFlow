@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS cf_farm (
 CREATE TABLE IF NOT EXISTS cf_field (
   id bigserial PRIMARY KEY,
   field_name varchar(100) NOT NULL,
-  external_field_id varchar(50) UNIQUE,
+  external_field_id varchar(50),
   boundary_wkt text,
   centroid_lat numeric(9, 6),
   centroid_lon numeric(9, 6),
@@ -987,6 +987,9 @@ CREATE INDEX IF NOT EXISTS idx_cf_execution_status
 
 CREATE INDEX IF NOT EXISTS idx_cf_execution_record_execution_id
   ON cf_execution_record (execution_id);
+
+CREATE INDEX IF NOT EXISTS idx_cf_field_external_field_id
+  ON cf_field (external_field_id);
 
 CREATE INDEX IF NOT EXISTS idx_cf_evaluation_execution_id
   ON cf_evaluation (execution_id);

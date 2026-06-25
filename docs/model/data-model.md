@@ -346,6 +346,7 @@ Farm.province / city / districtCounty / adcode 用于结构化保存区域信息
 Farm.externalFarmId 用于保存外部平台农场标识，供气象等按农场取数的接口使用。
 Field 不再直接保存 farmId，农场与地块关系通过 FarmFieldRelation 维护。
 Field 第一版对齐 agri_field，保留地块名称、外部地块标识、边界 WKT、中心点和面积。
+Field.externalFieldId 只要求在同一 Farm 范围内不重复，不要求全局唯一。
 土壤类型、土壤肥力、前茬作物等信息当前不在 agri_field 中，第一版先不结构化。
 农场创建 / 编辑页的省、市、区县级联选项由独立参考表 AdministrativeDivision 提供，Farm 本身继续只保存最终选定结果，不冗余维护层级关系。
 ```

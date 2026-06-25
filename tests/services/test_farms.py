@@ -175,6 +175,35 @@ def test_create_fields_batch_rejects_duplicate_external_field_ids() -> None:
         )
 
 
+def test_create_field_allows_same_external_field_id_in_different_farms() -> None:
+    farm_repo = FakeFarmRepository(
+        {
+            1: Farm(id=1, farm_name="测试农场一"),
+            2: Farm(id=2, farm_name="测试农场二"),
+        },
+    )
+    field_repo = FakeFieldRepository(
+        {
+            10: Field(id=10, field_name="一号田", external_field_id="plot-001"),
+        },
+        next_id=11,
+    )
+    relation_repo = FakeFarmFieldRelationRepository([FarmFieldRelation(id=101, farm_id=1, field_id=10)])
+    service = FarmFieldService(field_repo, farm_repo, relation_repo)
+
+    result = service.create(
+        2,
+        FieldCreateInput(
+            field_name="二号田",
+            external_field_id="plot-001",
+        ),
+    )
+
+    assert result.id == 11
+    assert result.external_field_id == "plot-001"
+    assert relation_repo.list_field_ids_by_farm(2) == [11]
+
+
 def test_update_field_rejects_duplicate_external_field_id() -> None:
     farm_repo = FakeFarmRepository({1: Farm(id=1, farm_name="测试农场")})
     field_repo = FakeFieldRepository(
@@ -190,6 +219,29 @@ def test_update_field_rejects_duplicate_external_field_id() -> None:
 
     with pytest.raises(ValueError, match="external_field_id plot-002 already exists"):
         service.update(1, 10, FieldUpdateInput(external_field_id="plot-002"))
+
+
+def test_update_field_allows_same_external_field_id_in_different_farms() -> None:
+    farm_repo = FakeFarmRepository(
+        {
+            1: Farm(id=1, farm_name="测试农场一"),
+            2: Farm(id=2, farm_name="测试农场二"),
+        },
+    )
+    field_repo = FakeFieldRepository(
+        {
+            10: Field(id=10, field_name="一号田", external_field_id="plot-010"),
+            11: Field(id=11, field_name="二号田", external_field_id="plot-001"),
+        },
+    )
+    relation_repo = FakeFarmFieldRelationRepository(
+        [FarmFieldRelation(id=101, farm_id=1, field_id=10), FarmFieldRelation(id=102, farm_id=2, field_id=11)],
+    )
+    service = FarmFieldService(field_repo, farm_repo, relation_repo)
+
+    result = service.update(1, 10, FieldUpdateInput(external_field_id="plot-001"))
+
+    assert result.external_field_id == "plot-001"
 
 
 def test_update_field_allows_clearing_optional_values() -> None:

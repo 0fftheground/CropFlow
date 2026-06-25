@@ -210,7 +210,7 @@ class FarmFieldService:
     def create(self, farm_id: int, payload: FieldCreateInput) -> Field:
         self._get_farm(farm_id)
         external_field_id = _normalize_optional_string(payload.external_field_id)
-        self._ensure_external_field_id_available(external_field_id)
+        self._ensure_external_field_id_available(farm_id, external_field_id)
         centroid_lat = _validate_latitude(payload.centroid_lat, field_name="centroid_lat")
         centroid_lon = _validate_longitude(payload.centroid_lon, field_name="centroid_lon")
         area_ha = _validate_area_ha(payload.area_ha)
@@ -245,7 +245,7 @@ class FarmFieldService:
         if duplicate_external_ids:
             raise ValueError(f"Duplicate external_field_id values in batch: {duplicate_external_ids}.")
         for external_field_id in normalized_external_ids:
-            self._ensure_external_field_id_available(external_field_id)
+            self._ensure_external_field_id_available(farm_id, external_field_id)
 
         fields: list[Field] = []
         for payload, external_field_id in zip(payloads, normalized_external_ids, strict=False):
@@ -274,7 +274,7 @@ class FarmFieldService:
             field.field_name = _require_required_update_string(payload.field_name, "field_name")
         if payload.external_field_id is not UNSET:
             external_field_id = _normalize_optional_string(payload.external_field_id)
-            self._ensure_external_field_id_available(external_field_id, current_field_id=field_id)
+            self._ensure_external_field_id_available(farm_id, external_field_id, current_field_id=field_id)
             field.external_field_id = external_field_id
         if payload.boundary_wkt is not UNSET:
             field.boundary_wkt = _normalize_optional_string(payload.boundary_wkt)
@@ -354,15 +354,23 @@ class FarmFieldService:
 
     def _ensure_external_field_id_available(
         self,
+        farm_id: int,
         external_field_id: str | None,
         *,
         current_field_id: int | None = None,
     ) -> None:
         if external_field_id is None:
             return
-        existing = self.field_repository.get_by_external_field_id(external_field_id)
+        existing = self._get_field_by_external_field_id_in_farm(farm_id, external_field_id)
         if existing is not None and existing.id != current_field_id:
             raise ValueError(f"external_field_id {external_field_id} already exists.")
+
+    def _get_field_by_external_field_id_in_farm(self, farm_id: int, external_field_id: str) -> Field | None:
+        field_ids = self.farm_field_relation_repository.list_field_ids_by_farm(farm_id)
+        if not field_ids:
+            return None
+        fields = self.field_repository.list_by_ids(field_ids)
+        return next((field for field in fields if field.external_field_id == external_field_id), None)
 
 
 class FarmFieldQueryService:
