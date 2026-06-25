@@ -9,6 +9,7 @@
 ```text
 1. docs/history/ 保存历史推进记录、阶段拆解和旧 runbook。
 2. docs/change-notes/ 只保存已完成改动的变更记录，不承接旧 planning 材料。
+3. 只服务历史排查或阶段回放的调试脚本，归档到 docs/history/scripts/，不再作为正式 scripts/ 入口。
 ```
 
 当前开发应优先阅读：

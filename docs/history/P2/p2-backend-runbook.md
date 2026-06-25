@@ -82,7 +82,7 @@ curl http://127.0.0.1:8000/api/health
 ### 5.1 杂草主链路 trace
 
 ```powershell
-.venv\Scripts\python.exe scripts/run_e2e_trace.py
+.venv\Scripts\python.exe docs/history/scripts/run_e2e_trace.py
 ```
 
 说明：
@@ -94,7 +94,7 @@ curl http://127.0.0.1:8000/api/health
 ### 5.2 土壤封闭专项 trace
 
 ```powershell
-.venv\Scripts\python.exe scripts/run_soil_treatment_trace.py
+.venv\Scripts\python.exe docs/history/scripts/run_soil_treatment_trace.py
 ```
 
 说明：
