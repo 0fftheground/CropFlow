@@ -17,6 +17,7 @@
 ```text
 docs/fde/task-flow-fde-output-template.md
 docs/fde/plant-protection-fde-output-template.md
+docs/fde/fertilization-fde-draft.md
 ```
 
 其中：
@@ -24,4 +25,5 @@ docs/fde/plant-protection-fde-output-template.md
 ```text
 1. task-flow-fde-output-template.md 是通用、行业无关的采访输出模板。
 2. plant-protection-fde-output-template.md 是基于当前植保实际开发内容整理出的完整参考样例，覆盖杂草和病虫害两条主线。
+3. fertilization-fde-draft.md 是基于施肥任务清单、workflow 矩阵和方向说明整理的施肥方向初稿，可继续按缺失项补充。
 ```

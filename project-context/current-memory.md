@@ -28,6 +28,9 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
   - 新增 `bootstrap-db.ps1`、`seed_reference_data.py`、`migrate_farm_field_data.py`
   - 支持先建表，再初始化基础参考数据，并按需把本地真实 `cf_farm / cf_field / cf_farm_field_relation` 迁到远程库
   - 已新增 `sync-remote-db.ps1` + `sync_table_data.py` 作为远程库一键同步入口，支持显式配置要全量同步的表，并统一串起 migration、reference seed 和本地表数据同步
+  - 现已补 `compare_table_data.py` 作为差异预检入口，支持先看 source / target 的新增、缺失和业务字段变化，再决定同步哪些基础表
+  - `sync-remote-db.ps1` 默认同步模式已从 `exact` 调整为保守的 `merge`；只有显式传 `-TableSyncMode exact` 才覆盖目标表
+  - 已通过 SSH tunnel 在真实远程 `cropflow_deploy` 上完成一次落库验证：schema 升级到 `cf014_scope_field_external_id`，并以 `merge + SkipSeed` 同步 `cf_administrative_division`、`cf_farm`、`cf_field`、`cf_farm_field_relation`
 - Docker 部署路径已补齐并跑通：
   - 已补 `Dockerfile`、`docker-compose.yml`、`docker/entrypoint.sh`、`.env.docker.example`
   - 已补远程数据库初始化与 Docker 部署文档
@@ -70,10 +73,17 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
   - `docs/fde/task-flow-fde-output-template.md` 已补通用任务 / 流程 FDE 输出模板
   - `docs/fde/plant-protection-fde-output-template.md` 已补为完整植保参考样例，覆盖杂草和病虫害两条主线
   - `docs/workflow/checklists/plant-protection-task-checklist.md` 已调整为植保农事项梳理入口页
+  - 已新增 `docs/fde/fertilization-fde-draft.md` 作为施肥方向 FDE 草稿，并已结合 `docs/references/raw/土壤检测数据样表.xlsx`、`docs/references/raw/施肥算法接口.md` 补入土壤检测字段草案和施肥算法 `POST /run` 的请求 / 响应映射草案
+  - `docs/workflow/checklists/fertilization-task-checklist.md` 当前仍不是最终稿，明天还需要继续调整后再回写 FDE 草稿
+  - 只服务历史排查的 `run_e2e_trace.py`、`run_soil_treatment_trace.py`、`replay_pest_disease_daily_update.py` 已从正式 `scripts/` 迁到 `docs/history/scripts/`；`scripts/migrate-up.ps1` 已删除
 
 ## Remaining
 
 - 把远程部署用的 `.env`、镜像源和拉起顺序沉淀为稳定运维说明，避免下次再走本地 tunnel 连接串。
+- 施肥方向 FDE 还未收口，尤其要继续补齐：
+  - 土样 / 检测结果字段哪些属于第一版强依赖
+  - `POST /run` 采样点级处方如何转成田块级正式方案 / `prescriptionMap`
+  - 处方生成与效果抽查异常是否必须进入 `ReviewRequest`
 - 如需正式修复历史脏数据，在目标环境执行 `scripts/repair_merged_disease_pest_controls.py --apply` 并核对生成的 repair event。
 - 气象运行期管理还没完全产品化，缓存、版本审计、异常展示和前端状态细化仍待补齐。
 - DeviceCommand、InventoryItem / InventoryTransaction 仍按 deferred 处理。
@@ -88,9 +98,9 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 
 下个 session 优先做三件事：
 
-1. 继续确认农场 / 地块与计划创建链路的真实前端使用方式，重点看内部 `field_id`、`external_field_id` 展示和删除保护是否符合页面预期。
-2. 在真实联调环境再确认一次杂草防治 `再生稻 -> 早稻` 的外部映射是否已覆盖土壤封闭、药前调查、茎叶除草和补防四条调用链。
-3. 再视联调环境决定是否执行 `repair_merged_disease_pest_controls.py --apply`，并继续补天气异常展示、前端状态表达和真实计划脏数据清理策略。
+1. 先继续调整 `docs/workflow/checklists/fertilization-task-checklist.md`，再据此补完 `docs/fde/fertilization-fde-draft.md` 里土样字段、处方映射、审核口径和异常后续动作。
+2. 继续确认农场 / 地块与计划创建链路的真实前端使用方式，重点看内部 `field_id`、`external_field_id` 展示和删除保护是否符合页面预期。
+3. 在真实联调环境再确认一次杂草防治 `再生稻 -> 早稻` 的外部映射是否已覆盖土壤封闭、药前调查、茎叶除草和补防四条调用链；再视情况决定是否执行 `repair_merged_disease_pest_controls.py --apply`。
 
 ## Last Updated
 
