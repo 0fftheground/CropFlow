@@ -27,6 +27,7 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 - 远程数据库初始化与迁移路径已补齐：
   - 新增 `bootstrap-db.ps1`、`seed_reference_data.py`、`migrate_farm_field_data.py`
   - 支持先建表，再初始化基础参考数据，并按需把本地真实 `cf_farm / cf_field / cf_farm_field_relation` 迁到远程库
+  - 已新增 `sync-remote-db.ps1` + `sync_table_data.py` 作为远程库一键同步入口，支持显式配置要全量同步的表，并统一串起 migration、reference seed 和本地表数据同步
 - Docker 部署路径已补齐并跑通：
   - 已补 `Dockerfile`、`docker-compose.yml`、`docker/entrypoint.sh`、`.env.docker.example`
   - 已补远程数据库初始化与 Docker 部署文档
@@ -59,6 +60,11 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
   - `HttpWeatherProvider.get_daily_weather()` 在传入未来 `as_of_date` 时，observed 只截到真实今天的前一天
   - forecast 改为从真实今天开始补齐，避免向历史观测接口请求“今天尚未落库”的数据
   - `tests/services/test_weather_provider.py` 已补回归用例并通过
+- 前端联调与上层回放已继续完成一轮验证：
+  - 病虫害复核页按新的 `theoryPlan.rounds` 整表提交模式联调已通过，`/api/review-requests/{id}` 的中文 `targets` 回显、轮次增删改提交，以及 `/api/review-requests/{id}/resolve` 返回后的正式任务刷新已确认正常
+  - `task_detail / execution_feedback / survey_entry / plan_detail` 当前联调可用，相关聚合详情与执行反馈流转未发现阻塞问题
+  - 未来日期实际生育期修复已完成一轮更上层的阶段重算 / API 回放验证，天气边界修复在上层流程中成立
+  - 行政区划查询与农场创建相关级联链路联调已通过，`/api/administrative-divisions` 的根节点、省市区查询、直辖市虚拟二级节点和最终 `adcode` 回填已确认正常
 - AI 协作与 FDE 文档入口已继续收口：
   - `AGENTS.md` 已补“编码前检查”“通用 agent-skills 路由”“Never”约束，明确当前仓库默认工作流
   - `docs/fde/task-flow-fde-output-template.md` 已补通用任务 / 流程 FDE 输出模板
@@ -67,15 +73,12 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 
 ## Remaining
 
-- 继续做前端真实联调验收，优先 `review_request / task_detail / execution_feedback / survey_entry / plan_detail`，重点确认病虫害复核页按新的 `theoryPlan.rounds` 整表提交模式工作正常。
 - 把远程部署用的 `.env`、镜像源和拉起顺序沉淀为稳定运维说明，避免下次再走本地 tunnel 连接串。
 - 如需正式修复历史脏数据，在目标环境执行 `scripts/repair_merged_disease_pest_controls.py --apply` 并核对生成的 repair event。
 - 气象运行期管理还没完全产品化，缓存、版本审计、异常展示和前端状态细化仍待补齐。
 - DeviceCommand、InventoryItem / InventoryTransaction 仍按 deferred 处理。
 - 农场 / 地块接口还未经过真实前端联调，尤其要确认前端创建计划时继续使用内部 `field_id`，只把 `external_field_id` 当外部映射字段展示或透传。
-- 行政区划接口还需要和前端一起确认级联选择细节，重点看直辖市虚拟二级节点和最终 `adcode` 回填是否符合页面预期。
 - 杂草防治接口仍需在真实联调环境再确认一次 `再生稻 -> 早稻` 的外部映射是否已覆盖土壤封闭、药前调查、茎叶除草和补防四条调用链。
-- 未来日期实际生育期修复目前只补了 weather provider 服务测试；还应结合阶段重算链路再补一轮 `stage_management` 或本地 API 回放验证。
 
 ## Blockers
 
@@ -85,10 +88,10 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 
 下个 session 优先做三件事：
 
-1. 和前端一起实跑农场创建页，重点验 `/api/administrative-divisions` 的根节点、省下城市、直辖市虚拟节点和最终 `adcode` 回填。
-2. 继续和前端实跑病虫害复核场景，重点验 `/api/review-requests/{id}` 的中文 `targets` 回显、`theoryPlan.rounds` 的增删改提交流程，以及 `/api/review-requests/{id}/resolve` 返回后的正式任务刷新。
-3. 继续抽查植保任务详情与执行反馈流转，并补一轮未来日期实际生育期的阶段重算回放验证；再视联调环境决定是否执行 `repair_merged_disease_pest_controls.py --apply`，继续补天气异常展示、前端状态表达和真实计划脏数据清理策略。
+1. 继续确认农场 / 地块与计划创建链路的真实前端使用方式，重点看内部 `field_id`、`external_field_id` 展示和删除保护是否符合页面预期。
+2. 在真实联调环境再确认一次杂草防治 `再生稻 -> 早稻` 的外部映射是否已覆盖土壤封闭、药前调查、茎叶除草和补防四条调用链。
+3. 再视联调环境决定是否执行 `repair_merged_disease_pest_controls.py --apply`，并继续补天气异常展示、前端状态表达和真实计划脏数据清理策略。
 
 ## Last Updated
 
-`2026-06-24`
+`2026-06-25`

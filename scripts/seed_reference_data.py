@@ -9,6 +9,7 @@ def main() -> None:
         session.commit()
 
     print("Reference seed completed.")
+    print(f"administrative_division_count={summary.administrative_division_count}")
     print(f"code_dict_count={summary.code_dict_count}")
     print(f"crop_stage_dict_count={summary.crop_stage_dict_count}")
     print(f"rice_variety_count={summary.rice_variety_count}")
