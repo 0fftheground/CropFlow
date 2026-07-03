@@ -268,13 +268,16 @@ def test_farm_field_routes_cover_crud() -> None:
     delete_response = client.delete("/api/farms/1/fields/10")
 
     assert create_response.status_code == 201
+    assert create_response.json()["id"] == "11"
     assert create_response.json()["farm_id"] == 1
     assert create_response.json()["external_field_id"] == "plot-001"
     assert fake_service.created_payload.external_field_id == "plot-001"
     assert list_response.status_code == 200
-    assert [item["id"] for item in list_response.json()] == [12, 10]
+    assert [item["id"] for item in list_response.json()] == ["12", "10"]
     assert get_response.status_code == 200
+    assert get_response.json()["id"] == "10"
     assert patch_response.status_code == 200
+    assert patch_response.json()["id"] == "10"
     assert patch_response.json()["field_name"] == "二号田"
     assert patch_response.json()["external_field_id"] == "plot-002"
     assert delete_response.status_code == 204
@@ -354,7 +357,7 @@ def test_farm_field_batch_routes_cover_create_and_delete() -> None:
     )
 
     assert create_response.status_code == 201
-    assert [item["id"] for item in create_response.json()] == [11, 12]
+    assert [item["id"] for item in create_response.json()] == ["11", "12"]
     assert [item.external_field_id for item in fake_service.batch_created_payloads] == ["plot-001", "plot-002"]
     assert delete_response.status_code == 204
     assert fake_service.batch_deleted_field_ids == [11, 12]

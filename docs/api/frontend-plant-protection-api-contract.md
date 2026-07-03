@@ -121,7 +121,7 @@ Content-Type: application/json
 
 | field | type | notes |
 |---|---|---|
-| `id` | `int` | 地块主键 |
+| `id` | `string` | 地块主键的字符串形式；内部 `Field.id` 仍为整数 |
 | `farm_id` | `int` | 所属农场 id |
 | `field_name` | `string` | 地块名称 |
 | `external_field_id` | `string \| null` | 外部地块 id；用于外部系统映射 |
@@ -316,7 +316,7 @@ Content-Type: application/json
 ```text
 1. `plan_code` 已改为后端自动生成。
 2. 前端创建计划时不再传这个字段。
-3. `field_ids` 中的地块必须真实存在，且全部属于 `farm_id` 指定的农场。
+3. `field_ids` 中的地块必须真实存在，且全部属于 `farm_id` 指定的农场；前端可传数字或数字字符串，后端会归一为内部整数 id。
 ```
 
 请求体：
@@ -325,7 +325,7 @@ Content-Type: application/json
 |---|---|---|---|
 | `plan_name` | `string` | yes | 计划名称 |
 | `farm_id` | `int` | yes | 农场 id |
-| `field_ids` | `int[]` | yes | 地块 id 列表 |
+| `field_ids` | `(int \| string)[]` | yes | 地块 id 列表；支持前端直接传 `FieldResponse.id` 返回的数字字符串 |
 | `culti_type_code` | `int` | yes | 稻作类型编码 |
 | `planting_method_code` | `int` | yes | 种植方式编码 |
 | `crop_name` | `string` | yes | 作物名称 |
@@ -438,6 +438,7 @@ Content-Type: application/json
 
 1. `200 OK`
 2. 响应体为 `FieldResponse[]`
+3. `FieldResponse.id` 返回字符串，前端可直接作为选项 value；创建 / 更新计划的 `field_ids` 可直接传这些数字字符串，后端会归一为内部整数 id
 
 ##### 地块详情
 

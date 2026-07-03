@@ -97,7 +97,7 @@ class FieldBatchDeleteRequest(BaseModel):
 
 
 class FieldResponse(BaseModel):
-    id: int
+    id: str
     farm_id: int
     field_name: str
     external_field_id: str | None
@@ -382,7 +382,7 @@ def _serialize_farm(farm: Farm) -> FarmResponse:
 
 def _serialize_field(farm_id: int, field: Field) -> FieldResponse:
     return FieldResponse(
-        id=field.id,
+        id=str(field.id),
         farm_id=farm_id,
         field_name=field.field_name,
         external_field_id=field.external_field_id,

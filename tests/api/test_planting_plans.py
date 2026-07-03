@@ -355,6 +355,32 @@ def test_create_planting_plan_route_allows_missing_field_ids() -> None:
     app.dependency_overrides.clear()
 
 
+def test_create_planting_plan_route_accepts_string_field_ids() -> None:
+    fake_service = FakePlantingPlanService()
+    app.dependency_overrides[get_planting_plan_service] = lambda: fake_service
+    app.dependency_overrides[get_db] = lambda: DummySession()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/planting-plans",
+        json={
+            "plan_name": "早稻计划",
+            "farm_id": 1,
+            "field_ids": ["10", "11"],
+            "culti_type_code": 5,
+            "planting_method_code": 1,
+            "crop_name": "水稻",
+            "variety_id": 3,
+            "sowing_date": "2026-04-10",
+        },
+    )
+
+    assert response.status_code == 201
+    assert fake_service.created_payload.field_ids == [10, 11]
+
+    app.dependency_overrides.clear()
+
+
 def test_get_and_patch_planting_plan_routes() -> None:
     fake_service = FakePlantingPlanService()
     app.dependency_overrides[get_planting_plan_service] = lambda: fake_service
@@ -370,6 +396,20 @@ def test_get_and_patch_planting_plan_routes() -> None:
     assert patch_response.status_code == 200
     assert patch_response.json()["status"] == "completed"
     assert patch_response.json()["farm_name"] == "测试农场"
+
+    app.dependency_overrides.clear()
+
+
+def test_patch_planting_plan_route_accepts_string_field_ids() -> None:
+    fake_service = FakePlantingPlanService()
+    app.dependency_overrides[get_planting_plan_service] = lambda: fake_service
+    app.dependency_overrides[get_db] = lambda: DummySession()
+    client = TestClient(app)
+
+    response = client.patch("/api/planting-plans/1", json={"field_ids": ["10", "11"]})
+
+    assert response.status_code == 200
+    assert fake_service.updated_payload.field_ids == [10, 11]
 
     app.dependency_overrides.clear()
 
