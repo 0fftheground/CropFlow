@@ -8,6 +8,15 @@
 
 因此本方向当前任务以非代码交付为主，用于补齐后续接入契约，而不是立即提交施肥方案代码、库存扣减代码或对象样例代码。
 
+推荐产出顺序：
+
+```text
+1. 先整理 docs/workflow/checklists/fertilization-task-checklist.md
+2. 再生成并人工核查 docs/fde/fertilization-fde-draft.md
+3. 已冻结的方向知识和交付要求再回写到本文件
+4. 其中流程事实、接口契约、字段口径仍需同步回 docs/workflow/、docs/api/、docs/model/
+```
+
 ## 当前阶段任务总表
 
 | 方向 | 当前要交什么 | 产出形式 | 依赖谁拍板 |
@@ -26,11 +35,11 @@
 
 ```text
 1. 补充施肥算法接口文档。
-2. 区分基肥、分蘖肥、穗肥、发苗肥、促芽肥等参数。
+2. 区分基肥、分蘖肥、穗肥等本轮施肥主链路参数；再生稻发苗肥、促芽肥暂不纳入本轮 FDE。
 3. 明确穗肥前长势监测到变量处方图的关系。
 4. 明确是否需要 prescriptionMap。
 5. 明确肥料类型、用量、面积、作业窗口和验收标准。
-6. 明确施肥作业执行记录、效果抽查和反馈规则。
+6. 明确施肥作业执行记录、效果评估和反馈规则。
 7. 明确施肥与库存物料的关系。
 ```
 
@@ -40,7 +49,7 @@
 1. 施肥算法接口摘要：
    按总文档统一算法模板说明输入字段、推荐输出、异常结构、映射目标和 fallbackAction。
 2. task 定义表：
-   至少按总文档统一格式给出基肥、分蘖肥、穗肥、发苗肥、促芽肥、效果抽查相关 workflowKey、taskCategory、taskSubtype、goal、upstreamKeys、downstreamKeys。
+   至少按总文档统一格式给出基肥、分蘖肥、穗肥、施肥效果评估相关 workflowKey、taskCategory、taskSubtype、goal、upstreamKeys、downstreamKeys；再生稻发苗肥、促芽肥后续单独补充。
 3. 触发规则表和依赖关系表：
    按总文档统一格式说明施肥相关 CalendarItem、FarmingTask、OperationPlan、ReviewRequest 的触发来源、阻断条件、依赖关系和 fallbackAction。
 4. 方案字段草案：
@@ -48,13 +57,13 @@
 5. 处方图字段草案：
    说明变量处方图需要表达哪些信息，以及与施肥方案的关系。
 6. 执行、评价、反馈、复核字段草案：
-   列出施肥执行、效果抽查、异常反馈至少需要哪些字段，并说明哪些字段进入 Evaluation / Feedback / ReviewRequest。
+   列出施肥执行、效果评估、异常反馈至少需要哪些字段，并说明哪些字段进入 Evaluation / Feedback / ReviewRequest。
 7. 库存关系说明：
    说明肥料库存、出库、实际消耗之间的业务关系和关键字段，不要求现在落到表结构。
 8. 至少 3 个测试场景：
    - 常规施肥生成 OperationPlan 并完成执行反馈。
    - 穗肥前长势监测生成变量处方图。
-   - 穗肥效果抽查发现异常并触发 ReviewRequest。
+   - 施肥效果评估发现异常后触发人工处理农事，人工处理结果目前仅记录并结束。
 9. 待决问题清单：
    统一列出需要核心后端或产品 / 架构负责人拍板的点。
 10. 文档回写要求：
@@ -166,7 +175,7 @@
 |---|---|---|---|---|---|---|---|
 | FE-INT-001 | 常规施肥生成方案并完成反馈 | integration | 推荐算法返回施肥方案 + 执行完成 | OperationPlan / ExecutionRecord / Feedback | 不创建复核 | no |  |
 | FE-INT-002 | 穗肥前长势监测生成变量处方图 | integration | 长势结果 + 施肥算法输入 | prescriptionMap / OperationPlan | 不直接关闭施肥任务 | no |  |
-| FE-INT-003 | 效果抽查异常触发复核 | integration | 抽查结果 warning/fail | Evaluation / Feedback / ReviewRequest | 不标记 fully_passed | yes |  |
+| FE-INT-003 | 施肥效果评估异常触发人工处理 | integration | 评估结果 warning/fail | Evaluation / Feedback / 人工处理 FarmingTask | 不标记 fully_passed | yes | 人工处理结果目前仅记录并结束 |
 ```
 
 #### 10. 待决问题清单
@@ -188,11 +197,11 @@
 1. 基肥
 2. 分蘖肥
 3. 穗肥
-4. 发苗肥 / 返青肥
-5. 促芽肥（如再生稻保留）
-6. 穗肥前长势监测触发变量处方图
-7. 施肥后效果抽查 / 服务评价
-8. 异常反馈后的人工复核或后续施肥调整
+4. 穗肥前长势监测触发变量处方图
+5. 施肥效果评估 / 服务评价
+6. 施肥效果评估异常后的人工处理记录
+
+注：再生稻发苗肥、促芽肥暂不纳入本轮施肥 FDE，后续如恢复范围，应另起材料补齐 task 定义、触发和上下游关系。
 ```
 
 每个任务项至少写清：
@@ -202,10 +211,10 @@
 2. 接口依赖
 3. 接口调用时间
 4. 接口主要返回结果和分支
-5. 系统动作：新增/更新 CalendarItem、TaskIntent、FarmingTask、OperationPlan、ReviewRequest
+5. 系统动作：新增/更新 CalendarItem、TaskIntent、FarmingTask、OperationPlan；仅在 FDE 明确需要人工审核或人工判断时创建 ReviewRequest
 6. 作业方案：窗口、肥料类型、用量、处方图、验收标准
 7. 作业流程：人工/设备/第三方执行、结果回传、后续动作
-8. 任务后续操作：是否进入抽查、复核、再次施肥、结束
+8. 任务后续操作：是否进入效果评估、复核、再次施肥、结束
 ```
 
 ### B. 建议优先收集的 API 契约文档
@@ -214,22 +223,27 @@
 
 | 建议文件 | 需要包含的内容 |
 |---|---|
-| `docs/api/fertilization_recommendation_api.md` | 常规施肥推荐接口；覆盖基肥、分蘖肥、穗肥等主链路的输入、输出、异常、字段映射 |
+| `docs/api/fertilization_prescription_algorithm_api.md` | 当前施肥处方算法 `POST /run` 开发 contract；覆盖入参组装、响应解析、错误处理和 `OperationPlan.parameters` 映射 |
 | `docs/api/fertilization_prescription_map_api.md` | 变量处方图或分区处方接口；说明 `prescriptionMap` 的结构、区域粒度、单位、分区标识 |
-| `docs/api/fertilization_effect_evaluation_api.md` | 施肥后效果抽查/评价接口；说明抽查输入、评价结果、异常分支和是否触发复核 |
+| `docs/api/fertilization_effect_evaluation_api.md` | 施肥效果评估接口；说明评估输入、评价结果、异常分支和人工处理记录口径 |
 | `docs/api/fertilization_inventory_mapping.md` | 不是算法接口也建议补；说明肥料品类、库存扣减、实际消耗、批次或单位换算关系 |
-| `docs/api/fertilization_payload_mapping.md` | 入参组装和返回结果对象构建说明；把算法字段如何落到 `TaskIntent / OperationPlan / ExecutionRecord` 写清 |
+| `docs/api/fertilization_payload_mapping.md` | 后续如施肥方向 API 增多，可独立补入参组装和返回结果对象构建说明；当前处方算法映射先以 `fertilization_prescription_algorithm_api.md` 为准 |
 
-### C. 进入开发前建议冻结的口径
+### C. 当前冻结口径
 
-建议在施肥方向文档里单独列一段“当前冻结口径”，至少拍板这些问题：
+当前已明确的施肥方向口径：
 
 ```text
-1. 哪些施肥链路直接生成正式任务，哪些先进入 ReviewRequest
-2. prescriptionMap 是第一版必选、可选，还是仅穗肥前长势联动时需要
-3. InventoryItem / InventoryTransaction 第一版要求做到什么粒度
-4. 效果抽查不合格时，是生成后续施肥任务、只生成复核，还是只记录反馈
-5. 人工调整施肥结论时，是否允许直接落 OperationPlan，还是必须回到编排器
+1. 施肥处方和变量穗肥处方都先人工审核。
+2. 人工审核通过后的施肥处方，直接写正式 OperationPlan 并推进下游任务生成。
+3. prescriptionMap 第一版仅在穗肥前长势联动生成变量处方图时使用。
+4. 穗肥变量处方图系统内只保存远程公开 URL，不保存完整图内容，不做签名 URL 或平台代理转发。
+5. 施肥效果评估异常触发人工处理农事后，人工处理结果目前仅记录并结束。
+6. 施肥算法只返回样本点的单位面积施肥量，系统侧映射 / 补充为地块维度的单位面积施肥量，不要求算法返回地块绝对施肥总量。
+7. 再生稻发苗肥、促芽肥暂不纳入本轮 FDE。
+8. 土样采集第一版不生成二维码。
+9. 长势监测流程以无人机监测执行记录和遥感后续任务 id 串接影像上传、影像拼接。
+10. M3 / healthy 模式必需字段已确认，按 FDE 字段口径组装算法入参。
 ```
 
 ## 当前阶段完成标准

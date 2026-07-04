@@ -81,7 +81,8 @@ docs/workflow/flows/plant-protection-disease-pest-loop.md
 | WF_IRRIGATION_DEVICE | irrigation | device_installation | none | 灌溉执行硬件设备安装与测试 | none | 种植前准备 |
 | WF_PESTICIDE_STOCK_IN | material_management | pesticide_stock_in | GENERAL_MATERIAL_STOCK_IN | 药剂入库 | none | 支撑植保方案可用药剂 |
 | WF_FERTILIZER_STOCK_IN | material_management | fertilizer_stock_in | GENERAL_MATERIAL_STOCK_IN | 肥料入库 | none | 支撑施肥处方和施肥作业 |
-| WF_SOIL_TEST | fertilization | soil_test | none | 采土与测土 | samplingPointPlanningAlgorithm / soilInterpolationAlgorithm | 支撑施肥处方 |
+| WF_SOIL_SAMPLING | fertilization | soil_sampling | none | 土样采集 | samplingPointPlanningAlgorithm | 第一版默认以种植计划各地块中心作为采样点，生成土样编号 |
+| WF_SOIL_TESTING | fertilization | soil_testing | none | 土样检测 | soilInterpolationAlgorithm | 检测结果落独立土壤检测结果表，支撑施肥处方 |
 | WF_FERTILIZER_PRESCRIPTION | fertilization | prescription_generation | none | 施肥处方生成 | fertilizerPrescriptionAlgorithm | 生成施肥处方 |
 | WF_DRY_LAND_PREPARATION | soil_preparation | rotary_tillage | none | 旱整地 / 旋耕整地 | none | 种植前准备 |
 | WF_LAND_LEVELING | soil_preparation | land_leveling | none | 水整地 / 平地效果评估 | landLevelingEvaluationAlgorithm | 水整地后评估 |
@@ -98,20 +99,20 @@ docs/workflow/flows/plant-protection-disease-pest-loop.md
 | WF_DISEASE_PEST_HEADING_CONTROL | plant_protection | heading_stage_disease_pest_control | GENERAL_PLANT_PROTECTION_CONTROL | 齐穗病虫防治 | none | 纯打药作业，消费调查后生成的 OperationPlan |
 | WF_DISEASE_PEST_BOOTING_SURVEY | plant_protection | booting_stage_disease_pest_survey | GENERAL_PLANT_PROTECTION_SURVEY | 破口病虫调查 | diseaseControlRecommendationAlgorithm / pestControlRecommendationAlgorithm / categorySpecificControlAlgorithm | 调查不一定触发防治 |
 | WF_DISEASE_PEST_BOOTING_CONTROL | plant_protection | booting_stage_disease_pest_control | GENERAL_PLANT_PROTECTION_CONTROL | 破口病虫防治 | none | 纯打药作业，消费调查后生成的 OperationPlan |
-| WF_BASE_FERTILIZER | fertilization | base | GENERAL_FERTILIZATION_OPERATION | 施基肥 | farmingRuleLibrary | 施基肥范围后续由专门农事规则库维护 |
-| WF_TILLERING_FERTILIZER | fertilization | tillering | GENERAL_FERTILIZATION_OPERATION | 施分蘖肥 | none / prescription | BBCH21-22 |
-| WF_PANICLE_VARIABLE_PRESCRIPTION | fertilization | panicle_variable_prescription | GENERAL_GROWTH_MONITORING | 穗肥前长势监测与变量处方图 | growthMonitoringAlgorithm / panicleVariablePrescriptionAlgorithm | 施穗肥前单独执行 |
-| WF_PANICLE_FERTILIZER | fertilization | panicle | GENERAL_FERTILIZATION_OPERATION | 施穗肥 | panicleVariablePrescriptionAlgorithm | BBCH41-42 |
+| WF_BASE_FERTILIZER | fertilization | base_fertilizer | GENERAL_FERTILIZATION_OPERATION | 施基肥 | farmingRuleLibrary | 施基肥范围后续由专门农事规则库维护 |
+| WF_TILLERING_FERTILIZER | fertilization | tillering_fertilizer | GENERAL_FERTILIZATION_OPERATION | 施分蘖肥 | none / prescription | BBCH21-22 |
+| WF_TILLERING_GROWTH_MONITORING | fertilization | tillering_growth_monitoring | GENERAL_GROWTH_MONITORING | 分蘖末期遥感长势监测与变量处方图 | growthMonitoringAlgorithm / panicleVariablePrescriptionAlgorithm | 施穗肥前单独执行，产出变量处方图 |
+| WF_PANICLE_FERTILIZER | fertilization | panicle_fertilizer | GENERAL_FERTILIZATION_OPERATION | 施穗肥 | panicleVariablePrescriptionAlgorithm | BBCH41-42 |
 | WF_MISSING_SEEDLING_DETECTION | field_inspection | missing_seedling_detection | none | 缺苗识别 | missingSeedlingDetectionAlgorithm | 遥感；低空面状 RGB，时间与移栽同步 |
 | WF_GROWTH_MONITOR | field_inspection | growth_monitoring | GENERAL_GROWTH_MONITORING | 长势监测 | ndviGrowthMonitoringAlgorithm / abnormalCauseRecognitionAlgorithm | 不包含稳肥变量推荐和产量预测 |
-| WF_PANICLE_FERTILIZER_EFFECT_CHECK | fertilization | panicle_fertilizer_effect_check | GENERAL_GROWTH_MONITORING | 穗肥施肥效果抽查 | growthMonitoringAlgorithm | 穗肥后 7-10 天，不适用于所有施肥 |
+| WF_FERTILIZATION_EFFECT_EVALUATION | fertilization | effect_evaluation | none | 施肥效果评估 | none | 当前统一覆盖基肥、施蘖肥和施穗肥完成后 7-10 天的人工现场评估；通过上下文区分被评估的施肥 taskSubtype |
 | WF_PLANT_PROTECTION_SERVICE_EVALUATION | plant_protection | service_effect_evaluation | none | 植保服务效果评估收集 | none | 与收割前晒田分开 |
 | WF_PLANT_PROTECTION_SERVICE_EFFECT_SURVEY | plant_protection | service_effect_survey | GENERAL_PLANT_PROTECTION_SURVEY | 植保服务效果现场确认 | none | 服务评估不满意后直接生成正式 FarmingTask |
 | WF_PRE_HARVEST_DRAIN | harvest | pre_harvest_drain | none | 收割前晒田 | none | 收割前 12 天 |
 | WF_HARVEST | harvest | harvest | none | 收割 | none | 不细分人工/机械 |
 | WF_LODGING_DETECTION | field_inspection | lodging_detection | none | 倒伏识别 | lodgingDetectionAlgorithm | 触发任务状态更新 |
-| WF_RATOON_SEEDLING_FERTILIZER | fertilization | ratoon_seedling_fertilizer | GENERAL_FERTILIZATION_OPERATION | 再生季施发苗肥 | none / prescription | 仅稻作类型为再生稻时存在 |
-| WF_RATOON_BUD_FERTILIZER | fertilization | ratoon_bud_fertilizer | GENERAL_FERTILIZATION_OPERATION | 再生季施促芽肥 | none / prescription | 仅稻作类型为再生稻时存在 |
+| WF_RATOON_SEEDLING_FERTILIZER | fertilization | ratoon_seedling_fertilizer | GENERAL_FERTILIZATION_OPERATION | 再生季施发苗肥 | none / prescription | 仅稻作类型为再生稻时存在；暂不纳入本轮施肥 FDE |
+| WF_RATOON_BUD_FERTILIZER | fertilization | ratoon_bud_fertilizer | GENERAL_FERTILIZATION_OPERATION | 再生季施促芽肥 | none / prescription | 仅稻作类型为再生稻时存在；暂不纳入本轮施肥 FDE |
 | WF_RATOON_DRY_FIELD | harvest | ratoon_dry_field | none | 再生季晒田 | none | 仅稻作类型为再生稻时存在 |
 | WF_RATOON_HARVEST | harvest | ratoon_harvest | none | 再生季收割 | none | 仅稻作类型为再生稻时存在 |
 
@@ -169,7 +170,7 @@ docs/workflow/flows/plant-protection-disease-pest-loop.md
 
 ## 4.3 GENERAL_FERTILIZATION_OPERATION：施肥作业
 
-适用：基肥、分蘖肥、穗肥、再生季发苗肥、再生季促芽肥。
+适用：基肥、分蘖肥、穗肥；再生季发苗肥、再生季促芽肥作为全局 workflowKey 保留，但暂不纳入本轮施肥 FDE。
 
 | stepId | stepName | stepType | trigger | inputData | algorithmService | outputData | createdEntity | nextStep | notes |
 |---|---|---|---|---|---|---|---|---|---|
@@ -181,13 +182,13 @@ docs/workflow/flows/plant-protection-disease-pest-loop.md
 
 ## 4.4 GENERAL_GROWTH_MONITORING：长势监测
 
-适用：普通长势监测、穗肥前长势监测、穗肥效果抽查。
+适用：普通长势监测、穗肥前长势监测。
 
 | stepId | stepName | stepType | trigger | inputData | algorithmService | outputData | createdEntity | nextStep | notes |
 |---|---|---|---|---|---|---|---|---|---|
-| S1 | 长势监测任务生成 | manual_task | 监测类 CalendarItem 到期 | Field / 时间窗口 / monitorPurpose | none | 监测 FarmingTask | FarmingTask | S2 | monitorPurpose 区分普通监测、穗肥前、穗肥后抽查 |
-| S2 | 影像上传 | input | 航测完成 | 多光谱影像 / RGB 影像 | none | 影像文件 | ExecutionRecord | S3 |  |
-| S3 | 影像拼接 | algorithm | 影像上传 | 影像文件 | imageStitchingAlgorithm | 拼接影像 | ExecutionRecord | S4 |  |
+| S1 | 长势监测任务生成 | manual_task | 监测类 CalendarItem 到期 | Field / 时间窗口 / monitorPurpose | none | 监测 FarmingTask | FarmingTask | S2 | monitorPurpose 区分普通监测、穗肥前监测 |
+| S2 | 无人机监测执行记录 | input | 业务人员到达农场并完成无人机监测 | 无人机监测结果 / 遥感后续任务 id | none | ExecutionRecord | ExecutionRecord | S3 | 执行记录中记录影像上传、影像拼接等遥感后续任务 id |
+| S3 | 影像上传 / 拼接 | algorithm | 遥感后续任务 id 可用 | 多光谱影像 / RGB 影像 / 影像文件 | imageStitchingAlgorithm | 拼接影像 | ExecutionRecord | S4 |  |
 | S4 | 长势检测 | algorithm | 拼接影像就绪 | 拼接影像 | growthMonitoringAlgorithm / ndviGrowthMonitoringAlgorithm | 长势结果 | ExecutionRecord / FieldConditionReported | S5 |  |
 | S5 | 结果任务状态更新 | feedback | 算法完成 | 长势结果 | none | 状态更新 | FarmingTask | END_OR_EXTENSION | 普通监测可继续异常点位和归因分析 |
 
@@ -211,8 +212,9 @@ docs/workflow/flows/plant-protection-disease-pest-loop.md
 | WF_IRRIGATION_DEVICE | none | 种植前准备 | 灌溉硬件安装与测试 | ExecutionRecord | 设备信息字段后续确认 |
 | WF_PESTICIDE_STOCK_IN | GENERAL_MATERIAL_STOCK_IN | 药剂到货或种植前准备 | 药剂信息录入和入库确认 | InventoryItem / InventoryTransaction / EventRecord / Feedback | 支撑植保方案 |
 | WF_FERTILIZER_STOCK_IN | GENERAL_MATERIAL_STOCK_IN | 肥料到货或种植前准备 | 肥料信息录入和入库确认 | InventoryItem / InventoryTransaction / EventRecord / Feedback | 支撑施肥处方 |
-| WF_SOIL_TEST | none | 最晚种植前 13 天 | 采样点规划、采土、实验室检测、测土数据入库、土壤插值 | OperationPlan.basis / EventRecord | 是否生成一维码待确认 |
-| WF_FERTILIZER_PRESCRIPTION | none | 种植前三天 / 测土结果就绪 | 获取测土、品种、面积、目标产量等输入，调用施肥处方算法 | OperationPlan | 处方图结构待确认 |
+| WF_SOIL_SAMPLING | none | 计划创建时人工勾选采土，或最晚种植前 13 天 | 默认按种植计划各地块中心生成采样点和土样编号，人工完成采土 | CalendarItem / FarmingTask / EventRecord | 第一版不生成二维码 |
+| WF_SOIL_TESTING | none | 土样采集完成 | 实验室检测结果录入，按原始检测样表字段落独立土壤检测结果表；缺失地块按需调用土壤插值 | SoilTestResult / EventRecord | 支撑施肥处方 |
+| WF_FERTILIZER_PRESCRIPTION | none | 种植前三天 / 测土结果就绪 | 获取测土、品种、面积、目标产量等输入，调用施肥处方算法，处方先进入人工审核 | OperationPlan / ReviewRequest | 审核页展示土壤检测数据和算法处方 |
 | WF_DRY_LAND_PREPARATION | none | 种植前准备 / 农事日历 | 旋耕整地作业和反馈 | Feedback |  |
 | WF_LAND_LEVELING | none | 水整地后 | RGB 影像上传，平地效果评估 | ExecutionRecord / EventRecord |  |
 | WF_WATER_LEVEL_SETUP | none | 水整地 / 平地效果评估完成后 | 航测、影像拼接、水位布设区域推荐 | OperationPlan |  |
@@ -227,19 +229,19 @@ docs/workflow/flows/plant-protection-disease-pest-loop.md
 | WF_DISEASE_PEST_HEADING_CONTROL | GENERAL_PLANT_PROTECTION_CONTROL | 防治推荐算法返回需防治 | 纯打药作业 | Feedback | 消费调查后生成的 OperationPlan |
 | WF_DISEASE_PEST_BOOTING_SURVEY | GENERAL_PLANT_PROTECTION_SURVEY | 破口病虫调查日期到期 | 调查结果录入后按病虫类别调用对应防治推荐算法；如返回具体防治方案，先进入 TaskIntent / ReviewRequest，审核通过后再生成正式任务 | TaskIntent / ReviewRequest | 调查不一定触发防治 |
 | WF_DISEASE_PEST_BOOTING_CONTROL | GENERAL_PLANT_PROTECTION_CONTROL | 防治推荐算法返回需防治 | 纯打药作业 | Feedback | 消费调查后生成的 OperationPlan |
-| WF_BASE_FERTILIZER | GENERAL_FERTILIZATION_OPERATION | 农事规则推荐执行时间 | 施基肥作业 | Feedback | 范围由 farmingRuleLibrary 维护 |
-| WF_TILLERING_FERTILIZER | GENERAL_FERTILIZATION_OPERATION | 农事规则推荐执行时间 | 施分蘖肥作业 | Feedback |  |
-| WF_PANICLE_VARIABLE_PRESCRIPTION | GENERAL_GROWTH_MONITORING | 施穗肥前 | 长势结果进入穗肥变量处方图算法 | OperationPlan | 施穗肥使用该处方图 |
-| WF_PANICLE_FERTILIZER | GENERAL_FERTILIZATION_OPERATION | 农事规则推荐执行时间 / 穗肥处方就绪 | 施穗肥作业 | Feedback | 依赖穗肥变量处方图 |
-| WF_PANICLE_FERTILIZER_EFFECT_CHECK | GENERAL_GROWTH_MONITORING | 穗肥后 7-10 天 | 长势检测结果作为穗肥效果抽查结果 | FieldConditionReported / Feedback | 不适用于所有施肥 |
+| WF_BASE_FERTILIZER | GENERAL_FERTILIZATION_OPERATION | 农事规则推荐执行时间 | 施基肥作业，消费审核后的基肥处方 | Feedback | 范围由 farmingRuleLibrary 维护 |
+| WF_TILLERING_FERTILIZER | GENERAL_FERTILIZATION_OPERATION | 农事规则推荐执行时间 | 施分蘖肥作业，消费审核后的分蘖肥处方 | Feedback |  |
+| WF_TILLERING_GROWTH_MONITORING | GENERAL_GROWTH_MONITORING | 施穗肥前 | 业务人员到场执行无人机监测，完成后录入执行记录及遥感后续任务 id；长势结果进入穗肥变量处方图算法 | OperationPlan / ReviewRequest | 审核页展示穗肥基础处方、长势监测记录和变量处方图 |
+| WF_PANICLE_FERTILIZER | GENERAL_FERTILIZATION_OPERATION | 分蘖末期遥感长势监测完成并产出变量处方后，到达农事规则推荐执行时间 | 施穗肥作业，消费审核后的变量穗肥处方 | Feedback | 依赖穗肥变量处方图 |
+| WF_FERTILIZATION_EFFECT_EVALUATION | none | 施基肥、施蘖肥或施穗肥完成后 7-10 天 | 人工现场调查作物长势并录入评估结果；当前通过上下文记录 `evaluatedTaskSubtype` 和来源施肥任务 | Evaluation / Feedback / ExecutionRecord | 当前统一覆盖基肥、施蘖肥和施穗肥效果评估，后续如出现明显分化再拆分 subtype |
 | WF_GROWTH_MONITOR | GENERAL_GROWTH_MONITORING | 生育期 / 定期 | 普通长势监测后可生成异常点位，并触发定点低空 RGB 归因分析 | FieldConditionReported / ReviewRequest | 不包含稳肥变量推荐和产量预测 |
 | WF_MISSING_SEEDLING_DETECTION | none | 与移栽同步 | 低空面状 RGB，缺苗识别算法生成缺苗区域矢量文件，人工判断是否触发补苗 | EventRecord / ReviewRequest / TaskIntent | 补苗任务不自动触发 |
 | WF_LODGING_DETECTION | none | 倒伏反馈后 | 高空 RGB，倒伏识别算法 | EventRecord / FarmingTask status update |  |
 | WF_PLANT_PROTECTION_SERVICE_EVALUATION | none | 植保服务后 / 收割前窗口 | 农户反馈、服务人员现场调查、实际情况反馈录入 | Feedback | 与收割前晒田分开 |
 | WF_PRE_HARVEST_DRAIN | none | 收获前 12 天 | 晒田作业和反馈 | Feedback |  |
 | WF_HARVEST | none | 达到收割条件 | 收割作业和反馈 | Feedback | 不细分人工/机械 |
-| WF_RATOON_SEEDLING_FERTILIZER | GENERAL_FERTILIZATION_OPERATION | cultiTypeCode = 8（再生稻） / 农事规则推荐执行时间 | 再生季施发苗肥 | Feedback |  |
-| WF_RATOON_BUD_FERTILIZER | GENERAL_FERTILIZATION_OPERATION | cultiTypeCode = 8（再生稻） / 农事规则推荐执行时间 | 再生季施促芽肥 | Feedback |  |
+| WF_RATOON_SEEDLING_FERTILIZER | GENERAL_FERTILIZATION_OPERATION | cultiTypeCode = 8（再生稻） / 农事规则推荐执行时间 | 再生季施发苗肥 | Feedback | 暂不纳入本轮施肥 FDE |
+| WF_RATOON_BUD_FERTILIZER | GENERAL_FERTILIZATION_OPERATION | cultiTypeCode = 8（再生稻） / 农事规则推荐执行时间 | 再生季施促芽肥 | Feedback | 暂不纳入本轮施肥 FDE |
 | WF_RATOON_DRY_FIELD | none | cultiTypeCode = 8（再生稻） / 农事规则推荐执行时间 | 再生季晒田作业 | Feedback |  |
 | WF_RATOON_HARVEST | none | cultiTypeCode = 8（再生稻） / 农事规则推荐执行时间 | 再生季收割作业 | Feedback |  |
 
@@ -288,16 +290,18 @@ SurveyDateRecommendationJob
 → additional_survey_date / service_effect_evaluation_date 继续生成 CalendarItem
 ```
 
-## 6.3 CHAIN_PANICLE_FERTILIZER：穗肥前监测到穗肥效果抽查
+## 6.3 CHAIN_PANICLE_FERTILIZER：穗肥前监测到施肥效果评估
 
 ```text
 穗肥前长势监测
 → 穗肥变量处方图生成
 → 施穗肥
-→ 穗肥后 7-10 天施肥效果抽查
+→ 穗肥后 7-10 天施肥效果评估
 ```
 
 ## 6.4 CHAIN_RATOON_SEASON：再生季农事
+
+注：该链路作为全局再生季 workflow 保留；再生季发苗肥、促芽肥暂不纳入本轮施肥 FDE。
 
 ```text
 PlantingPlan.cultiTypeCode = 8（再生稻）
@@ -441,7 +445,7 @@ InventoryTransaction
 8. 缺苗识别结果由人工判断是否触发补苗任务。
 9. 药剂 / 肥料入库需要独立库存表。
 10. 移栽作业不需要 OperationPlan，只记录执行结果和实际移栽日期。
-11. 再生季施发苗肥、施促芽肥、晒田、收割的执行时间由农事规则推荐。
+11. 再生季施发苗肥、施促芽肥、晒田、收割的执行时间由农事规则推荐；其中发苗肥、促芽肥暂不纳入本轮施肥 FDE。
 11. workflowKey / workflowStepKey / generalFlowKey / chainKey 当前不进入第一版表结构，先放 metadata、事件上下文或编排层。
 12. 茎叶除草药前调查日期由 weed_survey_date_diagnosis 接口返回。
 ```

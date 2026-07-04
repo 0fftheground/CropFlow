@@ -976,13 +976,15 @@ manual
 `taskSubtype` 不建议在第一版全部固定死。MVP 可以先用字符串编码，并维护一份建议值：
 
 ```text
-fertilization.base
-fertilization.tillering
-fertilization.panicle
-fertilization.soil_test
+fertilization.soil_sampling
+fertilization.soil_testing
 fertilization.prescription_generation
-fertilization.panicle_variable_prescription
-fertilization.panicle_fertilizer_effect_check
+fertilization.base_fertilizer
+fertilization.tillering_fertilizer
+fertilization.tillering_growth_monitoring
+fertilization.panicle_fertilizer
+fertilization.effect_evaluation
+fertilization.manual_follow_up
 fertilization.ratoon_seedling_fertilizer
 fertilization.ratoon_bud_fertilizer
 plant_protection.weed_control

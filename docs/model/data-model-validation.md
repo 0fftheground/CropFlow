@@ -273,13 +273,15 @@ manual
 当前建议子类：
 
 ```text
-fertilization.base
-fertilization.tillering
-fertilization.panicle
-fertilization.soil_test
+fertilization.soil_sampling
+fertilization.soil_testing
 fertilization.prescription_generation
-fertilization.panicle_variable_prescription
-fertilization.panicle_fertilizer_effect_check
+fertilization.base_fertilizer
+fertilization.tillering_fertilizer
+fertilization.tillering_growth_monitoring
+fertilization.panicle_fertilizer
+fertilization.effect_evaluation
+fertilization.manual_follow_up
 fertilization.ratoon_seedling_fertilizer
 fertilization.ratoon_bud_fertilizer
 plant_protection.weed_control
@@ -325,8 +327,8 @@ field_inspection.lodging_detection
 | 是否保留送嫁肥？                    | 暂不保留                 | taskSubtype / workflowKey   |
 | 病虫调查和病虫防治是否是同一个农事？        | 不是，调查和防治拆成两个 FarmingTask | workflowKey / taskSubtype   |
 | 调查时间推荐算法是否属于调查农事流程？        | 不属于，由后台定时任务调用并新建或修改调查日期 | Background Job / CalendarItem |
-| 施肥效果抽查是否适用于所有施肥？           | 不是，仅穗肥后抽查            | taskSubtype                 |
-| 再生季农事是否作为一个整体流程？           | 不作为整体流程，发苗肥、促芽肥、晒田、收割分别建农事 | taskSubtype / trigger condition |
+| 施肥效果评估是否适用于所有施肥？           | 当前统一覆盖基肥、施蘖肥、施穗肥，后续可再细分 | taskSubtype                 |
+| 再生季农事是否作为一个整体流程？           | 不作为整体流程，发苗肥、促芽肥、晒田、收割分别建农事；其中发苗肥、促芽肥暂不纳入本轮施肥 FDE | taskSubtype / trigger condition |
 | 整地是否需要旋耕、耙田、平田等细类？         | 需要细分                 | taskSubtype                 |
 | 收割是否需要人工收割、机械收割、分批收割？      | 不区分                  | taskSubtype                 |
 | 巡田是否只是人工任务，还是也可能由无人机或设备触发？ | 可能触发无人机（需要人工确认或天气判定） | executionMode / taskSubtype |
@@ -368,15 +370,17 @@ field_inspection.lodging_detection
 
 ## 6.2 施肥方案
 
-待核对：
+核对结论以 `docs/fde/fertilization-fde-draft.md` 为当前事实源：
 
 | 问题 | 结论 | 影响 |
 |---|---|---|
-| 施肥算法需要哪些输入？ | pending | OperationPlan.parameters |
-| 是否返回肥料类型、用量、浓度、面积？ | pending | parameters |
-| 是否需要处方图？ | pending | prescriptionMap |
-| 基肥、分蘖肥、穗肥的参数结构是否不同？ | pending | taskSubtype / parameters |
-| 验收标准是什么？ | pending | acceptanceCriteria |
+| 施肥算法需要哪些输入？ | 已核对：`waysType`、`targetYield`、`varietyType`、`riceType`、`fertilizerA/B/C`、`excelData`；`excelData` 由系统从土壤检测结果表按采样点组装，必填字段见 `docs/api/fertilization_prescription_algorithm_api.md` | OperationPlan.parameters / inputPayload |
+| 是否返回肥料类型、用量、浓度、面积？ | 已核对：算法返回采样点单位面积施肥量和 N/P/K 分配比例；系统侧映射 / 补充为地块维度单位面积施肥量，按 `fieldPlans[].fertilizers[].amountPerArea + amountUnit` 表达，不要求算法返回地块绝对施肥总量 | OperationPlan.parameters.fieldPlans |
+| 是否需要处方图？ | 仅穗肥前长势联动生成变量处方图时使用；第一版系统内只保存远程公开 URL，不保存完整图内容，不做签名 URL 或平台代理转发 | OperationPlan.prescriptionMap |
+| 基肥、分蘖肥、穗肥的参数结构是否不同？ | 第一版统一按 `OperationPlan.parameters.fieldPlans[]` 表达，阶段语义由 `taskSubtype` 和挂载任务区分 | taskSubtype / parameters |
+| 验收标准是什么？ | 仍需业务侧补充明确文案；当前 FDE 只保留 `acceptanceCriteria` 作为可选字段 | acceptanceCriteria |
+
+施肥处方审核页当前最小上下文：土壤检测数据、算法入参摘要、算法算出的具体处方；穗肥变量处方审核页还需展示穗肥基础处方、长势监测记录和变量处方图 URL / 预览入口。
 
 ## 6.3 植保方案
 

@@ -63,6 +63,7 @@
 - `docs/api/growth_stage_gdd_api.md`
 - `docs/api/pestDisease_survey_window_api.md`
 - `docs/api/pestDisease_control_window_api.md`
+- `docs/api/fertilization_prescription_algorithm_api.md`
 
 ## Decisions
 

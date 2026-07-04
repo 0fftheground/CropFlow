@@ -126,6 +126,7 @@ docs/
 | `api/growth_stage_gdd_api.md` | 生育期 / GDD 算法接口，用于 Stage Orchestrator 初始化和阶段状态管理 |
 | `api/pestDisease_survey_window_api.md` | 病虫害调查窗口算法接口当前版，用于初始化常规调查计划和每日更新调查事件 |
 | `api/raw/weather_api.pdf` | 气象数据接口原始文档；开发入口应优先使用 markdown contract |
+| `api/fertilization_prescription_algorithm_api.md` | 施肥处方算法 `POST /run` 开发 contract，用于组装入参、解析响应并映射到 `OperationPlan.parameters` |
 
 ## 本地开发入口
 
