@@ -15,6 +15,7 @@ from app.core.constants import (
     CALENDAR_STATUS_INVALIDATED,
     EVENT_TYPE_CALENDAR_ITEM_UPDATED,
     EVENT_TYPE_TASK_DUE_CHECK_TRIGGERED,
+    FARMING_TASK_STATUS_PENDING,
     TASK_SUBTYPE_CONTROL_EFFECT_SURVEY,
     TASK_SUBTYPE_RICE_SAFETY_SURVEY,
     TASK_SUBTYPE_REGULAR_DISEASE_PEST_SURVEY,
@@ -576,6 +577,75 @@ def test_recommend_pre_treatment_survey_reuses_generated_item_with_same_idempote
     assert item.description == "由 weed_survey_date_diagnosis 推荐的茎叶除草药前调查日期。"
     assert item.generation_condition["algorithmCode"] == "weed_survey_date_diagnosis"
     assert len(calendar_repo.items) == 1
+
+
+def test_upsert_calendar_item_syncs_pending_generated_task() -> None:
+    generated_item = CalendarItem(
+        id=10,
+        planting_plan_id=1,
+        stage_code="BBCH30",
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
+        title="旧药前调查",
+        description="旧描述",
+        suggested_start_date=date(2026, 4, 18),
+        suggested_end_date=date(2026, 4, 18),
+        status=CALENDAR_STATUS_GENERATED,
+        generation_condition={"stale": True},
+        idempotency_key="calendar-item:1:stem-leaf-weed-pre-survey:old",
+        generated_task_id=88,
+    )
+    generated_task = FarmingTask(
+        id=88,
+        planting_plan_id=1,
+        calendar_item_id=10,
+        task_category="plant_protection",
+        task_subtype=TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
+        title="旧药前调查",
+        description="旧描述",
+        target_stage_code="BBCH30",
+        planned_start_at=datetime(2026, 4, 18),
+        planned_end_at=datetime(2026, 4, 18, 23, 59, 59),
+        status=FARMING_TASK_STATUS_PENDING,
+        priority="normal",
+        execution_mode="manual",
+        idempotency_key="farming-task:calendar-item:10",
+        created_by_type="system",
+        created_by_id="TaskDueCheckJob",
+    )
+    calendar_repo = FakeCalendarItemRepository(items=[generated_item], next_id=11)
+    farming_task_repo = FakeFarmingTaskRepository(items=[generated_task])
+    service = SurveyDateRecommendationService(
+        planting_plan_repository=FakePlantingPlanRepository(make_plan()),
+        farm_repository=None,
+        rice_variety_repository=FakeRiceVarietyRepository(make_variety()),
+        code_dict_repository=FakeCodeDictRepository(make_code_dicts()),
+        rice_control_window_level1_repository=None,
+        calendar_item_repository=calendar_repo,
+        event_record_repository=FakeEventRecordRepository(),
+        weather_provider=FakeWeatherProvider(),
+        diagnosis_client=FakeDiagnosisClient(),
+        farming_task_repository=farming_task_repo,
+    )
+
+    updated_item = service._upsert_calendar_item(
+        planting_plan=make_plan(),
+        task_subtype=TASK_SUBTYPE_STEM_LEAF_WEED_PRE_SURVEY,
+        title="新药前调查",
+        description="新描述",
+        suggested_start_date=date(2026, 4, 20),
+        suggested_end_date=date(2026, 4, 21),
+        generation_condition={"reason": "stage_changed"},
+        idempotency_scope="stem-leaf-weed-pre-survey:new-window",
+        matched_item=generated_item,
+    )
+
+    assert updated_item is generated_item
+    assert generated_task.title == "新药前调查"
+    assert generated_task.description == "新描述"
+    assert generated_task.planned_start_at == datetime(2026, 4, 20)
+    assert generated_task.planned_end_at == datetime(2026, 4, 21, 23, 59, 59, 999999)
+    assert generated_task.target_stage_code == "BBCH30"
 
 
 def test_recommend_pre_treatment_survey_reactivates_invalidated_item_with_same_idempotency_key() -> None:

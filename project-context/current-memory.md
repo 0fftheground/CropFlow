@@ -12,6 +12,7 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 ## Progress
 
 - 后端主链路已稳定：Plan Orchestrator、Task / Review / Execution、病虫日更、天气 / 生育期运行期支撑都已接通。
+- 生育期或日历刷新导致 `CalendarItem` 更新时，通用 `_upsert_calendar_item` 路径现在会同步已生成且仍为 pending 的关联 `FarmingTask` 标题、描述、计划时间和目标生育期；非 pending 任务、已审核方案和执行记录不自动改动。
 - 病虫害防治复核契约已收口到“只审核理论方案”：
   - `/api/review-requests/{reviewRequestId}/resolve` 对 `plant_protection.disease_pest_control` 仅接收 `decision_payload.proposedPlan.theoryPlan`
   - `theoryPlan.rounds` 支持直接提交用户编辑后的完整轮次列表；数量变化即表示新增 / 删除，后端自动重排轮次并重算天气修正后的实际窗口

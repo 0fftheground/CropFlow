@@ -1890,7 +1890,6 @@ class SurveyDateRecommendationService:
                 matched_item=matched_item,
                 allow_multiple_active=True,
             )
-            self._sync_pending_generated_regular_survey_task(calendar_item)
             calendar_items.append(calendar_item)
             active_idempotency_keys.add(calendar_item.idempotency_key)
 
@@ -2415,7 +2414,7 @@ class SurveyDateRecommendationService:
         generated_task = self.farming_task_repository.get(item.generated_task_id)
         return generated_task is not None and generated_task.status != FARMING_TASK_STATUS_PENDING
 
-    def _sync_pending_generated_regular_survey_task(self, item: CalendarItem) -> None:
+    def _sync_pending_generated_task_from_calendar_item(self, item: CalendarItem) -> None:
         if item.status != CALENDAR_STATUS_GENERATED or item.generated_task_id is None:
             return
         if self.farming_task_repository is None:
@@ -2692,6 +2691,7 @@ class SurveyDateRecommendationService:
                 matched_item.status = CALENDAR_STATUS_ACTIVE
                 matched_item.invalidated_reason = None
 
+        self._sync_pending_generated_task_from_calendar_item(matched_item)
         return matched_item
 
     def _record_event(
