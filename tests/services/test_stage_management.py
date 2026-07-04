@@ -255,7 +255,7 @@ def test_refresh_prediction_creates_stage_snapshot_and_states() -> None:
     assert result.snapshot.input_payload["farm_area_name"] == "湖南"
     assert "weather_data" not in result.snapshot.input_payload
     assert result.snapshot.input_payload["calculation_context"]["as_of_date"] == "2026-05-27"
-    assert result.snapshot.stage_timeline["stages"][1]["start_date"] == "2026-04-22"
+    assert result.snapshot.stage_timeline["stages"][1]["start_date"] == "2026-04-14"
     assert result.snapshot.stage_timeline["stages"][1]["raw_stage_code"] == "BBCH21"
     assert result.snapshot.stage_timeline["raw_stage_points"][0]["stage_code"] == "BBCH13"
     assert result.snapshot.stage_timeline["raw_stage_points"][0]["season_scope"] == "main"
@@ -339,6 +339,72 @@ def test_refresh_prediction_prefers_stage_names_from_crop_stage_dict() -> None:
     raw_points = {item["stage_code"]: item for item in result.snapshot.stage_timeline["raw_stage_points"]}
     assert raw_points["BBCH13"]["stage_name"] == "三叶一心（字典）"
     assert raw_points["BBCH21"]["stage_name"] == "分蘖始期（字典）"
+
+
+def test_refresh_prediction_rebases_direct_seeded_thresholds_after_three_leaf_stage() -> None:
+    snapshot_repo = FakeStagePredictionSnapshotRepository()
+    stage_repo = FakeCropStageStateRepository()
+    thermal_repo = FakeCropThermalTimeStateRepository()
+    weather_provider = FakeWeatherProvider()
+    service = StageManagementService(
+        planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(_make_rice_variety()),
+        stage_prediction_snapshot_repository=snapshot_repo,
+        crop_stage_state_repository=stage_repo,
+        crop_thermal_time_state_repository=thermal_repo,
+        stage_prediction_client=MockStagePredictionClient(),
+        weather_provider=weather_provider,
+    )
+
+    result = service.refresh_prediction(
+        1,
+        prediction_source="initial",
+        as_of_date=date(2026, 5, 27),
+    )
+
+    thresholds = result.snapshot.thermal_thresholds["stage_thresholds"]
+    assert thresholds["BBCH13"] == 64
+    assert thresholds["BBCH21"] == 64
+    assert thresholds["BBCH28"] == 240
+    assert thresholds["BBCH89"] == 1504
+    assert result.snapshot.thermal_thresholds["direct_seeding_threshold_adjustment"] == {
+        "applied": True,
+        "basis": "BBCH21_minus_BBCH13",
+        "thermal_time_delta": "112",
+    }
+
+
+def test_refresh_for_weather_update_does_not_reapply_direct_seeded_threshold_adjustment() -> None:
+    snapshot_repo = FakeStagePredictionSnapshotRepository()
+    stage_repo = FakeCropStageStateRepository()
+    thermal_repo = FakeCropThermalTimeStateRepository()
+    weather_provider = FakeWeatherProvider()
+    service = StageManagementService(
+        planting_plan_repository=FakePlantingPlanRepository(_make_plan()),
+        farm_repository=FakeFarmRepository(_make_farm()),
+        rice_variety_repository=FakeRiceVarietyRepository(_make_rice_variety()),
+        stage_prediction_snapshot_repository=snapshot_repo,
+        crop_stage_state_repository=stage_repo,
+        crop_thermal_time_state_repository=thermal_repo,
+        stage_prediction_client=MockStagePredictionClient(),
+        weather_provider=weather_provider,
+    )
+    initial_result = service.refresh_prediction(
+        1,
+        prediction_source="initial",
+        as_of_date=date(2026, 5, 27),
+    )
+
+    result = service.refresh_for_weather_update(
+        1,
+        source_event_id=101,
+        as_of_date=date(2026, 6, 10),
+    )
+
+    assert initial_result.snapshot.thermal_thresholds["stage_thresholds"]["BBCH21"] == 64
+    assert result.snapshot.thermal_thresholds["stage_thresholds"]["BBCH21"] == 64
+    assert result.snapshot.thermal_thresholds["stage_thresholds"]["BBCH28"] == 240
 
 
 def test_refresh_prediction_for_early_rice_transplanting_uses_transplant_date_as_three_leaf_anchor() -> None:
@@ -643,11 +709,11 @@ def test_refresh_for_weather_update_reuses_latest_threshold_rule() -> None:
     assert result.snapshot.prediction_source == "weather_update"
     assert result.snapshot.source_event_id == 101
     assert result.snapshot.input_payload["rule_snapshot_id"] == 10
-    assert result.crop_stage_state.current_stage_code == "tillering"
+    assert result.crop_stage_state.current_stage_code == "pokou"
     assert result.crop_stage_state.version == 2
     assert result.crop_thermal_time_state.accumulated_thermal_time == Decimal("868.0")
     assert result.crop_thermal_time_state.threshold_snapshot_id == result.snapshot.id
-    assert result.stage_changed is False
+    assert result.stage_changed is True
 
 
 def test_refresh_for_weather_update_uses_incremental_observed_weather() -> None:
@@ -1138,10 +1204,10 @@ def test_extract_pest_disease_growth_stage_from_timeline() -> None:
     growth_stage = extract_pest_disease_growth_stage(result.snapshot.stage_timeline)
 
     assert growth_stage == {
-        "tillering_date": "2026-04-22",
-        "pokou_date": "2026-06-18",
-        "heading_date": "2026-06-27",
-        "maturity_date": "2026-08-03",
+        "tillering_date": "2026-04-14",
+        "pokou_date": "2026-06-10",
+        "heading_date": "2026-06-19",
+        "maturity_date": "2026-07-26",
     }
 
 

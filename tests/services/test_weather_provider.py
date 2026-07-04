@@ -355,7 +355,7 @@ def test_http_weather_provider_builds_hourly_weather_and_filters_typhoon_alerts(
 
     def fake_post_json(path: str, payload: dict[str, str]) -> list[dict[str, object]]:
         assert path == "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter"
-        assert payload == {"farmId": "84911829811210"}
+        assert payload == {"farmID": "84911829811210"}
         rows: list[dict[str, object]] = []
         start = datetime(2026, 5, 29, 0, 0, 0)
         for offset in range(80):
@@ -427,10 +427,6 @@ def test_http_weather_provider_falls_back_to_daily_forecast_for_hourly_weather()
         calls.append((path, payload))
         if len(calls) == 1:
             assert path == "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter"
-            assert payload == {"farmId": "84911829811210"}
-            raise ValueError("Weather API /weather/v1/getForecast10DaysBeforeAnd15DaysAfter returned HTTP 500: Api not exists!")
-        if len(calls) == 2:
-            assert path == "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter"
             assert payload == {"farmID": "84911829811210"}
             return [
                 {
@@ -455,7 +451,7 @@ def test_http_weather_provider_falls_back_to_daily_forecast_for_hourly_weather()
                     "tAvg": 24.0,
                 },
             ]
-        if len(calls) == 3:
+        if len(calls) == 2:
             assert path == "/weather/v1/getForecast10DaysBeforeAnd15DaysAfter"
             assert payload == {"farmID": "84911829811210"}
             rows: list[dict[str, object]] = []
@@ -491,7 +487,6 @@ def test_http_weather_provider_falls_back_to_daily_forecast_for_hourly_weather()
     }
     assert hourly_weather[-1]["datetime"] == "2026-05-31 23:00:00"
     assert calls == [
-        ("/weather/v1/getForecast10DaysBeforeAnd15DaysAfter", {"farmId": "84911829811210"}),
         ("/weather/v1/getForecast10DaysBeforeAnd15DaysAfter", {"farmID": "84911829811210"}),
         ("/weather/v1/getForecast10DaysBeforeAnd15DaysAfter", {"farmID": "84911829811210"}),
     ]

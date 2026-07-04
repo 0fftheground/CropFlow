@@ -94,6 +94,7 @@ _LOCAL_TO_STAGE_ALGORITHM_MATUR_TYPE = {
 _EARLY_RICE_STAGE_ALGORITHM_CULTI_TYPE = 4
 _DIRECT_SEEDED_PLANTING_METHOD_CODE = 1
 _THREE_LEAF_ONE_HEART_STAGE_CODE = "BBCH13"
+_TILLERING_START_STAGE_CODE = "BBCH21"
 
 
 def _rebuild_stage_registry(raw_stage_sequence: list[dict[str, str | None]]) -> None:
@@ -470,6 +471,7 @@ class StageManagementService:
         threshold_rule = _enrich_stage_threshold_rule(
             prediction.threshold_rule,
             request_payload=request_payload,
+            planting_plan=planting_plan,
         )
         calculation_context = _build_stage_calculation_context(
             planting_plan,
@@ -519,6 +521,7 @@ class StageManagementService:
         threshold_rule = _enrich_stage_threshold_rule(
             latest_snapshot.thermal_thresholds or {},
             request_payload=request_payload,
+            planting_plan=planting_plan,
         )
         existing_thermal_state = self.crop_thermal_time_state_repository.get_by_plan(planting_plan_id)
         weather_payload = dict(source_event_payload or {})
@@ -681,7 +684,11 @@ class StageManagementService:
         refresh_result = self._refresh_from_threshold_rule(
             planting_plan=planting_plan,
             request_payload=request_payload,
-            threshold_rule=_enrich_stage_threshold_rule(threshold_rule, request_payload=request_payload),
+            threshold_rule=_enrich_stage_threshold_rule(
+                threshold_rule,
+                request_payload=request_payload,
+                planting_plan=planting_plan,
+            ),
             algorithm_code=algorithm_code,
             algorithm_version=algorithm_version,
             prediction_source="manual_adjustment",
@@ -1125,6 +1132,7 @@ def _enrich_stage_threshold_rule(
     threshold_rule: dict[str, Any],
     *,
     request_payload: dict[str, Any] | None = None,
+    planting_plan: PlantingPlan | None = None,
 ) -> dict[str, Any]:
     enriched = dict(threshold_rule or {})
     if request_payload is None:
@@ -1136,7 +1144,66 @@ def _enrich_stage_threshold_rule(
     enriched["base_temperature"] = thermal_profile["base_temperature"]
     enriched["upper_temperature_cap"] = thermal_profile["upper_temperature_cap"]
     enriched["lower_temperature_floor"] = thermal_profile["lower_temperature_floor"]
+    if planting_plan is not None:
+        enriched = _adjust_direct_seeded_stage_thresholds(enriched, planting_plan=planting_plan)
     return enriched
+
+
+def _adjust_direct_seeded_stage_thresholds(
+    threshold_rule: dict[str, Any],
+    *,
+    planting_plan: PlantingPlan,
+) -> dict[str, Any]:
+    if planting_plan.planting_method_code != _DIRECT_SEEDED_PLANTING_METHOD_CODE:
+        return threshold_rule
+    existing_adjustment = threshold_rule.get("direct_seeding_threshold_adjustment")
+    if isinstance(existing_adjustment, dict) and existing_adjustment.get("applied") is True:
+        return threshold_rule
+    raw_thresholds = threshold_rule.get("stage_thresholds")
+    if not isinstance(raw_thresholds, dict) or not raw_thresholds:
+        return threshold_rule
+    parsed_thresholds = _parse_raw_stage_thresholds(raw_thresholds)
+    three_leaf_threshold = parsed_thresholds.get(_THREE_LEAF_ONE_HEART_STAGE_CODE)
+    tillering_threshold = parsed_thresholds.get(_TILLERING_START_STAGE_CODE)
+    if three_leaf_threshold is None or tillering_threshold is None:
+        return threshold_rule
+    delta = tillering_threshold - three_leaf_threshold
+    if delta <= _DECIMAL_ZERO:
+        return threshold_rule
+
+    adjusted_thresholds = dict(raw_thresholds)
+    tillering_order = get_raw_stage_order_index(_TILLERING_START_STAGE_CODE)
+    if tillering_order is None:
+        return threshold_rule
+    for raw_stage_code in _RAW_STAGE_METADATA_BY_CODE:
+        raw_stage_order = get_raw_stage_order_index(raw_stage_code)
+        if raw_stage_order is None or raw_stage_order < tillering_order:
+            continue
+        for threshold_key in _iter_threshold_keys(raw_stage_code):
+            if threshold_key not in adjusted_thresholds:
+                continue
+            adjusted_value = Decimal(str(adjusted_thresholds[threshold_key])) - delta
+            adjusted_thresholds[threshold_key] = _serialize_adjusted_threshold_value(
+                adjusted_value,
+                original_value=adjusted_thresholds[threshold_key],
+            )
+
+    adjusted_rule = dict(threshold_rule)
+    adjusted_rule["stage_thresholds"] = adjusted_thresholds
+    adjusted_rule["direct_seeding_threshold_adjustment"] = {
+        "applied": True,
+        "basis": "BBCH21_minus_BBCH13",
+        "thermal_time_delta": _normalize_decimal_for_json(delta),
+    }
+    return adjusted_rule
+
+
+def _serialize_adjusted_threshold_value(adjusted_value: Decimal, *, original_value: Any) -> int | float | str:
+    if isinstance(original_value, str):
+        return _normalize_decimal_for_json(adjusted_value)
+    if adjusted_value == adjusted_value.to_integral_value():
+        return int(adjusted_value)
+    return float(adjusted_value)
 
 
 def _build_stage_calculation_context(

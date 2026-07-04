@@ -7,7 +7,7 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 
 ## Phase Goal
 
-在已冻结的杂草样板闭环基础上，收口植保后端主链路、真实天气 / 生育期运行期支撑，并补齐可复用的远程数据库初始化与 Docker 部署路径。
+在已冻结的杂草样板闭环基础上，收口植保后端主链路、真实天气 / 生育期运行期支撑，并继续收口施肥方向 FDE / workflow / model 契约，为 `P3` 扩展接入准备稳定文档口径。
 
 ## Progress
 
@@ -64,6 +64,9 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
   - `HttpWeatherProvider.get_daily_weather()` 在传入未来 `as_of_date` 时，observed 只截到真实今天的前一天
   - forecast 改为从真实今天开始补齐，避免向历史观测接口请求“今天尚未落库”的数据
   - `tests/services/test_weather_provider.py` 已补回归用例并通过
+- 生育期 GDD 阈值消费口径已修正：
+  - 外部接口返回阈值包含移栽返青期积温；直播计划在后端按 `BBCH21 - BBCH13` 扣除返青期积温，并从 `BBCH21` 及后续阈值中扣减
+  - 非直播早稻且存在 `transplant_date` 时，系统继续把移栽日期作为 `BBCH13` 锚点，再按阈值差推导后续阶段
 - 前端联调与上层回放已继续完成一轮验证：
   - 病虫害复核页按新的 `theoryPlan.rounds` 整表提交模式联调已通过，`/api/review-requests/{id}` 的中文 `targets` 回显、轮次增删改提交，以及 `/api/review-requests/{id}/resolve` 返回后的正式任务刷新已确认正常
   - `task_detail / execution_feedback / survey_entry / plan_detail` 当前联调可用，相关聚合详情与执行反馈流转未发现阻塞问题
@@ -74,17 +77,21 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
   - `docs/fde/task-flow-fde-output-template.md` 已补通用任务 / 流程 FDE 输出模板
   - `docs/fde/plant-protection-fde-output-template.md` 已补为完整植保参考样例，覆盖杂草和病虫害两条主线
   - `docs/workflow/checklists/plant-protection-task-checklist.md` 已调整为植保农事项梳理入口页
-  - 已新增 `docs/fde/fertilization-fde-draft.md` 作为施肥方向 FDE 草稿，并已结合 `docs/references/raw/土壤检测数据样表.xlsx`、`docs/references/raw/施肥算法接口.md` 补入土壤检测字段草案和施肥算法 `POST /run` 的请求 / 响应映射草案
-  - `docs/workflow/checklists/fertilization-task-checklist.md` 当前仍不是最终稿，明天还需要继续调整后再回写 FDE 草稿
+  - 施肥方向文档今天继续收口了一轮：`docs/workflow/checklists/fertilization-task-checklist.md`、`docs/fde/fertilization-fde-draft.md`、`docs/workflow/task-workflow-matrix.md`、`docs/domain/fertilization.md`、`docs/model/data-model.md`、`docs/model/data-model-validation.md` 已开始同步
+  - 施肥主链路已基本对齐：采样点默认取 `PlantingPlan` 各地块中心，采土 / 测土拆成两个任务，土壤检测结果独立表按原始检测样表格式存储，施肥算法调用时再按需提取必要字段
+  - 施肥处方与方案口径已基本对齐：所有施肥处方和变量穗肥处方都先人工审核；施肥处方生成结果优先挂在对应任务下的 `OperationPlan`；基肥 / 分蘖肥 / 穗肥处方统一按“地块 -> 施肥量”表达
+  - 穗肥变量处方图口径已收口到“系统内只保存远程 URL”；施肥效果评估已统一覆盖基肥、施蘖肥和施穗肥；评估异常当前口径是触发人工处理农事，而不是直接走 `ReviewRequest`
+  - 施肥方向 `FER-OPEN-05/06/08` 已继续冻结：变量处方图 URL 第一版直接公开；施肥效果评估异常后的人工处理结果目前仅记录并结束；算法只给样本点单位面积施肥量，系统侧映射 / 补充为地块维度单位面积施肥量，不要求算法返回地块绝对施肥总量
+  - 施肥 FDE 继续冻结：再生稻发苗肥 / 促芽肥暂不纳入本轮；土样采集第一版不生成二维码；长势监测按业务人员到场执行无人机监测、完成后录入执行记录和遥感后续任务 id（影像上传、影像拼接）处理；M3 / healthy 必需字段已确认；当前以 `docs/fde/fertilization-fde-draft.md` 为施肥事实源
+  - 施肥开发口径已继续补齐：`taskSubtype` 以 FDE draft 为准，正式文档已同步为 `soil_sampling / soil_testing / base_fertilizer / tillering_fertilizer / tillering_growth_monitoring / panicle_fertilizer / effect_evaluation / manual_follow_up`；新增 `docs/api/fertilization_prescription_algorithm_api.md` 作为 `POST /run` 开发 contract；审核页最小上下文明确为土壤检测数据、算法处方、穗肥变量处方图
   - 只服务历史排查的 `run_e2e_trace.py`、`run_soil_treatment_trace.py`、`replay_pest_disease_daily_update.py` 已从正式 `scripts/` 迁到 `docs/history/scripts/`；`scripts/migrate-up.ps1` 已删除
 
 ## Remaining
 
 - 把远程部署用的 `.env`、镜像源和拉起顺序沉淀为稳定运维说明，避免下次再走本地 tunnel 连接串。
-- 施肥方向 FDE 还未收口，尤其要继续补齐：
-  - 土样 / 检测结果字段哪些属于第一版强依赖
-  - `POST /run` 采样点级处方如何转成田块级正式方案 / `prescriptionMap`
-  - 处方生成与效果抽查异常是否必须进入 `ReviewRequest`
+- 施肥方向文档还未最终收口，当前主要剩余点：
+  - 后续如进入真实前端 / 算法联调，再补变量处方图服务、效果评估、库存映射等扩展 API contract；当前处方算法开发入口已补齐
+  - 如要正式开发施肥闭环，先按 FDE draft 和 `docs/api/fertilization_prescription_algorithm_api.md` 拆任务与测试，再落数据表和服务实现
 - 如需正式修复历史脏数据，在目标环境执行 `scripts/repair_merged_disease_pest_controls.py --apply` 并核对生成的 repair event。
 - 气象运行期管理还没完全产品化，缓存、版本审计、异常展示和前端状态细化仍待补齐。
 - DeviceCommand、InventoryItem / InventoryTransaction 仍按 deferred 处理。
@@ -99,10 +106,10 @@ Roadmap 对应阶段：`T2` 工程实现后段，并已进入 `T3` 植保 / 气�
 
 下个 session 优先做三件事：
 
-1. 先继续调整 `docs/workflow/checklists/fertilization-task-checklist.md`，再据此补完 `docs/fde/fertilization-fde-draft.md` 里土样字段、处方映射、审核口径和异常后续动作。
-2. 继续确认农场 / 地块与计划创建链路的真实前端使用方式，重点看内部 `field_id`、`external_field_id` 展示和删除保护是否符合页面预期。
-3. 在真实联调环境再确认一次杂草防治 `再生稻 -> 早稻` 的外部映射是否已覆盖土壤封闭、药前调查、茎叶除草和补防四条调用链；再视情况决定是否执行 `repair_merged_disease_pest_controls.py --apply`。
+1. 如继续推进施肥，优先基于 FDE draft 和 `docs/api/fertilization_prescription_algorithm_api.md` 拆后端任务、数据表和测试。
+2. 变量处方图服务、施肥效果评估和库存映射可作为后续扩展 contract 单独补。
+3. 后续如重新纳入再生稻发苗肥 / 促芽肥，应另起 FDE 补充，不回填到本轮已冻结主链路。
 
 ## Last Updated
 
-`2026-06-25`
+`2026-07-03`

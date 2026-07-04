@@ -1167,8 +1167,8 @@ class HttpWeatherProvider:
         try:
             response_data = self._post_weather_json_with_farm_id_compatibility(
                 self.FORECAST_HOURLY_PATH,
-                {"farmId": external_farm_id},
-                preferred_farm_id_keys=("farmId", "farmID"),
+                {"farmID": external_farm_id},
+                preferred_farm_id_keys=("farmID", "farmId"),
             )
             return self._build_hourly_weather_from_hourly_rows(response_data, effective_as_of=effective_as_of)
         except (RuntimeError, ValueError):

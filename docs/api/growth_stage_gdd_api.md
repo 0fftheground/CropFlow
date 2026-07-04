@@ -8,6 +8,7 @@
 2. 当前接口内部读取本地 `config.yml`、`gdd_new_20250710.xlsx` 和 `variety_gdd.xlsx`，调用方不需要传入码表或积温表。
 3. 返回字段使用 BBCH 编码作为 key。普通稻返回头季阶段；当 `cultiType == 8` 表示再生稻时，额外返回再生季 `Z_` 阶段。
 4. 当前不返回 `再生季抽穗期`，因为接口返回编码列表中未包含 `Z_BBCH55`，且现有规则未单独计算该阶段。
+5. 当前接口返回的累计积温阈值包含移栽场景下 `BBCH13 -> BBCH21` 的返青期积温；当 CropFlow 计划为直播时，后端在消费阈值前会按 `BBCH21 - BBCH13` 计算返青期积温差，并从 `BBCH21` 及后续阶段阈值中扣除。
 
 ## 1. 基本信息
 
@@ -51,7 +52,8 @@
 3. 获取天气数据并计算逐日积温、累计积温。
 4. 根据累计积温和阶段阈值推导阶段日期。
 5. 维护阶段状态、快照、重算和幂等控制。
-6. 处理接口失败后的重试、告警或人工排查流程。
+6. 对直播计划做阈值换算：使用 `BBCH21 - BBCH13` 扣除移栽返青期积温，并把调整后的阈值写入 `StagePredictionSnapshot.thermal_thresholds`。
+7. 处理接口失败后的重试、告警或人工排查流程。
 
 ### 3.2 GDD 阈值算法服务负责
 
@@ -131,6 +133,7 @@
 1. 普通稻返回 12 个头季 BBCH 阈值。
 2. 再生稻在 12 个头季阈值基础上，额外返回 3 个 `Z_` 阈值。
 3. value 为累计积温阈值，不是阶段日期。
+4. CropFlow 保存到 `StagePredictionSnapshot.thermal_thresholds` 的阈值可能已按计划种植方式调整；直播计划会带有 `direct_seeding_threshold_adjustment` 标记，避免天气刷新或人工生育期重算时重复扣减。
 
 ### 6.1 普通稻返回字段
 
@@ -286,7 +289,8 @@
 4. 当前版响应不包含 `algorithm_code`、`algorithm_version`、`threshold_rule_id` 和 `threshold_rule_version`。
 5. 普通稻不返回 `Z_BBCH*` 节点。
 6. 再生稻当前只返回 `Z_BBCH51 / Z_BBCH58 / Z_BBCH89`，不返回 `Z_BBCH55`。
-7. 如后续需要对齐 `growth_stage_prediction_api.md` 中的规则包结构，可在不改变请求字段的前提下，将响应扩展为 `code/msg/data.threshold_rule.stage_thresholds`。
+7. 直播阈值扣减属于 CropFlow 后端消费规则，不要求算法服务按种植方式返回两套阈值。
+8. 如后续需要对齐 `growth_stage_prediction_api.md` 中的规则包结构，可在不改变请求字段的前提下，将响应扩展为 `code/msg/data.threshold_rule.stage_thresholds`。
 
 ## 11. 调用地址
 
