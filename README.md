@@ -17,7 +17,7 @@ CropFlow 是一个围绕作物种植计划运行的农事编排 MVP。
 
 ## 当前阶段
 
-当前已进入 `P2` 核心工程骨架与最小实现阶段。后端已具备 FastAPI + SQLAlchemy + Alembic 基础工程、核心 ORM / Repository / Orchestrator、首批 API handler 和测试骨架。
+当前处于 `P2` 收尾和 `P3` 前置扩展接入阶段。后端已具备 FastAPI + SQLAlchemy + Alembic 基础工程、核心 ORM / Repository / Orchestrator、API handler、测试和文档化开发流程。
 
 仓库级实时推进状态以以下文件为准：
 
@@ -30,9 +30,9 @@ project-context/phases/
 当前阶段重点：
 
 ```text
-1. 接入真实杂草诊断服务并补集成测试。
-2. 接入后台作业调度并打通首条端到端联调链路。
-3. 继续补齐执行、复核、任务生成相关测试和运行说明。
+1. 稳定单个种植计划内的编排、任务、执行、反馈和复核闭环。
+2. 按业务方向扩展植保、施肥、灌溉、遥感监测等能力。
+3. 持续维护正式文档、API contract、测试和本地 / 部署运行说明。
 ```
 
 本地开发启动方式：
@@ -156,7 +156,7 @@ docs/workflow/raw/total-workflow.pdf         农事项总流程图原始来源
 
 ## 技术栈状态
 
-当前已进入后端最小实现阶段。
+当前后端主体工程和首批业务闭环已进入稳定扩展阶段。
 
 后端建议方向：
 
