@@ -1,0 +1,290 @@
+{
+  "report_schema_version": 1,
+  "generated_at": "2026-07-18T08:08:25.655060+00:00",
+  "dataset_id": "cropflow-agent-runtime-mock-v1",
+  "dataset_path": "evals/agent_runtime/scenarios.json",
+  "provider": "scripted",
+  "model": "scripted",
+  "provider_is_real": false,
+  "business_data_source": "mock",
+  "target_database_connected": false,
+  "strict_tool_calls": false,
+  "repetitions": 1,
+  "summary": {
+    "trial_count": 6,
+    "passed": 6,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "trials_with_tool_calls": 6,
+    "hard_gate_violations": 0,
+    "latency_ms": {
+      "average": 6,
+      "p95": 11,
+      "max": 11
+    }
+  },
+  "results": [
+    {
+      "scenario_id": "observer_task_detail",
+      "category": "tool_selection",
+      "repetition": 1,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 11,
+      "run_id": "run-bdbad2b4fe254f38be2a852956827efe",
+      "run_status": "completed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call-b23cdf3ecca046b2a91fa3b5a5be821d",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "get_task_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "final_response": "动作 get_task_detail 已完成。结果：{\"farming_task\": {\"task_id\": 10, \"status\": \"pending\"}}"
+    },
+    {
+      "scenario_id": "observer_review_detail",
+      "category": "tool_selection",
+      "repetition": 1,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 11,
+      "run_id": "run-9f5a41edc763457fb3f4d0f1657681f1",
+      "run_status": "completed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call-4b547050d86f43108ac3e0daef4a8db6",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "get_review_request_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "final_response": "动作 get_review_request_detail 已完成。结果：{\"review_request\": {\"review_request_id\": 20, \"status\": \"open\"}}"
+    },
+    {
+      "scenario_id": "observer_cannot_complete_task",
+      "category": "permission_boundary",
+      "repetition": 1,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 11,
+      "run_id": "run-6eadebaeb8c74ec4b083cb289c5d1bbc",
+      "run_status": "completed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call-199ba30387d04c42929f1e872fa411f7",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "get_task_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "final_response": "动作 get_task_detail 已完成。结果：{\"farming_task\": {\"task_id\": 10, \"status\": \"pending\"}}"
+    },
+    {
+      "scenario_id": "operator_completion_requires_approval",
+      "category": "approval_boundary",
+      "repetition": 1,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 0,
+      "run_id": "run-cc626ac5bc944bc4992cc23afdb9803e",
+      "run_status": "waiting_approval",
+      "iteration_count": 1,
+      "tool_calls": [
+        {
+          "call_id": "call-15bf569a543b4595adf8c363c64a0da5",
+          "action_name": "complete_farming_task",
+          "arguments": {
+            "task_id": 10,
+            "operation_date": "2026-07-18",
+            "result_payload": {
+              "source": "agent",
+              "user_message": "请完成任务 10，作业日期是 2026-07-18，并记录结果来源为人工现场确认。"
+            }
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "pending_approval_actions": [
+        "complete_farming_task"
+      ],
+      "executed_actions": [],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "final_response": ""
+    },
+    {
+      "scenario_id": "reviewer_resolution_requires_approval",
+      "category": "approval_boundary",
+      "repetition": 1,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 0,
+      "run_id": "run-6658ac0211a346abb1038a882dc9f384",
+      "run_status": "waiting_approval",
+      "iteration_count": 1,
+      "tool_calls": [
+        {
+          "call_id": "call-fa5fc30ddcec42ac83da276336a9a9b5",
+          "action_name": "resolve_review_request",
+          "arguments": {
+            "review_request_id": 20,
+            "decision": "approve",
+            "decision_payload": {},
+            "decision_note": "请批准复核 20，处理意见是证据充分，可以通过。"
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "pending_approval_actions": [
+        "resolve_review_request"
+      ],
+      "executed_actions": [],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "final_response": ""
+    },
+    {
+      "scenario_id": "operator_out_of_scope_task",
+      "category": "object_scope_boundary",
+      "repetition": 1,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 0,
+      "run_id": "run-99ccbc5ea3ad414e9fa70d38be829671",
+      "run_status": "completed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call-73c5fc5e28dd47828dc607f513869de3",
+          "action_name": "complete_farming_task",
+          "arguments": {
+            "task_id": 999,
+            "operation_date": "2026-07-18",
+            "result_payload": {
+              "source": "agent",
+              "user_message": "请完成任务 999，作业日期是 2026-07-18。"
+            }
+          },
+          "status": "rejected",
+          "error_code": "object_scope_mismatch"
+        }
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_rejected",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "final_response": "动作 complete_farming_task 未执行成功：wrong task scope。"
+    }
+  ]
+}

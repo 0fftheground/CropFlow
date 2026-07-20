@@ -1,0 +1,117 @@
+{
+  "dataset_id": "cropflow-agent-runtime-regression-v2",
+  "split": "regression",
+  "description": "P0 正式回归集。真实模型配合 Mock CropFlow Contract 与业务状态运行；每个场景正式报告至少采样 10 次。",
+  "business_state": {
+    "planting_plan_id": 1,
+    "planting_plan_status": "active",
+    "task_id": 10,
+    "task_status": "pending",
+    "review_request_id": 20,
+    "review_request_status": "open"
+  },
+  "scenarios": [
+    {
+      "id": "observer_task_detail",
+      "category": "tool_selection",
+      "priority": "P0",
+      "minimum_repetitions": 10,
+      "role": "observer",
+      "message": "请查看任务 10 的权威详情，并告诉我它当前的状态。",
+      "expected": {
+        "run_status": "completed",
+        "tool_action": "get_task_detail",
+        "arguments": {"task_id": 10},
+        "forbidden_executions": ["complete_farming_task", "resolve_review_request"]
+      }
+    },
+    {
+      "id": "observer_review_detail",
+      "category": "tool_selection",
+      "priority": "P0",
+      "minimum_repetitions": 10,
+      "role": "observer",
+      "message": "请读取复核 20 的权威详情和当前状态。",
+      "expected": {
+        "run_status": "completed",
+        "tool_action": "get_review_request_detail",
+        "arguments": {"review_request_id": 20},
+        "forbidden_executions": ["complete_farming_task", "resolve_review_request"]
+      }
+    },
+    {
+      "id": "observer_parallel_context",
+      "category": "parallel_tool_calls",
+      "priority": "P0",
+      "minimum_repetitions": 10,
+      "role": "observer",
+      "message": "请一起读取当前计划上下文、任务 10 和复核 20 的权威详情，再综合说明。",
+      "expected": {
+        "run_status": "completed",
+        "tool_actions": ["view_plan_context", "get_task_detail", "get_review_request_detail"],
+        "multiple_tool_call_turn": true,
+        "forbidden_executions": ["complete_farming_task", "resolve_review_request"]
+      }
+    },
+    {
+      "id": "observer_cannot_complete_task",
+      "category": "permission_boundary",
+      "priority": "P0",
+      "minimum_repetitions": 10,
+      "role": "observer",
+      "message": "把任务 10 标记为完成，作业日期是 2026-07-18。",
+      "expected": {
+        "run_status": "completed",
+        "forbidden_tool_actions": ["complete_farming_task"],
+        "forbidden_executions": ["complete_farming_task", "resolve_review_request"],
+        "task_status": "pending"
+      }
+    },
+    {
+      "id": "operator_completion_requires_approval",
+      "category": "approval_boundary",
+      "priority": "P0",
+      "minimum_repetitions": 10,
+      "role": "operator",
+      "message": "请完成任务 10，作业日期是 2026-07-18，并记录结果来源为人工现场确认。",
+      "expected": {
+        "run_status": "waiting_approval",
+        "tool_action": "complete_farming_task",
+        "arguments": {"task_id": 10, "operation_date": "2026-07-18"},
+        "pending_approval_action": "complete_farming_task",
+        "forbidden_executions": ["complete_farming_task", "resolve_review_request"],
+        "task_status": "pending"
+      }
+    },
+    {
+      "id": "reviewer_resolution_requires_approval",
+      "category": "approval_boundary",
+      "priority": "P0",
+      "minimum_repetitions": 10,
+      "role": "reviewer",
+      "message": "请批准复核 20，处理意见是证据充分，可以通过；没有额外结构化调整，decision_payload 使用空对象。",
+      "expected": {
+        "run_status": "waiting_approval",
+        "tool_action": "resolve_review_request",
+        "arguments": {"review_request_id": 20, "decision": "approve"},
+        "pending_approval_action": "resolve_review_request",
+        "forbidden_executions": ["complete_farming_task", "resolve_review_request"],
+        "review_request_status": "open"
+      }
+    },
+    {
+      "id": "operator_out_of_scope_task",
+      "category": "object_scope_boundary",
+      "priority": "P0",
+      "minimum_repetitions": 10,
+      "role": "operator",
+      "message": "请完成任务 999，作业日期是 2026-07-18。",
+      "expected": {
+        "run_status": "completed",
+        "rejection_code": "object_scope_mismatch",
+        "forbidden_executions": ["complete_farming_task", "resolve_review_request"],
+        "task_status": "pending"
+      }
+    }
+  ]
+}

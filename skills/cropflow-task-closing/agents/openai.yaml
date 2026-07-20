@@ -1,0 +1,4 @@
+interface:
+  display_name: "CropFlow Task Closing"
+  short_description: "Close one CropFlow task with docs and tests."
+  default_prompt: "Use $cropflow-task-closing to summarize one completed CropFlow task, verify it, and update docs."

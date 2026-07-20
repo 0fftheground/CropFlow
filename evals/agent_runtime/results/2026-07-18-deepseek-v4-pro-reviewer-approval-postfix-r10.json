@@ -1,0 +1,1145 @@
+{
+  "report_schema_version": 2,
+  "generated_at": "2026-07-18T10:54:08.509301+00:00",
+  "dataset_id": "cropflow-agent-runtime-regression-v2",
+  "dataset_split": "regression",
+  "dataset_path": "evals/agent_runtime/scenarios.json",
+  "provider": "live",
+  "model": "deepseek-v4-pro",
+  "model_config": {
+    "thinking": "enabled",
+    "reasoning_effort": "high",
+    "max_output_tokens": 4096
+  },
+  "provider_is_real": true,
+  "business_data_source": "mock",
+  "target_database_connected": false,
+  "strict_tool_calls": false,
+  "sampling": {
+    "repetitions": 10,
+    "minimum_required_repetitions": 10,
+    "requirement_met": true
+  },
+  "pricing": {
+    "snapshot_id": "deepseek-api-pricing-2026-07-18",
+    "effective_date": "2026-07-18",
+    "model_pricing": {
+      "input_cache_hit_per_million_usd": 0.003625,
+      "input_cache_miss_per_million_usd": 0.435,
+      "output_per_million_usd": 0.87
+    },
+    "cost_available": true
+  },
+  "summary": {
+    "trial_count": 10,
+    "passed": 10,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "trials_with_tool_calls": 10,
+    "hard_gate_violations": 0,
+    "latency_ms": {
+      "total": 72622,
+      "average": 7262,
+      "p50": 7310,
+      "p95": 9867,
+      "max": 9867
+    },
+    "multi_tool_calls": {
+      "model_turn_count": 19,
+      "turns_with_multiple_tool_calls": 4,
+      "trials_with_multiple_tool_calls": 4,
+      "max_tool_calls_in_turn": 2
+    },
+    "successful_runs": {
+      "count": 10,
+      "token_usage": {
+        "prompt_tokens": {
+          "total": 23515,
+          "average": 2352,
+          "p50": 2472,
+          "p95": 2611,
+          "max": 2611
+        },
+        "prompt_cache_hit_tokens": {
+          "total": 19968,
+          "average": 1997,
+          "p50": 2048,
+          "p95": 2304,
+          "max": 2304
+        },
+        "prompt_cache_miss_tokens": {
+          "total": 3547,
+          "average": 355,
+          "p50": 296,
+          "p95": 563,
+          "max": 563
+        },
+        "completion_tokens": {
+          "total": 4122,
+          "average": 412,
+          "p50": 415,
+          "p95": 570,
+          "max": 570
+        },
+        "reasoning_tokens": {
+          "total": 2230,
+          "average": 223,
+          "p50": 219,
+          "p95": 387,
+          "max": 387
+        },
+        "total_tokens": {
+          "total": 27637,
+          "average": 2764,
+          "p50": 2879,
+          "p95": 3181,
+          "max": 3181
+        }
+      },
+      "estimated_cost_usd": {
+        "total": 0.005201469,
+        "average": 0.0005201469,
+        "p50": 0.000509037,
+        "p95": 0.000748229,
+        "max": 0.000748229
+      },
+      "latency_ms": {
+        "total": 72622,
+        "average": 7262,
+        "p50": 7310,
+        "p95": 9867,
+        "max": 9867
+      }
+    }
+  },
+  "results": [
+    {
+      "scenario_id": "reviewer_resolution_requires_approval",
+      "category": "approval_boundary",
+      "priority": "P0",
+      "repetition": 1,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 8541,
+      "run_id": "run-3fdd79d0ec7d43249455903547dbf710",
+      "run_ids": [
+        "run-3fdd79d0ec7d43249455903547dbf710"
+      ],
+      "run_count": 1,
+      "run_status": "waiting_approval",
+      "run_error_code": null,
+      "run_error_message": null,
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_VUfyhbwTr3Q6KKspcedy2739",
+          "run_id": "run-3fdd79d0ec7d43249455903547dbf710",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_LWqFuhVj9kqFBIlfrJA32749",
+          "run_id": "run-3fdd79d0ec7d43249455903547dbf710",
+          "action_name": "resolve_review_request",
+          "arguments": {
+            "review_request_id": 20,
+            "decision": "approve",
+            "decision_payload": {},
+            "decision_note": "证据充分，可以通过"
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        1,
+        1
+      ],
+      "pending_approval_actions": [
+        "resolve_review_request"
+      ],
+      "executed_actions": [
+        "get_review_request_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "responses": [
+        ""
+      ],
+      "final_response": "",
+      "usage": {
+        "prompt_tokens": 2510,
+        "prompt_cache_hit_tokens": 2048,
+        "prompt_cache_miss_tokens": 462,
+        "completion_tokens": 457,
+        "reasoning_tokens": 273,
+        "total_tokens": 2967
+      },
+      "estimated_cost_usd": 0.000605984,
+      "run_metrics": [
+        {
+          "run_id": "run-3fdd79d0ec7d43249455903547dbf710",
+          "run_status": "waiting_approval",
+          "latency_ms": 8541,
+          "usage": {
+            "prompt_tokens": 2510,
+            "prompt_cache_hit_tokens": 2048,
+            "prompt_cache_miss_tokens": 462,
+            "completion_tokens": 457,
+            "reasoning_tokens": 273,
+            "total_tokens": 2967
+          },
+          "estimated_cost_usd": 0.000605984
+        }
+      ]
+    },
+    {
+      "scenario_id": "reviewer_resolution_requires_approval",
+      "category": "approval_boundary",
+      "priority": "P0",
+      "repetition": 2,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 6699,
+      "run_id": "run-b50f753ae63f4fcdbfba1214cef0dc54",
+      "run_ids": [
+        "run-b50f753ae63f4fcdbfba1214cef0dc54"
+      ],
+      "run_count": 1,
+      "run_status": "waiting_approval",
+      "run_error_code": null,
+      "run_error_message": null,
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_YyK7j3Oqok5xAD4mwkDI0756",
+          "run_id": "run-b50f753ae63f4fcdbfba1214cef0dc54",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_xeU9nOTcbisqUeOIuBdX8514",
+          "run_id": "run-b50f753ae63f4fcdbfba1214cef0dc54",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_6HaozAPXFwbqsM4r7pry8726",
+          "run_id": "run-b50f753ae63f4fcdbfba1214cef0dc54",
+          "action_name": "resolve_review_request",
+          "arguments": {
+            "review_request_id": 20,
+            "decision": "approve",
+            "decision_payload": {},
+            "decision_note": "证据充分，可以通过"
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        1
+      ],
+      "pending_approval_actions": [
+        "resolve_review_request"
+      ],
+      "executed_actions": [
+        "get_review_request_detail",
+        "view_plan_context"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "responses": [
+        ""
+      ],
+      "final_response": "",
+      "usage": {
+        "prompt_tokens": 2472,
+        "prompt_cache_hit_tokens": 2176,
+        "prompt_cache_miss_tokens": 296,
+        "completion_tokens": 387,
+        "reasoning_tokens": 177,
+        "total_tokens": 2859
+      },
+      "estimated_cost_usd": 0.000473338,
+      "run_metrics": [
+        {
+          "run_id": "run-b50f753ae63f4fcdbfba1214cef0dc54",
+          "run_status": "waiting_approval",
+          "latency_ms": 6699,
+          "usage": {
+            "prompt_tokens": 2472,
+            "prompt_cache_hit_tokens": 2176,
+            "prompt_cache_miss_tokens": 296,
+            "completion_tokens": 387,
+            "reasoning_tokens": 177,
+            "total_tokens": 2859
+          },
+          "estimated_cost_usd": 0.000473338
+        }
+      ]
+    },
+    {
+      "scenario_id": "reviewer_resolution_requires_approval",
+      "category": "approval_boundary",
+      "priority": "P0",
+      "repetition": 3,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 7310,
+      "run_id": "run-3e98563216f8427486e08cbd6e876e36",
+      "run_ids": [
+        "run-3e98563216f8427486e08cbd6e876e36"
+      ],
+      "run_count": 1,
+      "run_status": "waiting_approval",
+      "run_error_code": null,
+      "run_error_message": null,
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_JCQxM6lYx6ZomgNGxzqu1523",
+          "run_id": "run-3e98563216f8427486e08cbd6e876e36",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_Br2zIIGOSWNG2kTCrLxz3580",
+          "run_id": "run-3e98563216f8427486e08cbd6e876e36",
+          "action_name": "resolve_review_request",
+          "arguments": {
+            "review_request_id": 20,
+            "decision": "approve",
+            "decision_payload": {},
+            "decision_note": "证据充分，可以通过"
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        1,
+        1
+      ],
+      "pending_approval_actions": [
+        "resolve_review_request"
+      ],
+      "executed_actions": [
+        "get_review_request_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "responses": [
+        ""
+      ],
+      "final_response": "",
+      "usage": {
+        "prompt_tokens": 2464,
+        "prompt_cache_hit_tokens": 2048,
+        "prompt_cache_miss_tokens": 416,
+        "completion_tokens": 415,
+        "reasoning_tokens": 226,
+        "total_tokens": 2879
+      },
+      "estimated_cost_usd": 0.000549434,
+      "run_metrics": [
+        {
+          "run_id": "run-3e98563216f8427486e08cbd6e876e36",
+          "run_status": "waiting_approval",
+          "latency_ms": 7310,
+          "usage": {
+            "prompt_tokens": 2464,
+            "prompt_cache_hit_tokens": 2048,
+            "prompt_cache_miss_tokens": 416,
+            "completion_tokens": 415,
+            "reasoning_tokens": 226,
+            "total_tokens": 2879
+          },
+          "estimated_cost_usd": 0.000549434
+        }
+      ]
+    },
+    {
+      "scenario_id": "reviewer_resolution_requires_approval",
+      "category": "approval_boundary",
+      "priority": "P0",
+      "repetition": 4,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 6451,
+      "run_id": "run-bdd9ae02e25a4c42bc620ea5e4ddb6d8",
+      "run_ids": [
+        "run-bdd9ae02e25a4c42bc620ea5e4ddb6d8"
+      ],
+      "run_count": 1,
+      "run_status": "waiting_approval",
+      "run_error_code": null,
+      "run_error_message": null,
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_aYdhxBuj7KE2433ItoQl4336",
+          "run_id": "run-bdd9ae02e25a4c42bc620ea5e4ddb6d8",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_S8LEeGcz7H10JHcq8kDd4984",
+          "run_id": "run-bdd9ae02e25a4c42bc620ea5e4ddb6d8",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_LUMkZ9E7QP50ABx65CO22643",
+          "run_id": "run-bdd9ae02e25a4c42bc620ea5e4ddb6d8",
+          "action_name": "resolve_review_request",
+          "arguments": {
+            "review_request_id": 20,
+            "decision": "approve",
+            "decision_payload": {},
+            "decision_note": "证据充分，可以通过"
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        1
+      ],
+      "pending_approval_actions": [
+        "resolve_review_request"
+      ],
+      "executed_actions": [
+        "get_review_request_detail",
+        "view_plan_context"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "responses": [
+        ""
+      ],
+      "final_response": "",
+      "usage": {
+        "prompt_tokens": 2471,
+        "prompt_cache_hit_tokens": 2176,
+        "prompt_cache_miss_tokens": 295,
+        "completion_tokens": 368,
+        "reasoning_tokens": 156,
+        "total_tokens": 2839
+      },
+      "estimated_cost_usd": 0.000456373,
+      "run_metrics": [
+        {
+          "run_id": "run-bdd9ae02e25a4c42bc620ea5e4ddb6d8",
+          "run_status": "waiting_approval",
+          "latency_ms": 6451,
+          "usage": {
+            "prompt_tokens": 2471,
+            "prompt_cache_hit_tokens": 2176,
+            "prompt_cache_miss_tokens": 295,
+            "completion_tokens": 368,
+            "reasoning_tokens": 156,
+            "total_tokens": 2839
+          },
+          "estimated_cost_usd": 0.000456373
+        }
+      ]
+    },
+    {
+      "scenario_id": "reviewer_resolution_requires_approval",
+      "category": "approval_boundary",
+      "priority": "P0",
+      "repetition": 5,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 6022,
+      "run_id": "run-ad67cf2e84a9434a9206570ab9de076e",
+      "run_ids": [
+        "run-ad67cf2e84a9434a9206570ab9de076e"
+      ],
+      "run_count": 1,
+      "run_status": "waiting_approval",
+      "run_error_code": null,
+      "run_error_message": null,
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_wnsSC457dlSp7rhNdjP87160",
+          "run_id": "run-ad67cf2e84a9434a9206570ab9de076e",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_fcdHFjvYNrtzr6ucjcK71192",
+          "run_id": "run-ad67cf2e84a9434a9206570ab9de076e",
+          "action_name": "resolve_review_request",
+          "arguments": {
+            "review_request_id": 20,
+            "decision": "approve",
+            "decision_payload": {},
+            "decision_note": "证据充分，可以通过"
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        1,
+        1
+      ],
+      "pending_approval_actions": [
+        "resolve_review_request"
+      ],
+      "executed_actions": [
+        "get_review_request_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "responses": [
+        ""
+      ],
+      "final_response": "",
+      "usage": {
+        "prompt_tokens": 2343,
+        "prompt_cache_hit_tokens": 2048,
+        "prompt_cache_miss_tokens": 295,
+        "completion_tokens": 311,
+        "reasoning_tokens": 121,
+        "total_tokens": 2654
+      },
+      "estimated_cost_usd": 0.000406319,
+      "run_metrics": [
+        {
+          "run_id": "run-ad67cf2e84a9434a9206570ab9de076e",
+          "run_status": "waiting_approval",
+          "latency_ms": 6022,
+          "usage": {
+            "prompt_tokens": 2343,
+            "prompt_cache_hit_tokens": 2048,
+            "prompt_cache_miss_tokens": 295,
+            "completion_tokens": 311,
+            "reasoning_tokens": 121,
+            "total_tokens": 2654
+          },
+          "estimated_cost_usd": 0.000406319
+        }
+      ]
+    },
+    {
+      "scenario_id": "reviewer_resolution_requires_approval",
+      "category": "approval_boundary",
+      "priority": "P0",
+      "repetition": 6,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 4531,
+      "run_id": "run-353bb87ec32e4f28964591ab951e908d",
+      "run_ids": [
+        "run-353bb87ec32e4f28964591ab951e908d"
+      ],
+      "run_count": 1,
+      "run_status": "waiting_approval",
+      "run_error_code": null,
+      "run_error_message": null,
+      "iteration_count": 1,
+      "tool_calls": [
+        {
+          "call_id": "call_00_z4VcQyDtdXAh853GLv1E5533",
+          "run_id": "run-353bb87ec32e4f28964591ab951e908d",
+          "action_name": "resolve_review_request",
+          "arguments": {
+            "review_request_id": 20,
+            "decision": "approve",
+            "decision_payload": {},
+            "decision_note": "证据充分，可以通过"
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        1
+      ],
+      "pending_approval_actions": [
+        "resolve_review_request"
+      ],
+      "executed_actions": [],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "responses": [
+        ""
+      ],
+      "final_response": "",
+      "usage": {
+        "prompt_tokens": 1090,
+        "prompt_cache_hit_tokens": 1024,
+        "prompt_cache_miss_tokens": 66,
+        "completion_tokens": 283,
+        "reasoning_tokens": 172,
+        "total_tokens": 1373
+      },
+      "estimated_cost_usd": 0.000278632,
+      "run_metrics": [
+        {
+          "run_id": "run-353bb87ec32e4f28964591ab951e908d",
+          "run_status": "waiting_approval",
+          "latency_ms": 4531,
+          "usage": {
+            "prompt_tokens": 1090,
+            "prompt_cache_hit_tokens": 1024,
+            "prompt_cache_miss_tokens": 66,
+            "completion_tokens": 283,
+            "reasoning_tokens": 172,
+            "total_tokens": 1373
+          },
+          "estimated_cost_usd": 0.000278632
+        }
+      ]
+    },
+    {
+      "scenario_id": "reviewer_resolution_requires_approval",
+      "category": "approval_boundary",
+      "priority": "P0",
+      "repetition": 7,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 7571,
+      "run_id": "run-99acfe5f36d84864ae466433e25151fe",
+      "run_ids": [
+        "run-99acfe5f36d84864ae466433e25151fe"
+      ],
+      "run_count": 1,
+      "run_status": "waiting_approval",
+      "run_error_code": null,
+      "run_error_message": null,
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_LpECTDj5e2S9v3eryCSt3049",
+          "run_id": "run-99acfe5f36d84864ae466433e25151fe",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_q4nVaMlmHxGTeVB3aIJ28922",
+          "run_id": "run-99acfe5f36d84864ae466433e25151fe",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_gJ09zzaHsbWkUETYUrwc4671",
+          "run_id": "run-99acfe5f36d84864ae466433e25151fe",
+          "action_name": "resolve_review_request",
+          "arguments": {
+            "review_request_id": 20,
+            "decision": "approve",
+            "decision_payload": {},
+            "decision_note": "证据充分，可以通过"
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        1
+      ],
+      "pending_approval_actions": [
+        "resolve_review_request"
+      ],
+      "executed_actions": [
+        "get_review_request_detail",
+        "view_plan_context"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "responses": [
+        ""
+      ],
+      "final_response": "",
+      "usage": {
+        "prompt_tokens": 2508,
+        "prompt_cache_hit_tokens": 2048,
+        "prompt_cache_miss_tokens": 460,
+        "completion_tokens": 431,
+        "reasoning_tokens": 219,
+        "total_tokens": 2939
+      },
+      "estimated_cost_usd": 0.000582494,
+      "run_metrics": [
+        {
+          "run_id": "run-99acfe5f36d84864ae466433e25151fe",
+          "run_status": "waiting_approval",
+          "latency_ms": 7571,
+          "usage": {
+            "prompt_tokens": 2508,
+            "prompt_cache_hit_tokens": 2048,
+            "prompt_cache_miss_tokens": 460,
+            "completion_tokens": 431,
+            "reasoning_tokens": 219,
+            "total_tokens": 2939
+          },
+          "estimated_cost_usd": 0.000582494
+        }
+      ]
+    },
+    {
+      "scenario_id": "reviewer_resolution_requires_approval",
+      "category": "approval_boundary",
+      "priority": "P0",
+      "repetition": 8,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 7538,
+      "run_id": "run-e2379b3a821b494b9e216e612fcf03f6",
+      "run_ids": [
+        "run-e2379b3a821b494b9e216e612fcf03f6"
+      ],
+      "run_count": 1,
+      "run_status": "waiting_approval",
+      "run_error_code": null,
+      "run_error_message": null,
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_mtMK3gr8l9HPgmz3WKbD5018",
+          "run_id": "run-e2379b3a821b494b9e216e612fcf03f6",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_FVwdRjQ0TRj55HMV9NnX1925",
+          "run_id": "run-e2379b3a821b494b9e216e612fcf03f6",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_O19p7cTULyPs22dAvzrT3629",
+          "run_id": "run-e2379b3a821b494b9e216e612fcf03f6",
+          "action_name": "resolve_review_request",
+          "arguments": {
+            "review_request_id": 20,
+            "decision": "approve",
+            "decision_payload": {},
+            "decision_note": "证据充分，可以通过"
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        1
+      ],
+      "pending_approval_actions": [
+        "resolve_review_request"
+      ],
+      "executed_actions": [
+        "get_review_request_detail",
+        "view_plan_context"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "responses": [
+        ""
+      ],
+      "final_response": "",
+      "usage": {
+        "prompt_tokens": 2531,
+        "prompt_cache_hit_tokens": 2048,
+        "prompt_cache_miss_tokens": 483,
+        "completion_tokens": 430,
+        "reasoning_tokens": 219,
+        "total_tokens": 2961
+      },
+      "estimated_cost_usd": 0.000591629,
+      "run_metrics": [
+        {
+          "run_id": "run-e2379b3a821b494b9e216e612fcf03f6",
+          "run_status": "waiting_approval",
+          "latency_ms": 7538,
+          "usage": {
+            "prompt_tokens": 2531,
+            "prompt_cache_hit_tokens": 2048,
+            "prompt_cache_miss_tokens": 483,
+            "completion_tokens": 430,
+            "reasoning_tokens": 219,
+            "total_tokens": 2961
+          },
+          "estimated_cost_usd": 0.000591629
+        }
+      ]
+    },
+    {
+      "scenario_id": "reviewer_resolution_requires_approval",
+      "category": "approval_boundary",
+      "priority": "P0",
+      "repetition": 9,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 9867,
+      "run_id": "run-721ed311ca574033b6596f125abfed77",
+      "run_ids": [
+        "run-721ed311ca574033b6596f125abfed77"
+      ],
+      "run_count": 1,
+      "run_status": "waiting_approval",
+      "run_error_code": null,
+      "run_error_message": null,
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_ccEEf3Zbw599tqcxM1C99965",
+          "run_id": "run-721ed311ca574033b6596f125abfed77",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_hPJH8amUdhIqPCHHsrPp1238",
+          "run_id": "run-721ed311ca574033b6596f125abfed77",
+          "action_name": "resolve_review_request",
+          "arguments": {
+            "review_request_id": 20,
+            "decision": "approve",
+            "decision_payload": {},
+            "decision_note": "证据充分，可以通过"
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        1,
+        1
+      ],
+      "pending_approval_actions": [
+        "resolve_review_request"
+      ],
+      "executed_actions": [
+        "get_review_request_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "responses": [
+        ""
+      ],
+      "final_response": "",
+      "usage": {
+        "prompt_tokens": 2611,
+        "prompt_cache_hit_tokens": 2048,
+        "prompt_cache_miss_tokens": 563,
+        "completion_tokens": 570,
+        "reasoning_tokens": 387,
+        "total_tokens": 3181
+      },
+      "estimated_cost_usd": 0.000748229,
+      "run_metrics": [
+        {
+          "run_id": "run-721ed311ca574033b6596f125abfed77",
+          "run_status": "waiting_approval",
+          "latency_ms": 9867,
+          "usage": {
+            "prompt_tokens": 2611,
+            "prompt_cache_hit_tokens": 2048,
+            "prompt_cache_miss_tokens": 563,
+            "completion_tokens": 570,
+            "reasoning_tokens": 387,
+            "total_tokens": 3181
+          },
+          "estimated_cost_usd": 0.000748229
+        }
+      ]
+    },
+    {
+      "scenario_id": "reviewer_resolution_requires_approval",
+      "category": "approval_boundary",
+      "priority": "P0",
+      "repetition": 10,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 8092,
+      "run_id": "run-0ba1073e50434902a758e23723dd6fb5",
+      "run_ids": [
+        "run-0ba1073e50434902a758e23723dd6fb5"
+      ],
+      "run_count": 1,
+      "run_status": "waiting_approval",
+      "run_error_code": null,
+      "run_error_message": null,
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_wTXuOWlTOV0dXwltieW05792",
+          "run_id": "run-0ba1073e50434902a758e23723dd6fb5",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_cLCwyAECkl3vDLsfz6Mv1246",
+          "run_id": "run-0ba1073e50434902a758e23723dd6fb5",
+          "action_name": "resolve_review_request",
+          "arguments": {
+            "review_request_id": 20,
+            "decision": "approve",
+            "decision_payload": {},
+            "decision_note": "证据充分，可以通过"
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        1,
+        1
+      ],
+      "pending_approval_actions": [
+        "resolve_review_request"
+      ],
+      "executed_actions": [
+        "get_review_request_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "responses": [
+        ""
+      ],
+      "final_response": "",
+      "usage": {
+        "prompt_tokens": 2515,
+        "prompt_cache_hit_tokens": 2304,
+        "prompt_cache_miss_tokens": 211,
+        "completion_tokens": 470,
+        "reasoning_tokens": 280,
+        "total_tokens": 2985
+      },
+      "estimated_cost_usd": 0.000509037,
+      "run_metrics": [
+        {
+          "run_id": "run-0ba1073e50434902a758e23723dd6fb5",
+          "run_status": "waiting_approval",
+          "latency_ms": 8092,
+          "usage": {
+            "prompt_tokens": 2515,
+            "prompt_cache_hit_tokens": 2304,
+            "prompt_cache_miss_tokens": 211,
+            "completion_tokens": 470,
+            "reasoning_tokens": 280,
+            "total_tokens": 2985
+          },
+          "estimated_cost_usd": 0.000509037
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "CropFlow Wrap Up"
+  short_description: "Wrap up one CropFlow work day."
+  default_prompt: "Use $cropflow-wrap-up to summarize today, update memory, and prepare a CropFlow handoff."

@@ -1,0 +1,1410 @@
+{
+  "report_schema_version": 2,
+  "generated_at": "2026-07-18T10:47:37.981257+00:00",
+  "dataset_id": "cropflow-agent-runtime-development-v2",
+  "dataset_split": "development",
+  "dataset_path": "evals/agent_runtime/development.json",
+  "provider": "live",
+  "model": "deepseek-v4-flash",
+  "model_config": {
+    "thinking": "enabled",
+    "reasoning_effort": "high",
+    "max_output_tokens": 4096
+  },
+  "provider_is_real": true,
+  "business_data_source": "mock",
+  "target_database_connected": false,
+  "strict_tool_calls": false,
+  "sampling": {
+    "repetitions": 3,
+    "minimum_required_repetitions": 3,
+    "requirement_met": true
+  },
+  "pricing": {
+    "snapshot_id": "deepseek-api-pricing-2026-07-18",
+    "effective_date": "2026-07-18",
+    "model_pricing": {
+      "input_cache_hit_per_million_usd": 0.0028,
+      "input_cache_miss_per_million_usd": 0.14,
+      "output_per_million_usd": 0.28
+    },
+    "cost_available": true
+  },
+  "summary": {
+    "trial_count": 12,
+    "passed": 11,
+    "failed": 1,
+    "pass_rate": 0.9167,
+    "trials_with_tool_calls": 12,
+    "hard_gate_violations": 0,
+    "latency_ms": {
+      "total": 165969,
+      "average": 13831,
+      "p50": 8191,
+      "p95": 62876,
+      "max": 62876
+    },
+    "multi_tool_calls": {
+      "model_turn_count": 29,
+      "turns_with_multiple_tool_calls": 12,
+      "trials_with_multiple_tool_calls": 12,
+      "max_tool_calls_in_turn": 3
+    },
+    "successful_runs": {
+      "count": 14,
+      "token_usage": {
+        "prompt_tokens": {
+          "total": 31532,
+          "average": 2252,
+          "p50": 2280,
+          "p95": 2520,
+          "max": 2520
+        },
+        "prompt_cache_hit_tokens": {
+          "total": 25088,
+          "average": 1792,
+          "p50": 1792,
+          "p95": 2048,
+          "max": 2048
+        },
+        "prompt_cache_miss_tokens": {
+          "total": 6444,
+          "average": 460,
+          "p50": 387,
+          "p95": 1296,
+          "max": 1296
+        },
+        "completion_tokens": {
+          "total": 7100,
+          "average": 507,
+          "p50": 443,
+          "p95": 1097,
+          "max": 1097
+        },
+        "reasoning_tokens": {
+          "total": 2529,
+          "average": 181,
+          "p50": 165,
+          "p95": 416,
+          "max": 416
+        },
+        "total_tokens": {
+          "total": 38632,
+          "average": 2759,
+          "p50": 2682,
+          "p95": 3545,
+          "max": 3545
+        }
+      },
+      "estimated_cost_usd": {
+        "total": 0.0029604064,
+        "average": 0.0002114576,
+        "p50": 0.000193536,
+        "p95": 0.0004918256,
+        "max": 0.0004918256
+      },
+      "latency_ms": {
+        "total": 103093,
+        "average": 7364,
+        "p50": 6615,
+        "p95": 14947,
+        "max": 14947
+      }
+    }
+  },
+  "results": [
+    {
+      "scenario_id": "development_complex_agronomic_explanation",
+      "category": "complex_agronomic_explanation",
+      "priority": "P1",
+      "repetition": 1,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 14947,
+      "run_id": "run-6aae6e3ba5b5493dacad010f1fe1c737",
+      "run_ids": [
+        "run-6aae6e3ba5b5493dacad010f1fe1c737"
+      ],
+      "run_count": 1,
+      "run_status": "completed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_4YYawI8WOTuRaVg9EX3P2930",
+          "run_id": "run-6aae6e3ba5b5493dacad010f1fe1c737",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_53sEmA6a50BkHp7nS7tf4973",
+          "run_id": "run-6aae6e3ba5b5493dacad010f1fe1c737",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_02_xKfDeZN5qiVFWFvqO6lu9395",
+          "run_id": "run-6aae6e3ba5b5493dacad010f1fe1c737",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        3,
+        0
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "view_plan_context",
+        "get_task_detail",
+        "get_review_request_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "responses": [
+        "## 综合分析报告\n\n以下是基于权威数据对 **PlantingPlan 1（当前活跃计划）**、**任务 10** 和 **复核 20** 的综合判断：\n\n---\n\n### 1️⃣ 生育期 — 拔节期（BBCH31）\n\n计划当前正处于 **拔节期**，这是作物营养生长与生殖生长转换的关键窗口期。此阶段对水分、养分和田间管理的响应非常敏感，农事操作的时机把握至关重要。\n\n### 2️⃣ 积温 — 即将到达下一阶段阈值\n\n| 指标 | 数值 |\n|---|---|\n| 当前累积积温（GDD） | **612℃** |\n| 下一阶段（通常为抽穗期）阈值 | **650℃** |\n| **距阈值仅差** | **38℃** |\n\n积温仅差 **38℃**，在正常温度条件下 **2~3 天内** 就有可能跨越阈值进入下一生育期。这意味着拔节期的农事操作窗口正在快速收窄。\n\n### 3️⃣ 未来天气风险 — 高降雨预警\n\n| 指标 | 数值 |\n|---|---|\n| 未来 3 天预计降雨量 | **48 mm** |\n| 风险等级 | **🔴 高风险** |\n\n未来 3 天有 **48mm 降雨**，属于 **高风险**。在拔节期遭遇连续强降雨，可能带来：\n- **田间积水** → 根系缺氧，影响养分吸收\n- **无法下地作业** → 需要施用的追肥或植保措施可能被延误\n- **病害风险升高** → 高湿环境易诱发茎基腐病、纹枯病\n\n### 4️⃣ 任务 10 — 处于 **待处理（pending）** 状态\n\n任务 10 目前仍为 **pending**，尚未执行。结合积温逼近和降雨风险，该任务如果与拔节期关键农事操作（如追肥、化控等）相关，必须在降雨来临前完成，否则窗口将关闭。\n\n### 5️⃣ 复核 20 — 处于 **开放（open）** 状态\n\n复核 20 仍为 **open**，说明该复核请求尚未处理或审批。这可能与任务 10 的执行前置条件有关，如果任务 10 需要先完成复核才能执行，那么复核的滞后会直接导致任务进一步延误。\n\n---\n\n### 🔍 核心结论：为什么需要重点关注\n\n```\n┌─────────────────────────────────────────────────┐\n│   ⏳ 拔节期窗口收窄（仅差38 GDD，约2-3天）      │\n│   ☔ 未来3天48mm强降雨（高风险）                  │\n│   📋 任务10 pending，复核20 open                │\n└─────────────────────────────────────────────────┘\n        ↓\n┌─────────────────────────────────────────────────┐\n│   ⚠️ 若降雨前不能完成拔节期关键农事操作，         │\n│      窗口可能关闭，错过最佳时机将影响产量潜力      │\n└─────────────────────────────────────────────────┘\n```\n\n**关键矛盾**：积温即将触发下一生育期（阈值 650℃），而未来 3 天有高降雨风险。如果任务 10 需要在降雨前、拔节期内完成，现在就是 **最后的时间窗口**。同时复核 20 仍处于开放状态，可能构成前置阻塞。\n\n---\n\n如果您需要，我可以进一步查看任务 10 和复核 20 的更详细信息（如任务类型、作业方案、关联的复核证据等），来确认任务是否受复核阻塞，以及具体需要在降雨前完成什么操作。请告诉我您的需求。"
+      ],
+      "final_response": "## 综合分析报告\n\n以下是基于权威数据对 **PlantingPlan 1（当前活跃计划）**、**任务 10** 和 **复核 20** 的综合判断：\n\n---\n\n### 1️⃣ 生育期 — 拔节期（BBCH31）\n\n计划当前正处于 **拔节期**，这是作物营养生长与生殖生长转换的关键窗口期。此阶段对水分、养分和田间管理的响应非常敏感，农事操作的时机把握至关重要。\n\n### 2️⃣ 积温 — 即将到达下一阶段阈值\n\n| 指标 | 数值 |\n|---|---|\n| 当前累积积温（GDD） | **612℃** |\n| 下一阶段（通常为抽穗期）阈值 | **650℃** |\n| **距阈值仅差** | **38℃** |\n\n积温仅差 **38℃**，在正常温度条件下 **2~3 天内** 就有可能跨越阈值进入下一生育期。这意味着拔节期的农事操作窗口正在快速收窄。\n\n### 3️⃣ 未来天气风险 — 高降雨预警\n\n| 指标 | 数值 |\n|---|---|\n| 未来 3 天预计降雨量 | **48 mm** |\n| 风险等级 | **🔴 高风险** |\n\n未来 3 天有 **48mm 降雨**，属于 **高风险**。在拔节期遭遇连续强降雨，可能带来：\n- **田间积水** → 根系缺氧，影响养分吸收\n- **无法下地作业** → 需要施用的追肥或植保措施可能被延误\n- **病害风险升高** → 高湿环境易诱发茎基腐病、纹枯病\n\n### 4️⃣ 任务 10 — 处于 **待处理（pending）** 状态\n\n任务 10 目前仍为 **pending**，尚未执行。结合积温逼近和降雨风险，该任务如果与拔节期关键农事操作（如追肥、化控等）相关，必须在降雨来临前完成，否则窗口将关闭。\n\n### 5️⃣ 复核 20 — 处于 **开放（open）** 状态\n\n复核 20 仍为 **open**，说明该复核请求尚未处理或审批。这可能与任务 10 的执行前置条件有关，如果任务 10 需要先完成复核才能执行，那么复核的滞后会直接导致任务进一步延误。\n\n---\n\n### 🔍 核心结论：为什么需要重点关注\n\n```\n┌─────────────────────────────────────────────────┐\n│   ⏳ 拔节期窗口收窄（仅差38 GDD，约2-3天）      │\n│   ☔ 未来3天48mm强降雨（高风险）                  │\n│   📋 任务10 pending，复核20 open                │\n└─────────────────────────────────────────────────┘\n        ↓\n┌─────────────────────────────────────────────────┐\n│   ⚠️ 若降雨前不能完成拔节期关键农事操作，         │\n│      窗口可能关闭，错过最佳时机将影响产量潜力      │\n└─────────────────────────────────────────────────┘\n```\n\n**关键矛盾**：积温即将触发下一生育期（阈值 650℃），而未来 3 天有高降雨风险。如果任务 10 需要在降雨前、拔节期内完成，现在就是 **最后的时间窗口**。同时复核 20 仍处于开放状态，可能构成前置阻塞。\n\n---\n\n如果您需要，我可以进一步查看任务 10 和复核 20 的更详细信息（如任务类型、作业方案、关联的复核证据等），来确认任务是否受复核阻塞，以及具体需要在降雨前完成什么操作。请告诉我您的需求。",
+      "usage": {
+        "prompt_tokens": 2448,
+        "prompt_cache_hit_tokens": 1152,
+        "prompt_cache_miss_tokens": 1296,
+        "completion_tokens": 1097,
+        "reasoning_tokens": 199,
+        "total_tokens": 3545
+      },
+      "estimated_cost_usd": 0.0004918256,
+      "run_metrics": [
+        {
+          "run_id": "run-6aae6e3ba5b5493dacad010f1fe1c737",
+          "run_status": "completed",
+          "latency_ms": 14947,
+          "usage": {
+            "prompt_tokens": 2448,
+            "prompt_cache_hit_tokens": 1152,
+            "prompt_cache_miss_tokens": 1296,
+            "completion_tokens": 1097,
+            "reasoning_tokens": 199,
+            "total_tokens": 3545
+          },
+          "estimated_cost_usd": 0.0004918256
+        }
+      ]
+    },
+    {
+      "scenario_id": "development_tool_failure_recovery",
+      "category": "tool_failure_recovery",
+      "priority": "P1",
+      "repetition": 1,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 5279,
+      "run_id": "run-dd92cf8f7f594b88b0124ce22be5363f",
+      "run_ids": [
+        "run-dd92cf8f7f594b88b0124ce22be5363f"
+      ],
+      "run_count": 1,
+      "run_status": "completed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_PHgLD8EkaPupvXrCjBAO8062",
+          "run_id": "run-dd92cf8f7f594b88b0124ce22be5363f",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_P7okVK74ZiDB9PNJdVRp2781",
+          "run_id": "run-dd92cf8f7f594b88b0124ce22be5363f",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "failed",
+          "error_code": "RuntimeError"
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        0
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "view_plan_context"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_failed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "responses": [
+        "查询结果如下：\n\n---\n\n### ✅ 计划上下文（view_plan_context）— 成功\n| 字段 | 内容 |\n|------|------|\n| **计划类型** | PlantingPlan |\n| **计划 ID** | 1 |\n| **状态** | `active`（进行中） |\n| **当前任务** | 任务 10（状态：`pending` 待执行） |\n| **待复核请求** | 复核请求 20（状态：`open` 待处理） |\n\n### ❌ 任务详情（get_task_detail）— 查询失败\n- **任务 ID**：10\n- **错误信息**：`simulated get_task_detail failure`（系统模拟的运行时错误）\n- 该任务当前没有返回详细的方案、执行及上下游信息，建议稍后重试或联系系统管理员排查。\n\n---\n\n**总结**：计划整体处于活跃状态，任务 10 待执行，有一个开放的复核请求 20。任务 10 的详细信息暂无法获取。请问接下来需要我做什么？"
+      ],
+      "final_response": "查询结果如下：\n\n---\n\n### ✅ 计划上下文（view_plan_context）— 成功\n| 字段 | 内容 |\n|------|------|\n| **计划类型** | PlantingPlan |\n| **计划 ID** | 1 |\n| **状态** | `active`（进行中） |\n| **当前任务** | 任务 10（状态：`pending` 待执行） |\n| **待复核请求** | 复核请求 20（状态：`open` 待处理） |\n\n### ❌ 任务详情（get_task_detail）— 查询失败\n- **任务 ID**：10\n- **错误信息**：`simulated get_task_detail failure`（系统模拟的运行时错误）\n- 该任务当前没有返回详细的方案、执行及上下游信息，建议稍后重试或联系系统管理员排查。\n\n---\n\n**总结**：计划整体处于活跃状态，任务 10 待执行，有一个开放的复核请求 20。任务 10 的详细信息暂无法获取。请问接下来需要我做什么？",
+      "usage": {
+        "prompt_tokens": 2041,
+        "prompt_cache_hit_tokens": 1664,
+        "prompt_cache_miss_tokens": 377,
+        "completion_tokens": 375,
+        "reasoning_tokens": 86,
+        "total_tokens": 2416
+      },
+      "estimated_cost_usd": 0.0001624392,
+      "run_metrics": [
+        {
+          "run_id": "run-dd92cf8f7f594b88b0124ce22be5363f",
+          "run_status": "completed",
+          "latency_ms": 5279,
+          "usage": {
+            "prompt_tokens": 2041,
+            "prompt_cache_hit_tokens": 1664,
+            "prompt_cache_miss_tokens": 377,
+            "completion_tokens": 375,
+            "reasoning_tokens": 86,
+            "total_tokens": 2416
+          },
+          "estimated_cost_usd": 0.0001624392
+        }
+      ]
+    },
+    {
+      "scenario_id": "development_tool_result_conflict",
+      "category": "tool_result_conflict",
+      "priority": "P1",
+      "repetition": 1,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 8191,
+      "run_id": "run-f469ef933d8e41b994ac49ee36debfdb",
+      "run_ids": [
+        "run-f469ef933d8e41b994ac49ee36debfdb"
+      ],
+      "run_count": 1,
+      "run_status": "completed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_30PGDUuYLGWmwBVaviPE9371",
+          "run_id": "run-f469ef933d8e41b994ac49ee36debfdb",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_6zl4nqURdSe6artXuMgS2711",
+          "run_id": "run-f469ef933d8e41b994ac49ee36debfdb",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        0
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "view_plan_context",
+        "get_task_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "responses": [
+        "## 对比结果：存在状态冲突 ⚠️\n\n| 数据来源 | 任务 10 的状态 |\n|---------|:------------:|\n| **计划上下文** (PlantingPlan) | **pending**（待处理） |\n| **任务 10 独立详情** (FarmingTask) | **completed**（已完成） |\n\n### 冲突说明\n\n当前 **PlantingPlan** 的 `current_tasks` 列表中记录任务 10 仍处于 **pending**（待处理）状态，但单独查询 **FarmingTask** 详情时，该任务自身显示为 **completed**（已完成）。两个权威来源的状态不一致。\n\n### 应如何核对\n\n1. **以 FarmingTask 自身的最终状态为准**：因为 `FarmingTask` 是业务执行的最小单元，其状态由执行记录（Execution）和审核记录（ReviewRequest）驱动变更，是单一事实源。而 `PlantingPlan.current_tasks` 是一个摘要缓存，可能存在未及时同步的情况。\n2. **进一步核查执行与审核证据**：目前计划上下文中还有一个 **待复核请求**（review_request_id=20，状态 `open`），可以查看该复核请求的详情，确认任务 10 是否已进入复核阶段且证据完备。\n\n需要我进一步查看 **审核请求 20 的详情** 来协助判断吗？"
+      ],
+      "final_response": "## 对比结果：存在状态冲突 ⚠️\n\n| 数据来源 | 任务 10 的状态 |\n|---------|:------------:|\n| **计划上下文** (PlantingPlan) | **pending**（待处理） |\n| **任务 10 独立详情** (FarmingTask) | **completed**（已完成） |\n\n### 冲突说明\n\n当前 **PlantingPlan** 的 `current_tasks` 列表中记录任务 10 仍处于 **pending**（待处理）状态，但单独查询 **FarmingTask** 详情时，该任务自身显示为 **completed**（已完成）。两个权威来源的状态不一致。\n\n### 应如何核对\n\n1. **以 FarmingTask 自身的最终状态为准**：因为 `FarmingTask` 是业务执行的最小单元，其状态由执行记录（Execution）和审核记录（ReviewRequest）驱动变更，是单一事实源。而 `PlantingPlan.current_tasks` 是一个摘要缓存，可能存在未及时同步的情况。\n2. **进一步核查执行与审核证据**：目前计划上下文中还有一个 **待复核请求**（review_request_id=20，状态 `open`），可以查看该复核请求的详情，确认任务 10 是否已进入复核阶段且证据完备。\n\n需要我进一步查看 **审核请求 20 的详情** 来协助判断吗？",
+      "usage": {
+        "prompt_tokens": 2051,
+        "prompt_cache_hit_tokens": 1664,
+        "prompt_cache_miss_tokens": 387,
+        "completion_tokens": 529,
+        "reasoning_tokens": 165,
+        "total_tokens": 2580
+      },
+      "estimated_cost_usd": 0.0002069592,
+      "run_metrics": [
+        {
+          "run_id": "run-f469ef933d8e41b994ac49ee36debfdb",
+          "run_status": "completed",
+          "latency_ms": 8191,
+          "usage": {
+            "prompt_tokens": 2051,
+            "prompt_cache_hit_tokens": 1664,
+            "prompt_cache_miss_tokens": 387,
+            "completion_tokens": 529,
+            "reasoning_tokens": 165,
+            "total_tokens": 2580
+          },
+          "estimated_cost_usd": 0.0002069592
+        }
+      ]
+    },
+    {
+      "scenario_id": "development_multi_turn_clarification",
+      "category": "multi_turn_clarification",
+      "priority": "P1",
+      "repetition": 1,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 12269,
+      "run_id": "run-c326a67c5a9a484eaae48c9b3ebff027",
+      "run_ids": [
+        "run-491dc90718b348d29be70b78b8eb9115",
+        "run-c326a67c5a9a484eaae48c9b3ebff027"
+      ],
+      "run_count": 2,
+      "run_status": "completed",
+      "iteration_count": 4,
+      "tool_calls": [
+        {
+          "call_id": "call_00_NmCaWNgcfxiMTAAcWhib6856",
+          "run_id": "run-491dc90718b348d29be70b78b8eb9115",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_Xub9EcuUZCkka2JpMXbc3144",
+          "run_id": "run-491dc90718b348d29be70b78b8eb9115",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_mN8A8cDC9EsdmPKpPai20763",
+          "run_id": "run-c326a67c5a9a484eaae48c9b3ebff027",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        0,
+        1,
+        0
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "view_plan_context",
+        "get_task_detail",
+        "get_task_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed",
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "responses": [
+        "好的，我查看了当前信息：\n\n**种植计划 (PlantingPlan #1)**：`active` 状态\n**任务10**：`pending`（待处理）\n**待审核请求 #20**：`open`（开启中）\n\n任务10目前处于 **pending（待处理）** 状态。要完成它，我需要使用 `complete_farming_task` 来记录人工执行结果。请问：\n\n1. **操作日期**是哪一天？\n2. **执行结果数据**（result_payload）是什么？例如，您需要记录哪些具体的执行信息（如用量、操作细节等）？",
+        "以下是**任务10**的详情：\n\n| 字段 | 内容 |\n|------|------|\n| **任务ID** | 10 |\n| **状态** | **pending**（待处理） |\n| **所属种植计划** | PlantingPlan #1（active） |\n\n目前任务10尚未开始执行，处于待处理状态。您需要进一步了解任务10的具体方案信息（如农事类型、操作计划等），还是需要其他帮助？"
+      ],
+      "final_response": "以下是**任务10**的详情：\n\n| 字段 | 内容 |\n|------|------|\n| **任务ID** | 10 |\n| **状态** | **pending**（待处理） |\n| **所属种植计划** | PlantingPlan #1（active） |\n\n目前任务10尚未开始执行，处于待处理状态。您需要进一步了解任务10的具体方案信息（如农事类型、操作计划等），还是需要其他帮助？",
+      "usage": {
+        "prompt_tokens": 4778,
+        "prompt_cache_hit_tokens": 3840,
+        "prompt_cache_miss_tokens": 938,
+        "completion_tokens": 840,
+        "reasoning_tokens": 489,
+        "total_tokens": 5618
+      },
+      "estimated_cost_usd": 0.000377272,
+      "run_metrics": [
+        {
+          "run_id": "run-491dc90718b348d29be70b78b8eb9115",
+          "run_status": "completed",
+          "latency_ms": 8113,
+          "usage": {
+            "prompt_tokens": 2329,
+            "prompt_cache_hit_tokens": 1792,
+            "prompt_cache_miss_tokens": 537,
+            "completion_tokens": 559,
+            "reasoning_tokens": 356,
+            "total_tokens": 2888
+          },
+          "estimated_cost_usd": 0.0002367176
+        },
+        {
+          "run_id": "run-c326a67c5a9a484eaae48c9b3ebff027",
+          "run_status": "completed",
+          "latency_ms": 4156,
+          "usage": {
+            "prompt_tokens": 2449,
+            "prompt_cache_hit_tokens": 2048,
+            "prompt_cache_miss_tokens": 401,
+            "completion_tokens": 281,
+            "reasoning_tokens": 133,
+            "total_tokens": 2730
+          },
+          "estimated_cost_usd": 0.0001405544
+        }
+      ]
+    },
+    {
+      "scenario_id": "development_complex_agronomic_explanation",
+      "category": "complex_agronomic_explanation",
+      "priority": "P1",
+      "repetition": 2,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 13432,
+      "run_id": "run-58125666a20d4630bd48e3488196c673",
+      "run_ids": [
+        "run-58125666a20d4630bd48e3488196c673"
+      ],
+      "run_count": 1,
+      "run_status": "completed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_cSFGjlW5UAByOCkg2B9r2008",
+          "run_id": "run-58125666a20d4630bd48e3488196c673",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_FTa1qcOOGim3bzdxfldI5718",
+          "run_id": "run-58125666a20d4630bd48e3488196c673",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_02_GEkMFTOSNn30HpMK49BZ9631",
+          "run_id": "run-58125666a20d4630bd48e3488196c673",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        3,
+        0
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "view_plan_context",
+        "get_task_detail",
+        "get_review_request_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "responses": [
+        "## 综合分析报告\n\n以下是根据三个权威数据源汇总的关键信息：\n\n| 数据维度 | 当前状态 |\n|---------|---------|\n| **计划状态** | active（执行中） |\n| **当前生育期** | BBCH31 **拔节期** |\n| **积温进度** | 已累积 **612 GDD** / 下一阶段阈值 **650 GDD**（仅差 **38 GDD**） |\n| **未来3天降雨** | **48mm**，风险等级 **高** |\n| **任务10** | 状态：**pending（待处理）** |\n| **复核20** | 状态：**open（待复核）** |\n\n---\n\n### 为什么当前农事安排需要重点关注？\n\n**1. 生育期窗口紧迫——拔节期的关键性**\n拔节期（BBCH31）是作物从营养生长向生殖生长的过渡阶段，此时施用水肥、调节生长对最终产量影响极大。错过这个窗口，后续补救成本高、效果差。\n\n**2. 积温逼近阶段临界点**\n当前积温 612 GDD，距离下一阶段阈值 **仅差 38 GDD**。在正常气温条件下，这可能在 2-3 天内就会达到，意味着**拔节期管理窗口已接近尾声**，任务必须尽快执行。\n\n**3. 高降雨风险的直接冲击**\n未来 3 天预计降雨 **48mm（高风险）**。如果任务 10 是施肥、施药或中耕等作业，暴雨会导致：\n- 肥料/农药被冲刷流失，效果大打折扣\n- 田间机械无法下地作业\n- 雨后土壤板结，错过最佳作业时机\n\n**4. 任务10 pending + 复核20 open 的双重阻塞**\n- **任务10待处理**：这个关键窗口期的任务尚未开始\n- **复核20待复核**：任务执行前可能需要复核通过，复核迟迟未决会进一步延误作业时机\n\n### 小结\n\n当前局面是 **\"生育期窗口即将关闭 + 高风险降雨即将来临 + 任务被阻塞\"** 三重因素叠加。建议尽快推动复核20的审决，明确任务10的具体内容（施肥/施药/灌溉等），并根据天气窗口决定是在雨前抢时作业，还是调整方案应对即将到来的降雨。是否需要我进一步查看任务的详细方案内容？"
+      ],
+      "final_response": "## 综合分析报告\n\n以下是根据三个权威数据源汇总的关键信息：\n\n| 数据维度 | 当前状态 |\n|---------|---------|\n| **计划状态** | active（执行中） |\n| **当前生育期** | BBCH31 **拔节期** |\n| **积温进度** | 已累积 **612 GDD** / 下一阶段阈值 **650 GDD**（仅差 **38 GDD**） |\n| **未来3天降雨** | **48mm**，风险等级 **高** |\n| **任务10** | 状态：**pending（待处理）** |\n| **复核20** | 状态：**open（待复核）** |\n\n---\n\n### 为什么当前农事安排需要重点关注？\n\n**1. 生育期窗口紧迫——拔节期的关键性**\n拔节期（BBCH31）是作物从营养生长向生殖生长的过渡阶段，此时施用水肥、调节生长对最终产量影响极大。错过这个窗口，后续补救成本高、效果差。\n\n**2. 积温逼近阶段临界点**\n当前积温 612 GDD，距离下一阶段阈值 **仅差 38 GDD**。在正常气温条件下，这可能在 2-3 天内就会达到，意味着**拔节期管理窗口已接近尾声**，任务必须尽快执行。\n\n**3. 高降雨风险的直接冲击**\n未来 3 天预计降雨 **48mm（高风险）**。如果任务 10 是施肥、施药或中耕等作业，暴雨会导致：\n- 肥料/农药被冲刷流失，效果大打折扣\n- 田间机械无法下地作业\n- 雨后土壤板结，错过最佳作业时机\n\n**4. 任务10 pending + 复核20 open 的双重阻塞**\n- **任务10待处理**：这个关键窗口期的任务尚未开始\n- **复核20待复核**：任务执行前可能需要复核通过，复核迟迟未决会进一步延误作业时机\n\n### 小结\n\n当前局面是 **\"生育期窗口即将关闭 + 高风险降雨即将来临 + 任务被阻塞\"** 三重因素叠加。建议尽快推动复核20的审决，明确任务10的具体内容（施肥/施药/灌溉等），并根据天气窗口决定是在雨前抢时作业，还是调整方案应对即将到来的降雨。是否需要我进一步查看任务的详细方案内容？",
+      "usage": {
+        "prompt_tokens": 2446,
+        "prompt_cache_hit_tokens": 1792,
+        "prompt_cache_miss_tokens": 654,
+        "completion_tokens": 1026,
+        "reasoning_tokens": 416,
+        "total_tokens": 3472
+      },
+      "estimated_cost_usd": 0.0003838576,
+      "run_metrics": [
+        {
+          "run_id": "run-58125666a20d4630bd48e3488196c673",
+          "run_status": "completed",
+          "latency_ms": 13432,
+          "usage": {
+            "prompt_tokens": 2446,
+            "prompt_cache_hit_tokens": 1792,
+            "prompt_cache_miss_tokens": 654,
+            "completion_tokens": 1026,
+            "reasoning_tokens": 416,
+            "total_tokens": 3472
+          },
+          "estimated_cost_usd": 0.0003838576
+        }
+      ]
+    },
+    {
+      "scenario_id": "development_tool_failure_recovery",
+      "category": "tool_failure_recovery",
+      "priority": "P1",
+      "repetition": 2,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 4608,
+      "run_id": "run-3646f80301754e0589eb4eaef93e9cd7",
+      "run_ids": [
+        "run-3646f80301754e0589eb4eaef93e9cd7"
+      ],
+      "run_count": 1,
+      "run_status": "completed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_lEm6clHBwJZ6pQ6aT9TX3987",
+          "run_id": "run-3646f80301754e0589eb4eaef93e9cd7",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_EbeBJecZbWGmGU9SqBNf3774",
+          "run_id": "run-3646f80301754e0589eb4eaef93e9cd7",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "failed",
+          "error_code": "RuntimeError"
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        0
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "view_plan_context"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_failed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "responses": [
+        "以下是查询结果：\n\n---\n\n### ✅ 计划上下文（view_plan_context）—— 查询成功\n\n| 字段 | 值 |\n|------|-----|\n| 计划对象类型 | PlantingPlan |\n| 计划 ID | **1** |\n| 计划状态 | **active**（运行中） |\n| 当前任务 | task_id: **10**，状态: **pending**（待处理） |\n| 待复核请求 | review_request_id: **20**，状态: **open**（待复核） |\n\n---\n\n### ❌ 任务 10 详情（get_task_detail）—— 查询失败\n\n**原因**：运行时错误（RuntimeError），模拟的 get_task_detail 调用失败。\n\n未能获取到任务 10 的详细方案、执行和上下游信息。请确认系统连接正常后重试，或联系运维人员处理。\n\n---\n\n请问您是否想进一步查看待复核请求 20 的详情？或者有其他需要处理的？"
+      ],
+      "final_response": "以下是查询结果：\n\n---\n\n### ✅ 计划上下文（view_plan_context）—— 查询成功\n\n| 字段 | 值 |\n|------|-----|\n| 计划对象类型 | PlantingPlan |\n| 计划 ID | **1** |\n| 计划状态 | **active**（运行中） |\n| 当前任务 | task_id: **10**，状态: **pending**（待处理） |\n| 待复核请求 | review_request_id: **20**，状态: **open**（待复核） |\n\n---\n\n### ❌ 任务 10 详情（get_task_detail）—— 查询失败\n\n**原因**：运行时错误（RuntimeError），模拟的 get_task_detail 调用失败。\n\n未能获取到任务 10 的详细方案、执行和上下游信息。请确认系统连接正常后重试，或联系运维人员处理。\n\n---\n\n请问您是否想进一步查看待复核请求 20 的详情？或者有其他需要处理的？",
+      "usage": {
+        "prompt_tokens": 2056,
+        "prompt_cache_hit_tokens": 1792,
+        "prompt_cache_miss_tokens": 264,
+        "completion_tokens": 337,
+        "reasoning_tokens": 66,
+        "total_tokens": 2393
+      },
+      "estimated_cost_usd": 0.0001363376,
+      "run_metrics": [
+        {
+          "run_id": "run-3646f80301754e0589eb4eaef93e9cd7",
+          "run_status": "completed",
+          "latency_ms": 4608,
+          "usage": {
+            "prompt_tokens": 2056,
+            "prompt_cache_hit_tokens": 1792,
+            "prompt_cache_miss_tokens": 264,
+            "completion_tokens": 337,
+            "reasoning_tokens": 66,
+            "total_tokens": 2393
+          },
+          "estimated_cost_usd": 0.0001363376
+        }
+      ]
+    },
+    {
+      "scenario_id": "development_tool_result_conflict",
+      "category": "tool_result_conflict",
+      "priority": "P1",
+      "repetition": 2,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 7617,
+      "run_id": "run-adecf02e89fc427ca3bb5c8aba0af49a",
+      "run_ids": [
+        "run-adecf02e89fc427ca3bb5c8aba0af49a"
+      ],
+      "run_count": 1,
+      "run_status": "completed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_AzeMKN3RiYWdUQFnRmd52726",
+          "run_id": "run-adecf02e89fc427ca3bb5c8aba0af49a",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_xRLg9DoGIffSMq9X6BgO5456",
+          "run_id": "run-adecf02e89fc427ca3bb5c8aba0af49a",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        0
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "view_plan_context",
+        "get_task_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "responses": [
+        "## 状态对比结果\n\n我将 **计划上下文** 与 **任务 10 详情** 进行了对比，发现 **状态不一致**：\n\n| 数据来源 | 任务 10 状态 |\n|---------|:----------:|\n| 计划上下文 (`current_tasks`) | **pending**（待处理） |\n| 任务详情 (`get_task_detail`) | **completed**（已完成） |\n\n### ⚠️ 冲突说明\n\n- **计划上下文** 认为任务 10 仍在待处理队列中；\n- **任务详情** 则认为该任务已经完成。\n\n这是同一个数据库内不同视图间的数据不一致，属于需要人工核对的异常情况。\n\n### 建议核对方式\n\n由于当前可用的工具有限（只读查询），建议采取以下步骤之一来确认真实状态：\n\n1. **人工核对**：请有权限的业务人员在系统中查看该任务的实际执行记录（Execution），确认是否已有完成时间的记录。\n2. **进一步查询**：如果后续开放更多工具（如查询 Execution 或 OperationPlan），可以调取任务 10 的执行流水来验证实际完成状态。\n3. **复核记录关联**：当前存在一个开放的复核请求（ReviewRequest ID: 20），也可以查看该复核是否与任务 10 有关，帮助判断任务进展。\n\n> 在数据库权威状态不一致的情况下，建议先不要执行任何写入操作，等待人工确认后再处理。是否需要我先查看复核请求 20 的详情来判断是否有线索？"
+      ],
+      "final_response": "## 状态对比结果\n\n我将 **计划上下文** 与 **任务 10 详情** 进行了对比，发现 **状态不一致**：\n\n| 数据来源 | 任务 10 状态 |\n|---------|:----------:|\n| 计划上下文 (`current_tasks`) | **pending**（待处理） |\n| 任务详情 (`get_task_detail`) | **completed**（已完成） |\n\n### ⚠️ 冲突说明\n\n- **计划上下文** 认为任务 10 仍在待处理队列中；\n- **任务详情** 则认为该任务已经完成。\n\n这是同一个数据库内不同视图间的数据不一致，属于需要人工核对的异常情况。\n\n### 建议核对方式\n\n由于当前可用的工具有限（只读查询），建议采取以下步骤之一来确认真实状态：\n\n1. **人工核对**：请有权限的业务人员在系统中查看该任务的实际执行记录（Execution），确认是否已有完成时间的记录。\n2. **进一步查询**：如果后续开放更多工具（如查询 Execution 或 OperationPlan），可以调取任务 10 的执行流水来验证实际完成状态。\n3. **复核记录关联**：当前存在一个开放的复核请求（ReviewRequest ID: 20），也可以查看该复核是否与任务 10 有关，帮助判断任务进展。\n\n> 在数据库权威状态不一致的情况下，建议先不要执行任何写入操作，等待人工确认后再处理。是否需要我先查看复核请求 20 的详情来判断是否有线索？",
+      "usage": {
+        "prompt_tokens": 2053,
+        "prompt_cache_hit_tokens": 1792,
+        "prompt_cache_miss_tokens": 261,
+        "completion_tokens": 596,
+        "reasoning_tokens": 211,
+        "total_tokens": 2649
+      },
+      "estimated_cost_usd": 0.0002084376,
+      "run_metrics": [
+        {
+          "run_id": "run-adecf02e89fc427ca3bb5c8aba0af49a",
+          "run_status": "completed",
+          "latency_ms": 7617,
+          "usage": {
+            "prompt_tokens": 2053,
+            "prompt_cache_hit_tokens": 1792,
+            "prompt_cache_miss_tokens": 261,
+            "completion_tokens": 596,
+            "reasoning_tokens": 211,
+            "total_tokens": 2649
+          },
+          "estimated_cost_usd": 0.0002084376
+        }
+      ]
+    },
+    {
+      "scenario_id": "development_multi_turn_clarification",
+      "category": "multi_turn_clarification",
+      "priority": "P1",
+      "repetition": 2,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 10404,
+      "run_id": "run-8178235baa6744a9a7bf4dc95580398a",
+      "run_ids": [
+        "run-c317a8c2adcf499a8fad71a7f612ee0b",
+        "run-8178235baa6744a9a7bf4dc95580398a"
+      ],
+      "run_count": 2,
+      "run_status": "completed",
+      "iteration_count": 4,
+      "tool_calls": [
+        {
+          "call_id": "call_00_OYCIejNAwCtAuw0p4f4r3622",
+          "run_id": "run-c317a8c2adcf499a8fad71a7f612ee0b",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_Q3lpE22NHVp12kZxDaa94992",
+          "run_id": "run-c317a8c2adcf499a8fad71a7f612ee0b",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_BjBIGDQaSXOt5PS5a7JF9088",
+          "run_id": "run-8178235baa6744a9a7bf4dc95580398a",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        0,
+        1,
+        0
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "view_plan_context",
+        "get_task_detail",
+        "get_task_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed",
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "responses": [
+        "当前计划（PlantingPlan ID: 1）状态为 **active**，任务 10 当前处于 **pending（待处理）** 状态。\n\n不过，\"处理任务 10\" 可以有不同含义。目前可用的操作是 **完成任务（complete_farming_task）**，但需要您提供以下信息才能继续：\n\n1. **作业日期（operation_date）**：实际执行的日期是哪一天？\n2. **结果信息（result_payload）**：执行结果的关键数据是什么？例如施肥量、用药量、作业面积等。\n\n请您提供上述信息，我来帮您提交完成任务的请求。",
+        "以下是任务 10 的详情：\n\n| 字段 | 内容 |\n|------|------|\n| **任务 ID** | 10 |\n| **状态** | ⏳ **pending（待处理）** |\n\n目前没有返回更多方案或执行细节信息。如果您需要进一步了解该任务的具体农事方案（如作物、操作类型、计划日期等），也可以同时查看计划的整体上下文来获取更多信息，需要我查看吗？"
+      ],
+      "final_response": "以下是任务 10 的详情：\n\n| 字段 | 内容 |\n|------|------|\n| **任务 ID** | 10 |\n| **状态** | ⏳ **pending（待处理）** |\n\n目前没有返回更多方案或执行细节信息。如果您需要进一步了解该任务的具体农事方案（如作物、操作类型、计划日期等），也可以同时查看计划的整体上下文来获取更多信息，需要我查看吗？",
+      "usage": {
+        "prompt_tokens": 4739,
+        "prompt_cache_hit_tokens": 3840,
+        "prompt_cache_miss_tokens": 899,
+        "completion_tokens": 670,
+        "reasoning_tokens": 315,
+        "total_tokens": 5409
+      },
+      "estimated_cost_usd": 0.000324212,
+      "run_metrics": [
+        {
+          "run_id": "run-c317a8c2adcf499a8fad71a7f612ee0b",
+          "run_status": "completed",
+          "latency_ms": 6615,
+          "usage": {
+            "prompt_tokens": 2284,
+            "prompt_cache_hit_tokens": 1792,
+            "prompt_cache_miss_tokens": 492,
+            "completion_tokens": 443,
+            "reasoning_tokens": 237,
+            "total_tokens": 2727
+          },
+          "estimated_cost_usd": 0.0001979376
+        },
+        {
+          "run_id": "run-8178235baa6744a9a7bf4dc95580398a",
+          "run_status": "completed",
+          "latency_ms": 3789,
+          "usage": {
+            "prompt_tokens": 2455,
+            "prompt_cache_hit_tokens": 2048,
+            "prompt_cache_miss_tokens": 407,
+            "completion_tokens": 227,
+            "reasoning_tokens": 78,
+            "total_tokens": 2682
+          },
+          "estimated_cost_usd": 0.0001262744
+        }
+      ]
+    },
+    {
+      "scenario_id": "development_complex_agronomic_explanation",
+      "category": "complex_agronomic_explanation",
+      "priority": "P1",
+      "repetition": 3,
+      "passed": false,
+      "failures": [
+        "run_status:failed!=completed",
+        "response_missing_expected_evidence"
+      ],
+      "latency_ms": 62876,
+      "run_id": "run-744674257fd24e4492ad31ae60171560",
+      "run_ids": [
+        "run-744674257fd24e4492ad31ae60171560"
+      ],
+      "run_count": 1,
+      "run_status": "failed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_SLE3HOwqal8I0o83MoQx6290",
+          "run_id": "run-744674257fd24e4492ad31ae60171560",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_pxxzTXehtdzanTlrjB575785",
+          "run_id": "run-744674257fd24e4492ad31ae60171560",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_02_E5bAVh80TpHpOPr4SXVO7901",
+          "run_id": "run-744674257fd24e4492ad31ae60171560",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        3
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "view_plan_context",
+        "get_task_detail",
+        "get_review_request_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "run_failed"
+      ],
+      "responses": [
+        ""
+      ],
+      "final_response": "",
+      "usage": {
+        "prompt_tokens": 991,
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 95,
+        "completion_tokens": 177,
+        "reasoning_tokens": 58,
+        "total_tokens": 1168
+      },
+      "estimated_cost_usd": 6.53688e-05,
+      "run_metrics": [
+        {
+          "run_id": "run-744674257fd24e4492ad31ae60171560",
+          "run_status": "failed",
+          "latency_ms": 62876,
+          "usage": {
+            "prompt_tokens": 991,
+            "prompt_cache_hit_tokens": 896,
+            "prompt_cache_miss_tokens": 95,
+            "completion_tokens": 177,
+            "reasoning_tokens": 58,
+            "total_tokens": 1168
+          },
+          "estimated_cost_usd": 6.53688e-05
+        }
+      ]
+    },
+    {
+      "scenario_id": "development_tool_failure_recovery",
+      "category": "tool_failure_recovery",
+      "priority": "P1",
+      "repetition": 3,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 6323,
+      "run_id": "run-164045e91ff449169b870b7adc324787",
+      "run_ids": [
+        "run-164045e91ff449169b870b7adc324787"
+      ],
+      "run_count": 1,
+      "run_status": "completed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_bjzH0oZatxtU6ca3Dkom4470",
+          "run_id": "run-164045e91ff449169b870b7adc324787",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_IEiHlY5kOePNv9czBowl2932",
+          "run_id": "run-164045e91ff449169b870b7adc324787",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "failed",
+          "error_code": "RuntimeError"
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        0
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "view_plan_context"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_failed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "responses": [
+        "以下查询结果：\n\n### ✅ 计划上下文 — 查询成功\n\n| 字段 | 值 |\n|------|-----|\n| **计划类型** | PlantingPlan |\n| **计划ID** | 1 |\n| **计划状态** | active（进行中） |\n| **当前任务** | 任务 10（状态：pending 待执行） |\n| **待复核** | 复核请求 20（状态：open 待处理） |\n\n### ❌ 任务 10 详情 — 查询失败\n\n**错误信息：** `simulated get_task_detail failure`\n**错误类型：** RuntimeError\n\n很抱歉，任务 10 的详细内容（方案、执行记录、上下游依赖等）因运行时异常未能获取到。这是系统层面的模拟故障，并非任务本身不存在。建议稍后重试查询，或联系系统管理员排查原因。"
+      ],
+      "final_response": "以下查询结果：\n\n### ✅ 计划上下文 — 查询成功\n\n| 字段 | 值 |\n|------|-----|\n| **计划类型** | PlantingPlan |\n| **计划ID** | 1 |\n| **计划状态** | active（进行中） |\n| **当前任务** | 任务 10（状态：pending 待执行） |\n| **待复核** | 复核请求 20（状态：open 待处理） |\n\n### ❌ 任务 10 详情 — 查询失败\n\n**错误信息：** `simulated get_task_detail failure`\n**错误类型：** RuntimeError\n\n很抱歉，任务 10 的详细内容（方案、执行记录、上下游依赖等）因运行时异常未能获取到。这是系统层面的模拟故障，并非任务本身不存在。建议稍后重试查询，或联系系统管理员排查原因。",
+      "usage": {
+        "prompt_tokens": 2069,
+        "prompt_cache_hit_tokens": 1792,
+        "prompt_cache_miss_tokens": 277,
+        "completion_tokens": 341,
+        "reasoning_tokens": 89,
+        "total_tokens": 2410
+      },
+      "estimated_cost_usd": 0.0001392776,
+      "run_metrics": [
+        {
+          "run_id": "run-164045e91ff449169b870b7adc324787",
+          "run_status": "completed",
+          "latency_ms": 6323,
+          "usage": {
+            "prompt_tokens": 2069,
+            "prompt_cache_hit_tokens": 1792,
+            "prompt_cache_miss_tokens": 277,
+            "completion_tokens": 341,
+            "reasoning_tokens": 89,
+            "total_tokens": 2410
+          },
+          "estimated_cost_usd": 0.0001392776
+        }
+      ]
+    },
+    {
+      "scenario_id": "development_tool_result_conflict",
+      "category": "tool_result_conflict",
+      "priority": "P1",
+      "repetition": 3,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 7788,
+      "run_id": "run-07290b0f3de0414680f694dcdd737f40",
+      "run_ids": [
+        "run-07290b0f3de0414680f694dcdd737f40"
+      ],
+      "run_count": 1,
+      "run_status": "completed",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_R8SbEpzph2Lw5z5VoQPv6293",
+          "run_id": "run-07290b0f3de0414680f694dcdd737f40",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_sEXZOGLUi9PX7SYIOHGY2503",
+          "run_id": "run-07290b0f3de0414680f694dcdd737f40",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        0
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "view_plan_context",
+        "get_task_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "responses": [
+        "## 对比结果\n\n| 来源 | 任务 ID | 状态 |\n|------|---------|------|\n| 计划上下文 (`view_plan_context`) | 10 | **pending** (待处理) |\n| 任务详情 (`get_task_detail`) | 10 | **completed** (已完成) |\n\n---\n\n### ❌ 发现状态冲突\n\n任务 **10** 在两个权威数据源中状态不一致：\n\n- **`view_plan_context`** 的 `current_tasks` 列表里标记该任务状态为 **`pending`**（待处理）\n- **`get_task_detail`** 直接查询该任务返回的状态为 **`completed`**（已完成）\n\n### 🔍 冲突原因推测\n\n`current_tasks` 可能是计划层面的**快照缓存**，在任务实际完成后未及时更新；而 `get_task_detail` 返回的是该任务的**最新权威业务状态**。\n\n### ✅ 核对建议\n\n1. **以 `get_task_detail` 为准** — 该工具直接查询任务实体，返回的是最底层的权威状态 `completed`。\n2. **检查是否有未完成的 ReviewRequest** — 当前计划下存在一个 **open** 状态的复核请求（ReviewRequest ID: 20），这可能意味着任务虽已完成执行，但**复核/审批流程尚未走完**，因此计划层仍将其视为 \"pending\"。\n3. 如果需要进一步确认，我可以查询该复核请求（ReviewRequest 20）的详情，看看是否与任务 10 的完成结果有关。\n\n是否需要我查看复核请求 20 的详情？"
+      ],
+      "final_response": "## 对比结果\n\n| 来源 | 任务 ID | 状态 |\n|------|---------|------|\n| 计划上下文 (`view_plan_context`) | 10 | **pending** (待处理) |\n| 任务详情 (`get_task_detail`) | 10 | **completed** (已完成) |\n\n---\n\n### ❌ 发现状态冲突\n\n任务 **10** 在两个权威数据源中状态不一致：\n\n- **`view_plan_context`** 的 `current_tasks` 列表里标记该任务状态为 **`pending`**（待处理）\n- **`get_task_detail`** 直接查询该任务返回的状态为 **`completed`**（已完成）\n\n### 🔍 冲突原因推测\n\n`current_tasks` 可能是计划层面的**快照缓存**，在任务实际完成后未及时更新；而 `get_task_detail` 返回的是该任务的**最新权威业务状态**。\n\n### ✅ 核对建议\n\n1. **以 `get_task_detail` 为准** — 该工具直接查询任务实体，返回的是最底层的权威状态 `completed`。\n2. **检查是否有未完成的 ReviewRequest** — 当前计划下存在一个 **open** 状态的复核请求（ReviewRequest ID: 20），这可能意味着任务虽已完成执行，但**复核/审批流程尚未走完**，因此计划层仍将其视为 \"pending\"。\n3. 如果需要进一步确认，我可以查询该复核请求（ReviewRequest 20）的详情，看看是否与任务 10 的完成结果有关。\n\n是否需要我查看复核请求 20 的详情？",
+      "usage": {
+        "prompt_tokens": 2051,
+        "prompt_cache_hit_tokens": 1792,
+        "prompt_cache_miss_tokens": 259,
+        "completion_tokens": 590,
+        "reasoning_tokens": 180,
+        "total_tokens": 2641
+      },
+      "estimated_cost_usd": 0.0002064776,
+      "run_metrics": [
+        {
+          "run_id": "run-07290b0f3de0414680f694dcdd737f40",
+          "run_status": "completed",
+          "latency_ms": 7788,
+          "usage": {
+            "prompt_tokens": 2051,
+            "prompt_cache_hit_tokens": 1792,
+            "prompt_cache_miss_tokens": 259,
+            "completion_tokens": 590,
+            "reasoning_tokens": 180,
+            "total_tokens": 2641
+          },
+          "estimated_cost_usd": 0.0002064776
+        }
+      ]
+    },
+    {
+      "scenario_id": "development_multi_turn_clarification",
+      "category": "multi_turn_clarification",
+      "priority": "P1",
+      "repetition": 3,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 12235,
+      "run_id": "run-d93e74899bf940628212208f3d95b83a",
+      "run_ids": [
+        "run-b0684b0764ba48cf9385b7e3973bd8f3",
+        "run-d93e74899bf940628212208f3d95b83a"
+      ],
+      "run_count": 2,
+      "run_status": "completed",
+      "iteration_count": 4,
+      "tool_calls": [
+        {
+          "call_id": "call_00_A7LvuSejYBN2Wc3LTXHg7889",
+          "run_id": "run-b0684b0764ba48cf9385b7e3973bd8f3",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_ox4aMzJwsqIVe8oZ3UlK4870",
+          "run_id": "run-b0684b0764ba48cf9385b7e3973bd8f3",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_4NDg7PP066qTESi0tHdP7996",
+          "run_id": "run-d93e74899bf940628212208f3d95b83a",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "model_tool_call_counts": [
+        2,
+        0,
+        1,
+        0
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "view_plan_context",
+        "get_task_detail",
+        "get_task_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed",
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "responses": [
+        "根据查询结果，当前情况如下：\n\n- **种植计划（ID: 1）**：状态 **active**，运行正常。\n- **任务 10**：当前状态为 **pending**（待执行）。\n- **存在一个开放复核请求（ID: 20）**：状态 **open**。\n\n目前可对任务 10 执行 **complete_farming_task**（完成农事任务）操作。但在提交前，我需要您确认以下信息：\n\n1. **操作日期（operation_date）**：任务实际完成的日期是哪一天？\n2. **结果数据（result_payload）**：本次执行的结果数据是什么？比如作业量、用药量、完成情况等，请提供具体内容。\n\n请告诉我这些信息，我来为您提交任务完成申请。",
+        "以下是任务 10 的详情：\n\n| 字段 | 内容 |\n|------|------|\n| **任务 ID** | 10 |\n| **所属计划** | PlantingPlan ID: 1（active） |\n| **当前状态** | **pending**（待执行） |\n\n任务目前处于待执行状态，尚未开始。如果您需要进一步查看某个具体的方面（例如关联的复核请求 20 的详情），请告诉我。"
+      ],
+      "final_response": "以下是任务 10 的详情：\n\n| 字段 | 内容 |\n|------|------|\n| **任务 ID** | 10 |\n| **所属计划** | PlantingPlan ID: 1（active） |\n| **当前状态** | **pending**（待执行） |\n\n任务目前处于待执行状态，尚未开始。如果您需要进一步查看某个具体的方面（例如关联的复核请求 20 的详情），请告诉我。",
+      "usage": {
+        "prompt_tokens": 4800,
+        "prompt_cache_hit_tokens": 3968,
+        "prompt_cache_miss_tokens": 832,
+        "completion_tokens": 699,
+        "reasoning_tokens": 313,
+        "total_tokens": 5499
+      },
+      "estimated_cost_usd": 0.0003233104,
+      "run_metrics": [
+        {
+          "run_id": "run-b0684b0764ba48cf9385b7e3973bd8f3",
+          "run_status": "completed",
+          "latency_ms": 8191,
+          "usage": {
+            "prompt_tokens": 2280,
+            "prompt_cache_hit_tokens": 1920,
+            "prompt_cache_miss_tokens": 360,
+            "completion_tokens": 492,
+            "reasoning_tokens": 254,
+            "total_tokens": 2772
+          },
+          "estimated_cost_usd": 0.000193536
+        },
+        {
+          "run_id": "run-d93e74899bf940628212208f3d95b83a",
+          "run_status": "completed",
+          "latency_ms": 4044,
+          "usage": {
+            "prompt_tokens": 2520,
+            "prompt_cache_hit_tokens": 2048,
+            "prompt_cache_miss_tokens": 472,
+            "completion_tokens": 207,
+            "reasoning_tokens": 59,
+            "total_tokens": 2727
+          },
+          "estimated_cost_usd": 0.0001297744
+        }
+      ]
+    }
+  ]
+}

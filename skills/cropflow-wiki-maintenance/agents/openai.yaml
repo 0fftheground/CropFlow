@@ -1,0 +1,4 @@
+interface:
+  display_name: "CropFlow Wiki Maintenance"
+  short_description: "Review and clean CropFlow wiki quality."
+  default_prompt: "Use $cropflow-wiki-maintenance to audit CropFlow docs for drift, gaps, and overlap."

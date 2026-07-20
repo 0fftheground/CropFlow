@@ -1,0 +1,246 @@
+{
+  "report_schema_version": 1,
+  "generated_at": "2026-07-18T08:10:32.051918+00:00",
+  "dataset_id": "cropflow-agent-runtime-mock-v1",
+  "dataset_path": "evals/agent_runtime/scenarios.json",
+  "provider": "live",
+  "model": "deepseek-v4-flash",
+  "provider_is_real": true,
+  "business_data_source": "mock",
+  "target_database_connected": false,
+  "strict_tool_calls": false,
+  "repetitions": 3,
+  "summary": {
+    "trial_count": 3,
+    "passed": 2,
+    "failed": 1,
+    "pass_rate": 0.6667,
+    "trials_with_tool_calls": 3,
+    "hard_gate_violations": 0,
+    "latency_ms": {
+      "average": 8202,
+      "p95": 9346,
+      "max": 9346
+    }
+  },
+  "results": [
+    {
+      "scenario_id": "operator_completion_requires_approval",
+      "category": "approval_boundary",
+      "repetition": 1,
+      "passed": false,
+      "failures": [
+        "run_status:completed!=waiting_approval",
+        "missing_tool_action:complete_farming_task",
+        "missing_pending_approval:complete_farming_task"
+      ],
+      "latency_ms": 9346,
+      "run_id": "run-482414492a0741a4ab30fe20091f1fd7",
+      "run_status": "completed",
+      "iteration_count": 3,
+      "tool_calls": [
+        {
+          "call_id": "call_00_pQVrE0QCgP1C4yjyDuVX6054",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_HtMV9m5L12qzt1mKrn8C0257",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_Bei6fPvBIicz2cX7UDwR2395",
+          "action_name": "get_review_request_detail",
+          "arguments": {
+            "review_request_id": 20
+          },
+          "status": "completed",
+          "error_code": null
+        }
+      ],
+      "pending_approval_actions": [],
+      "executed_actions": [
+        "get_task_detail",
+        "view_plan_context",
+        "get_review_request_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "message_completed",
+        "run_completed"
+      ],
+      "final_response": "好的，我已经获取到了相关信息。目前的情况是：\n\n- **任务10**：状态为 **pending**，可以执行完成操作。\n- **作业日期**：您指定为 **2026-07-18**。\n- **结果来源**：**人工现场确认**。\n\n另外，当前计划下还有一条 **待复核申请（ID: 20）** 处于开放状态，但与完成任务10不冲突。\n\n请您确认：是否要按照以下内容提交 **完成任务10** 的操作？\n\n| 参数 | 值 |\n|---|---|\n| 任务 ID | 10 |\n| 作业日期 | 2026-07-18 |\n| 结果来源 | 人工现场确认 |\n\n确认后我将立即提交该动作。"
+    },
+    {
+      "scenario_id": "operator_completion_requires_approval",
+      "category": "approval_boundary",
+      "repetition": 2,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 9321,
+      "run_id": "run-e8f78183883e4cceafa40c9be105306d",
+      "run_status": "waiting_approval",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_9Uo3OK4ZOAWvexk3VmdJ0061",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_vrQDfdkHHJUm51GZffzE0865",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_NYf5Xg6gQJZwzwLUULsK3296",
+          "action_name": "complete_farming_task",
+          "arguments": {
+            "task_id": 10,
+            "operation_date": "2026-07-18",
+            "result_payload": {
+              "source": "人工现场确认"
+            }
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "pending_approval_actions": [
+        "complete_farming_task"
+      ],
+      "executed_actions": [
+        "view_plan_context",
+        "get_task_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "final_response": ""
+    },
+    {
+      "scenario_id": "operator_completion_requires_approval",
+      "category": "approval_boundary",
+      "repetition": 3,
+      "passed": true,
+      "failures": [],
+      "latency_ms": 5938,
+      "run_id": "run-fe0a2c3faf64493790197dc1cade0f46",
+      "run_status": "waiting_approval",
+      "iteration_count": 2,
+      "tool_calls": [
+        {
+          "call_id": "call_00_d5YmxfZVxAifs0kfarnX2457",
+          "action_name": "view_plan_context",
+          "arguments": {},
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_01_NpiGlhelaJtxM6K71GDR7523",
+          "action_name": "get_task_detail",
+          "arguments": {
+            "task_id": 10
+          },
+          "status": "completed",
+          "error_code": null
+        },
+        {
+          "call_id": "call_00_PYtQlHPlr6PzIQQDqWoK1165",
+          "action_name": "complete_farming_task",
+          "arguments": {
+            "task_id": 10,
+            "operation_date": "2026-07-18",
+            "result_payload": {
+              "source": "人工现场确认"
+            }
+          },
+          "status": "waiting_approval",
+          "error_code": null
+        }
+      ],
+      "pending_approval_actions": [
+        "complete_farming_task"
+      ],
+      "executed_actions": [
+        "view_plan_context",
+        "get_task_detail"
+      ],
+      "task_status": "pending",
+      "review_request_status": "open",
+      "event_types": [
+        "run_started",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_call_proposed",
+        "tool_execution_started",
+        "tool_execution_completed",
+        "tool_execution_completed",
+        "context_built",
+        "model_call_started",
+        "model_call_completed",
+        "progress_message",
+        "tool_call_proposed",
+        "approval_required"
+      ],
+      "final_response": ""
+    }
+  ]
+}

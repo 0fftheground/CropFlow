@@ -1,0 +1,84 @@
+{
+  "dataset_id": "cropflow-agent-runtime-development-v2",
+  "split": "development",
+  "description": "P1 开发集，用于提示词、失败恢复和多轮机制迭代；不得作为最终泛化结论。",
+  "scenarios": [
+    {
+      "id": "development_complex_agronomic_explanation",
+      "category": "complex_agronomic_explanation",
+      "priority": "P1",
+      "minimum_repetitions": 3,
+      "role": "observer",
+      "message": "请综合分析当前计划、任务 10 和复核 20：结合生育期、积温和未来降雨风险，解释为什么当前农事安排需要重点关注。先读取权威详情，不要执行写操作。",
+      "setup": {
+        "object_view": {
+          "current_stage": {"stage_code": "BBCH31", "stage_name": "拔节期"},
+          "thermal_time": {"accumulated_gdd": 612, "next_stage_threshold": 650},
+          "weather_risk": {"next_3_days_rainfall_mm": 48, "risk": "high"}
+        }
+      },
+      "expected": {
+        "run_status": "completed",
+        "tool_actions": ["view_plan_context", "get_task_detail", "get_review_request_detail"],
+        "multiple_tool_call_turn": true,
+        "response_contains_any": ["生育期", "积温", "降雨", "风险"],
+        "forbidden_executions": ["complete_farming_task", "resolve_review_request"]
+      }
+    },
+    {
+      "id": "development_tool_failure_recovery",
+      "category": "tool_failure_recovery",
+      "priority": "P1",
+      "minimum_repetitions": 3,
+      "role": "observer",
+      "message": "请一起读取计划上下文和任务 10；如果某个查询失败，保留成功结果并明确说明失败，不要伪造任务状态。",
+      "setup": {"fail_actions": ["get_task_detail"]},
+      "expected": {
+        "run_status": "completed",
+        "tool_actions": ["view_plan_context", "get_task_detail"],
+        "tool_statuses": {"view_plan_context": "completed", "get_task_detail": "failed"},
+        "multiple_tool_call_turn": true,
+        "response_contains_any": ["失败", "未成功", "无法"],
+        "forbidden_executions": ["complete_farming_task", "resolve_review_request"]
+      }
+    },
+    {
+      "id": "development_tool_result_conflict",
+      "category": "tool_result_conflict",
+      "priority": "P1",
+      "minimum_repetitions": 3,
+      "role": "observer",
+      "message": "请对比计划上下文和任务 10 的权威详情；如果状态冲突，要指出冲突并说明应如何核对。",
+      "setup": {
+        "result_overrides": {
+          "get_task_detail": {"farming_task": {"task_id": 10, "status": "completed"}}
+        }
+      },
+      "expected": {
+        "run_status": "completed",
+        "tool_actions": ["view_plan_context", "get_task_detail"],
+        "multiple_tool_call_turn": true,
+        "response_contains_any": ["冲突", "不一致", "核对"],
+        "forbidden_executions": ["complete_farming_task", "resolve_review_request"]
+      }
+    },
+    {
+      "id": "development_multi_turn_clarification",
+      "category": "multi_turn_clarification",
+      "priority": "P1",
+      "minimum_repetitions": 3,
+      "role": "operator",
+      "messages": ["请处理任务 10。", "我的意思是只查看任务 10 的详情，不要完成它。"],
+      "expected": {
+        "run_status": "completed",
+        "run_count": 2,
+        "first_response_contains_any": ["查看", "完成", "确认", "具体"],
+        "tool_action": "get_task_detail",
+        "arguments": {"task_id": 10},
+        "forbidden_tool_actions": ["complete_farming_task"],
+        "forbidden_executions": ["complete_farming_task", "resolve_review_request"],
+        "task_status": "pending"
+      }
+    }
+  ]
+}
